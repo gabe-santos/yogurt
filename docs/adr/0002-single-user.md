@@ -1,0 +1,3 @@
+# Single user, deliberately
+
+Multi-user was specified and then withdrawn in favour of one account, so this records the reversal rather than leaving a future reader to guess. Read, Starred and Archived are therefore columns on the entry itself, not rows in a per-(user, entry) table, and there is no users table, no invite flow, and no per-user feed deduplication. The cost of changing our mind is a real migration: a users table plus moving three state columns into a join table, touching every read path. We accept that cost as a deferred, deliberate one; the alternative was carrying the join and its query complexity for a single reader who does not need it.

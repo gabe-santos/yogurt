@@ -1,0 +1,5 @@
+# Online-first, but with a delta-shaped, idempotent API
+
+The server is the only durable copy: the client renders what it fetched and keeps nothing, so there is no offline reading in the first version. Offline-first was the alternative and was rejected as roughly double the frontend work, taxing every later feature with two mutation paths — and on iOS it would not even deliver fresh content, since WebKit implements no Background Sync or Background Fetch and an installed web app therefore cannot refresh feeds while closed.
+
+To keep the upgrade additive rather than a rewrite, two properties are load-bearing from day one. Reads are **delta-shaped**: `GET /entries?since=<cursor>` returns changed entries plus tombstones and an opaque next cursor, so a future offline client can catch up with the same endpoint. Mutations are **idempotent state declarations** (`PUT /entries/:id/state {read, starred, archived}`), never toggles, so a queued mutation replayed twice is harmless. Anything that breaks either property breaks offline support later.
