@@ -1,6 +1,10 @@
 <script lang="ts">
 	import { goto, invalidateAll } from '$app/navigation';
 	import { ApiError, logIn } from '$lib/api';
+	import { Button } from '$lib/components/ui/button';
+	import { Input } from '$lib/components/ui/input';
+	import * as Field from '$lib/components/ui/field';
+	import * as Alert from '$lib/components/ui/alert';
 
 	let password = $state('');
 	let error = $state('');
@@ -27,29 +31,26 @@
 	<h1 class="text-2xl font-semibold">Reader</h1>
 
 	<form class="flex flex-col gap-3" onsubmit={submit}>
-		<label class="flex flex-col gap-1 text-sm" for="password">
-			Password
-			<input
-				id="password"
-				name="password"
-				type="password"
-				autocomplete="current-password"
-				required
-				bind:value={password}
-				class="rounded border border-neutral-300 px-3 py-2 text-base dark:border-neutral-700 dark:bg-neutral-900"
-			/>
-		</label>
+		<Field.FieldGroup>
+			<Field.Field>
+				<Field.FieldLabel for="password">Password</Field.FieldLabel>
+				<Input
+					id="password"
+					name="password"
+					type="password"
+					autocomplete="current-password"
+					required
+					bind:value={password}
+				/>
+			</Field.Field>
+		</Field.FieldGroup>
 
-		<button
-			type="submit"
-			disabled={signingIn}
-			class="rounded bg-neutral-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
-		>
-			Sign in
-		</button>
+		<Button type="submit" disabled={signingIn}>Sign in</Button>
 
 		{#if error}
-			<p role="alert" class="text-sm text-red-600 dark:text-red-400">{error}</p>
+			<Alert.Root variant="destructive">
+				<Alert.Description>{error}</Alert.Description>
+			</Alert.Root>
 		{/if}
 	</form>
 </main>

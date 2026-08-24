@@ -10,6 +10,6 @@
 	<title>Reader</title>
 </svelte:head>
 
-<div class="min-h-dvh bg-white text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100">
+<div class="min-h-dvh bg-background text-foreground">
 	{@render children()}
 </div>

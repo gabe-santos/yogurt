@@ -1,4 +1,11 @@
 <script lang="ts">
+	import { Button } from '$lib/components/ui/button';
+	import { Input } from '$lib/components/ui/input';
+	import * as Field from '$lib/components/ui/field';
+	import * as Alert from '$lib/components/ui/alert';
+	import * as Sidebar from '$lib/components/ui/sidebar';
+	import * as Tabs from '$lib/components/ui/tabs';
+	import CircleHelpIcon from '@lucide/svelte/icons/circle-help';
 	import { onMount } from 'svelte';
 	import { goto, invalidateAll } from '$app/navigation';
 	import {
@@ -290,173 +297,157 @@
 
 <svelte:window onkeydown={onKeydown} />
 
-<div class="mx-auto flex max-w-5xl flex-col gap-6 p-6 sm:flex-row sm:gap-10">
-	<aside class="flex w-full shrink-0 flex-col gap-4 sm:w-64">
-		<header class="flex items-center justify-between gap-4">
-			<h1 class="text-2xl font-semibold">Reader</h1>
-			<div class="flex items-center gap-2">
-				<button
-					type="button"
-					aria-label="Keyboard shortcuts"
-					class="rounded border border-neutral-300 px-2 py-1.5 text-sm hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
-					onclick={() => (helpOpen = true)}
-				>
-					?
-				</button>
-				<button
-					type="button"
-					class="rounded border border-neutral-300 px-3 py-1.5 text-sm hover:bg-neutral-100 disabled:opacity-50 dark:border-neutral-700 dark:hover:bg-neutral-800"
-					onclick={signOut}
-				>
-					Sign out
-				</button>
+<Sidebar.Provider>
+	<Sidebar.Root>
+		<Sidebar.Header>
+			<div class="flex items-center justify-between gap-2 px-2">
+				<h1 class="text-lg font-semibold">Reader</h1>
+				<div class="flex items-center gap-1">
+					<Button
+						variant="outline"
+						size="icon-sm"
+						aria-label="Keyboard shortcuts"
+						onclick={() => (helpOpen = true)}
+					>
+						<CircleHelpIcon />
+					</Button>
+					<Button variant="outline" size="sm" onclick={signOut}>Sign out</Button>
+				</div>
 			</div>
-		</header>
+		</Sidebar.Header>
 
-		<form class="flex flex-col gap-2" onsubmit={subscribe}>
-			<label class="flex flex-col gap-1 text-sm" for="address">
-				Feed or site address
-				<input
-					id="address"
-					name="address"
-					type="url"
-					required
-					placeholder="https://example.com"
-					bind:value={address}
-					class="rounded border border-neutral-300 px-3 py-2 text-base dark:border-neutral-700 dark:bg-neutral-900"
-				/>
-			</label>
-			<button
-				type="submit"
-				disabled={subscribing}
-				class="rounded bg-neutral-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
-			>
-				Subscribe
-			</button>
-			{#if subscribeError}
-				<p role="alert" class="text-sm text-red-600 dark:text-red-400">{subscribeError}</p>
-			{/if}
-		</form>
+		<Sidebar.Content>
+			<Sidebar.Group>
+				<Sidebar.GroupContent>
+					<form class="flex flex-col gap-2" onsubmit={subscribe}>
+						<Field.FieldGroup>
+							<Field.Field>
+								<Field.FieldLabel for="address">Feed or site address</Field.FieldLabel>
+								<Input
+									id="address"
+									name="address"
+									type="url"
+									required
+									placeholder="https://example.com"
+									bind:value={address}
+								/>
+							</Field.Field>
+						</Field.FieldGroup>
+						<Button type="submit" disabled={subscribing}>Subscribe</Button>
+						{#if subscribeError}
+							<Alert.Root variant="destructive">
+								<Alert.Description>{subscribeError}</Alert.Description>
+							</Alert.Root>
+						{/if}
+					</form>
+				</Sidebar.GroupContent>
+			</Sidebar.Group>
 
-		<nav class="flex flex-col gap-1" aria-label="Feeds">
-			<button
-				type="button"
-				aria-current={scope === undefined}
-				class="rounded px-2 py-1.5 text-left text-sm hover:bg-neutral-100 aria-[current=true]:bg-neutral-100 aria-[current=true]:font-medium dark:hover:bg-neutral-800 dark:aria-[current=true]:bg-neutral-800"
-				onclick={() => scopeTo(undefined)}
-			>
-				All Feeds
-			</button>
-			{#each feeds as feed (feed.id)}
-				<button
-					type="button"
-					data-testid="feed"
-					aria-current={scope === feed.id}
-					class="truncate rounded px-2 py-1.5 text-left text-sm hover:bg-neutral-100 aria-[current=true]:bg-neutral-100 aria-[current=true]:font-medium dark:hover:bg-neutral-800 dark:aria-[current=true]:bg-neutral-800"
-					onclick={() => scopeTo(feed.id)}
-				>
-					{feed.title}
-				</button>
-			{/each}
-		</nav>
-
-		<label class="flex items-center gap-2 text-sm text-neutral-600 dark:text-neutral-400">
-			<input type="checkbox" checked={markOnOpen} onchange={toggleMarkOnOpen} />
-			Mark an Entry read when opened
-		</label>
-	</aside>
-
-	<main class="flex min-w-0 grow flex-col gap-4">
-		<div class="flex items-center justify-between gap-4">
-			<h2 data-testid="scope" class="truncate text-lg font-medium">
-				{scopedFeed ? scopedFeed.title : 'All Feeds'}
-			</h2>
-			<button
-				type="button"
-				class="rounded border border-neutral-300 px-3 py-1.5 text-sm hover:bg-neutral-100 disabled:opacity-50 dark:border-neutral-700 dark:hover:bg-neutral-800"
-				onclick={refresh}
-				disabled={busy}
-			>
-				Refresh all
-			</button>
-		</div>
-
-		<div class="flex gap-1" role="tablist" aria-label="Filter">
-			<button
-				type="button"
-				data-testid="filter-all"
-				role="tab"
-				aria-selected={filter === 'all'}
-				class="rounded px-3 py-1 text-sm hover:bg-neutral-100 aria-[selected=true]:bg-neutral-100 aria-[selected=true]:font-medium dark:hover:bg-neutral-800 dark:aria-[selected=true]:bg-neutral-800"
-				onclick={() => setFilter('all')}
-			>
-				All
-			</button>
-			<button
-				type="button"
-				data-testid="filter-unread"
-				role="tab"
-				aria-selected={filter === 'unread'}
-				class="rounded px-3 py-1 text-sm hover:bg-neutral-100 aria-[selected=true]:bg-neutral-100 aria-[selected=true]:font-medium dark:hover:bg-neutral-800 dark:aria-[selected=true]:bg-neutral-800"
-				onclick={() => setFilter('unread')}
-			>
-				Unread
-			</button>
-		</div>
-
-		{#if notice}
-			<p data-testid="notice" class="text-sm text-neutral-600 dark:text-neutral-400">{notice}</p>
-		{/if}
-
-		{#if loading}
-			<p class="text-neutral-600 dark:text-neutral-400">Loading your Entries…</p>
-		{:else if entries.length === 0}
-			<p class="text-neutral-600 dark:text-neutral-400">
-				{feeds.length === 0
-					? 'No Feeds yet. Add one to start reading.'
-					: filter === 'unread'
-						? 'Nothing unread here.'
-						: 'Nothing to read here yet.'}
-			</p>
-		{:else}
-			<ul class="flex flex-col divide-y divide-neutral-200 dark:divide-neutral-800">
-				{#each entries as entry, index (entry.id)}
-					<li>
-						<button
-							type="button"
-							data-testid="entry"
-							aria-current={index === currentIndex}
-							class="flex w-full flex-col gap-1 py-3 text-left hover:bg-neutral-50 aria-[current=true]:bg-neutral-100 dark:hover:bg-neutral-900 dark:aria-[current=true]:bg-neutral-800"
-							onclick={() => openEntryAt(index)}
-						>
-							<span
-								class="font-medium underline-offset-2 hover:underline"
-								class:text-neutral-500={entry.read}
-								class:dark:text-neutral-500={entry.read}
+			<Sidebar.Group>
+				<Sidebar.GroupLabel>Feeds</Sidebar.GroupLabel>
+				<Sidebar.GroupContent>
+					<Sidebar.Menu>
+						<Sidebar.MenuItem>
+							<Sidebar.MenuButton
+								isActive={scope === undefined}
+								aria-current={scope === undefined}
+								onclick={() => scopeTo(undefined)}
 							>
-								{entry.title || entry.url}
-							</span>
-							<span class="text-xs text-neutral-500 dark:text-neutral-400">
-								{entry.feed_title} · {formatPublished(entry.published_at)}{entry.read ? '' : ' · unread'}
-							</span>
-						</button>
-					</li>
-				{/each}
-			</ul>
+								All Feeds
+							</Sidebar.MenuButton>
+						</Sidebar.MenuItem>
+						{#each feeds as feed (feed.id)}
+							<Sidebar.MenuItem>
+								<Sidebar.MenuButton
+									data-testid="feed"
+									isActive={scope === feed.id}
+									aria-current={scope === feed.id}
+									onclick={() => scopeTo(feed.id)}
+								>
+									<span class="truncate">{feed.title}</span>
+								</Sidebar.MenuButton>
+							</Sidebar.MenuItem>
+						{/each}
+					</Sidebar.Menu>
+				</Sidebar.GroupContent>
+			</Sidebar.Group>
+		</Sidebar.Content>
 
-			{#if cursor}
-				<button
-					type="button"
-					class="self-start rounded border border-neutral-300 px-3 py-1.5 text-sm hover:bg-neutral-100 disabled:opacity-50 dark:border-neutral-700 dark:hover:bg-neutral-800"
-					onclick={loadMore}
-					disabled={busy}
-				>
-					Load more
-				</button>
+		<Sidebar.Footer>
+			<label class="flex items-center gap-2 px-2 text-sm text-muted-foreground">
+				<input type="checkbox" checked={markOnOpen} onchange={toggleMarkOnOpen} />
+				Mark an Entry read when opened
+			</label>
+		</Sidebar.Footer>
+	</Sidebar.Root>
+
+	<Sidebar.Inset>
+		<div class="mx-auto flex w-full max-w-3xl flex-col gap-4 p-6">
+			<div class="flex items-center gap-2">
+				<Sidebar.Trigger class="-ml-1" />
+				<div class="flex flex-1 items-center justify-between gap-4">
+					<h2 data-testid="scope" class="truncate text-lg font-medium">
+						{scopedFeed ? scopedFeed.title : 'All Feeds'}
+					</h2>
+					<Button variant="outline" size="sm" onclick={refresh} disabled={busy}>Refresh all</Button>
+				</div>
+			</div>
+
+			<Tabs.Root value={filter} onValueChange={(value) => setFilter(value as 'all' | 'unread')}>
+				<Tabs.List aria-label="Filter">
+					<Tabs.Trigger value="all" data-testid="filter-all">All</Tabs.Trigger>
+					<Tabs.Trigger value="unread" data-testid="filter-unread">Unread</Tabs.Trigger>
+				</Tabs.List>
+			</Tabs.Root>
+
+			{#if notice}
+				<p data-testid="notice" class="text-sm text-muted-foreground">{notice}</p>
 			{/if}
-		{/if}
-	</main>
-</div>
+
+			{#if loading}
+				<p class="text-muted-foreground">Loading your Entries…</p>
+			{:else if entries.length === 0}
+				<p class="text-muted-foreground">
+					{feeds.length === 0
+						? 'No Feeds yet. Add one to start reading.'
+						: filter === 'unread'
+							? 'Nothing unread here.'
+							: 'Nothing to read here yet.'}
+				</p>
+			{:else}
+				<ul class="flex flex-col divide-y divide-border">
+					{#each entries as entry, index (entry.id)}
+						<li>
+							<button
+								type="button"
+								data-testid="entry"
+								aria-current={index === currentIndex}
+								class="flex w-full flex-col gap-1 py-3 text-left hover:bg-accent/50 aria-[current=true]:bg-accent"
+								onclick={() => openEntryAt(index)}
+							>
+								<span
+									class="font-medium underline-offset-2 hover:underline"
+									class:text-muted-foreground={entry.read}
+								>
+									{entry.title || entry.url}
+								</span>
+								<span class="text-xs text-muted-foreground">
+									{entry.feed_title} · {formatPublished(entry.published_at)}{entry.read ? '' : ' · unread'}
+								</span>
+							</button>
+						</li>
+					{/each}
+				</ul>
+
+				{#if cursor}
+					<Button variant="outline" size="sm" class="self-start" onclick={loadMore} disabled={busy}>
+						Load more
+					</Button>
+				{/if}
+			{/if}
+		</div>
+	</Sidebar.Inset>
+</Sidebar.Provider>
 
 {#if openEntry}
 	<EntryDrawer
