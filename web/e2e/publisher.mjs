@@ -41,16 +41,16 @@ const page = `<!doctype html>
 `;
 
 const documents = {
-	'/feed.xml': { type: 'application/rss+xml; charset=utf-8', body: feed },
-	'/': { type: 'text/html; charset=utf-8', body: page }
+  '/feed.xml': { type: 'application/rss+xml; charset=utf-8', body: feed },
+  '/': { type: 'text/html; charset=utf-8', body: page },
 };
 
 createServer((request, response) => {
-	const path = new URL(request.url, publisherURL).pathname;
-	const document = documents[path];
-	if (!document) {
-		response.writeHead(404, { 'Content-Type': 'text/plain' }).end('not here\n');
-		return;
-	}
-	response.writeHead(200, { 'Content-Type': document.type }).end(document.body);
+  const path = new URL(request.url, publisherURL).pathname;
+  const document = documents[path];
+  if (!document) {
+    response.writeHead(404, { 'Content-Type': 'text/plain' }).end('not here\n');
+    return;
+  }
+  response.writeHead(200, { 'Content-Type': document.type }).end(document.body);
 }).listen(publisherPort, '127.0.0.1');

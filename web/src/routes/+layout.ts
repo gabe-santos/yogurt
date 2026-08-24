@@ -6,5 +6,5 @@ export const ssr = false;
 export const prerender = false;
 
 export const load: LayoutLoad = async () => {
-	return { signedIn: await isSignedIn() };
+  return { signedIn: await isSignedIn() };
 };

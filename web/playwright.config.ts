@@ -2,7 +2,13 @@ import { defineConfig } from '@playwright/test';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { baseURL, password, port, publisherPort, publisherURL } from './e2e/env';
+import {
+  baseURL,
+  password,
+  port,
+  publisherPort,
+  publisherURL,
+} from './e2e/env';
 
 // Seam 3: the browser, driving the real binary — the same one a self-hoster
 // runs, serving the embedded SPA — over a throwaway database, against a fake
@@ -10,31 +16,31 @@ import { baseURL, password, port, publisherPort, publisherURL } from './e2e/env'
 const dataDir = join(tmpdir(), `reader-e2e-${process.pid}-${Date.now()}`);
 
 export default defineConfig({
-	testDir: 'e2e',
-	fullyParallel: false,
-	workers: 1,
-	forbidOnly: !!process.env.CI,
-	reporter: process.env.CI ? 'list' : [['list']],
-	use: { baseURL },
-	webServer: [
-		{
-			command: 'node e2e/publisher.mjs',
-			url: `${publisherURL}/feed.xml`,
-			reuseExistingServer: false,
-			env: { PUBLISHER_PORT: String(publisherPort) }
-		},
-		{
-			command: '../bin/reader',
-			url: baseURL,
-			reuseExistingServer: false,
-			env: {
-				READER_ADDR: `127.0.0.1:${port}`,
-				READER_DATA_DIR: dataDir,
-				READER_PASSWORD: password,
-				// The fake publisher is on loopback, which the app otherwise
-				// refuses to fetch.
-				READER_ALLOW_PRIVATE_FETCH: 'true'
-			}
-		}
-	]
+  testDir: 'e2e',
+  fullyParallel: false,
+  workers: 1,
+  forbidOnly: !!process.env.CI,
+  reporter: process.env.CI ? 'list' : [['list']],
+  use: { baseURL },
+  webServer: [
+    {
+      command: 'node e2e/publisher.mjs',
+      url: `${publisherURL}/feed.xml`,
+      reuseExistingServer: false,
+      env: { PUBLISHER_PORT: String(publisherPort) },
+    },
+    {
+      command: '../bin/reader',
+      url: baseURL,
+      reuseExistingServer: false,
+      env: {
+        READER_ADDR: `127.0.0.1:${port}`,
+        READER_DATA_DIR: dataDir,
+        READER_PASSWORD: password,
+        // The fake publisher is on loopback, which the app otherwise
+        // refuses to fetch.
+        READER_ALLOW_PRIVATE_FETCH: 'true',
+      },
+    },
+  ],
 });

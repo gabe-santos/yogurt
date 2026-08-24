@@ -9,30 +9,30 @@ import { defineConfig } from 'vite';
 const embedTarget = '../internal/webui/dist/spa';
 
 export default defineConfig({
-	plugins: [
-		tailwindcss(),
-		sveltekit({
-			compilerOptions: {
-				// Force runes mode for the project, except for libraries. Can be removed in svelte 6.
-				runes: ({ filename }) =>
-					filename.split(/[/\\]/).includes('node_modules') ? undefined : true
-			},
-			adapter: adapter({
-				pages: embedTarget,
-				assets: embedTarget,
-				fallback: 'index.html',
-				precompress: false,
-				strict: true
-			})
-		})
-	],
-	server: {
-		// `pnpm dev` serves the SPA; the API still comes from the Go binary.
-		proxy: {
-			'/api': {
-				target: 'http://localhost:8080',
-				changeOrigin: false
-			}
-		}
-	}
+  plugins: [
+    tailwindcss(),
+    sveltekit({
+      compilerOptions: {
+        // Force runes mode for the project, except for libraries. Can be removed in svelte 6.
+        runes: ({ filename }) =>
+          filename.split(/[/\\]/).includes('node_modules') ? undefined : true,
+      },
+      adapter: adapter({
+        pages: embedTarget,
+        assets: embedTarget,
+        fallback: 'index.html',
+        precompress: false,
+        strict: true,
+      }),
+    }),
+  ],
+  server: {
+    // `pnpm dev` serves the SPA; the API still comes from the Go binary.
+    proxy: {
+      '/api': {
+        target: 'http://localhost:8080',
+        changeOrigin: false,
+      },
+    },
+  },
 });
