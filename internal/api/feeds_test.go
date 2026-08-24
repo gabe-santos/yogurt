@@ -14,10 +14,13 @@ import (
 var published = time.Date(2026, 1, 1, 9, 0, 0, 0, time.UTC)
 
 type feedView struct {
-	ID      int64  `json:"id"`
-	URL     string `json:"url"`
-	Title   string `json:"title"`
-	SiteURL string `json:"site_url"`
+	ID          int64  `json:"id"`
+	URL         string `json:"url"`
+	Title       string `json:"title"`
+	SiteURL     string `json:"site_url"`
+	GroupID     int64  `json:"group_id"`
+	Suspended   bool   `json:"suspended"`
+	UnreadCount int    `json:"unread_count"`
 }
 
 type entryView struct {

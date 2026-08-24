@@ -11,27 +11,38 @@
 	import {
 		ApiError,
 		addFeed,
+		createGroup,
+		deleteFeed,
+		deleteGroup,
 		getSettings,
 		listEntries,
 		listFeeds,
+		listGroups,
 		logOut,
 		refreshFeeds,
+		renameGroup,
 		setEntryRead,
-		setSettings
+		setSettings,
+		updateFeed
 	} from '$lib/api';
-	import type { Entry, Feed } from '$lib/api';
+	import type { Entry, Feed, Group } from '$lib/api';
 	import EntryDrawer from '$lib/EntryDrawer.svelte';
 	import { formatPublished } from '$lib/format';
 	import HelpDialog from '$lib/HelpDialog.svelte';
 	import { bindings, matches } from '$lib/keys';
 	import type { Action } from '$lib/keys';
 
+	/** Scope is what the reading list is narrowed to: a single Feed, a single
+	 * Group, or (when undefined) every Feed. */
+	type Scope = { type: 'feed'; id: number } | { type: 'group'; id: number };
+
 	// The reading list is the server's, and this page mutates it as the reader
 	// works, so it owns the copy rather than deriving one from a load function.
 	let feeds = $state<Feed[]>([]);
+	let groups = $state<Group[]>([]);
 	let entries = $state<Entry[]>([]);
 	let cursor = $state('');
-	let scope = $state<number | undefined>(undefined);
+	let scope = $state<Scope | undefined>(undefined);
 	let filter = $state<'all' | 'unread'>('all');
 	let loading = $state(true);
 
@@ -52,34 +63,83 @@
 	let notice = $state('');
 	let busy = $state(false);
 
-	const scopedFeed = $derived(feeds.find((feed) => feed.id === scope));
+	let newGroupName = $state('');
+	let creatingGroup = $state(false);
+	let editingGroup = $state<number | undefined>(undefined);
+	let groupNameDraft = $state('');
+	let editingFeed = $state<number | undefined>(undefined);
+	let feedTitleDraft = $state('');
+
+	const scopedFeed = $derived.by(() => {
+		const current = scope;
+		return current && current.type === 'feed' ? feeds.find((f) => f.id === current.id) : undefined;
+	});
+	const scopedGroup = $derived.by(() => {
+		const current = scope;
+		return current && current.type === 'group' ? groups.find((g) => g.id === current.id) : undefined;
+	});
+	const scopeTitle = $derived(scopedFeed?.title ?? scopedGroup?.name ?? 'All Feeds');
 	const openEntry = $derived(openIndex !== undefined ? entries[openIndex] : undefined);
+	const feedsByGroup = $derived.by(() => {
+		const map = new Map<number, Feed[]>();
+		for (const feed of feeds) {
+			const list = map.get(feed.group_id) ?? [];
+			list.push(feed);
+			map.set(feed.group_id, list);
+		}
+		return map;
+	});
 
 	onMount(async () => {
 		try {
-			const [subscribed, page, settings] = await Promise.all([
+			const [subscribed, page, settings, subscribedGroups] = await Promise.all([
 				listFeeds(),
 				listEntries(),
-				getSettings()
+				getSettings(),
+				listGroups()
 			]);
 			feeds = subscribed;
 			entries = page.entries;
 			cursor = page.next_cursor;
 			markOnOpen = settings.mark_on_open;
+			groups = subscribedGroups;
 		} finally {
 			loading = false;
 		}
 	});
 
+	/** scopeQuery maps the current Scope onto listEntries' feed/group options,
+	 * so reload and loadMore cannot drift on how a Scope becomes a query. */
+	function scopeQuery(current: Scope | undefined) {
+		return {
+			feed: current?.type === 'feed' ? current.id : undefined,
+			group: current?.type === 'group' ? current.id : undefined
+		};
+	}
+
+	/** reportError shows an ApiError's own message, or a generic one for
+	 * anything else (a network failure, a body the server never sent). */
+	function reportError(cause: unknown) {
+		notice = cause instanceof ApiError ? cause.message : 'Could not reach the server';
+	}
+
 	/** reload replaces the list with the first page of the current scope and
 	 * filter, clearing keyboard position: the underlying list changed under it. */
 	async function reload() {
-		const page = await listEntries({ feed: scope, unread: filter === 'unread' });
+		const page = await listEntries({ ...scopeQuery(scope), unread: filter === 'unread' });
 		entries = page.entries;
 		cursor = page.next_cursor;
 		currentIndex = undefined;
 		openIndex = undefined;
 		manuallyUnread = new Set();
+	}
+
+	/** refreshCounts re-reads Feeds and Groups so their unread counts stay
+	 * correct after an Entry's Read state, or the collection itself, changes. */
+	async function refreshCounts() {
+		const [nextFeeds, nextGroups] = await Promise.all([listFeeds(), listGroups()]);
+		feeds = nextFeeds;
+		groups = nextGroups;
 	}
 
 	async function subscribe(event: SubmitEvent) {
@@ -90,8 +150,8 @@
 		try {
 			const feed = await addFeed(address);
 			address = '';
-			feeds = [...feeds, feed].sort((a, b) => a.title.localeCompare(b.title));
-			scope = feed.id;
+			await refreshCounts();
+			scope = { type: 'feed', id: feed.id };
 			await reload();
 			notice = `Subscribed to ${feed.title}.`;
 		} catch (cause) {
@@ -107,19 +167,20 @@
 		try {
 			const failures = await refreshFeeds();
 			await reload();
+			await refreshCounts();
 			notice =
 				failures.length === 0
 					? 'Every Feed is up to date.'
 					: `${failures.length} Feed${failures.length === 1 ? '' : 's'} could not be read.`;
 		} catch (cause) {
-			notice = cause instanceof ApiError ? cause.message : 'Could not reach the server';
+			reportError(cause);
 		} finally {
 			busy = false;
 		}
 	}
 
-	async function scopeTo(feedID: number | undefined) {
-		scope = feedID;
+	async function scopeTo(next: Scope | undefined) {
+		scope = next;
 		busy = true;
 		try {
 			await reload();
@@ -144,7 +205,11 @@
 	async function loadMore() {
 		busy = true;
 		try {
-			const page = await listEntries({ feed: scope, unread: filter === 'unread', cursor });
+			const page = await listEntries({
+				...scopeQuery(scope),
+				unread: filter === 'unread',
+				cursor
+			});
 			entries = [...entries, ...page.entries];
 			cursor = page.next_cursor;
 		} finally {
@@ -173,6 +238,7 @@
 		try {
 			const stored = await setEntryRead(previous.id, read);
 			entries[index] = stored;
+			await refreshCounts();
 		} catch {
 			entries[index] = previous;
 			notice = 'Could not update that Entry.';
@@ -236,6 +302,127 @@
 		} catch {
 			markOnOpen = !next;
 			notice = 'Could not update your settings.';
+		}
+	}
+
+	/** sortGroups matches the server's own order (default first, then by
+	 * name), so a create or rename never leaves the sidebar out of step with
+	 * what the next listGroups() would return. */
+	function sortGroups(list: Group[]): Group[] {
+		return [...list].sort((a, b) => {
+			if (a.is_default !== b.is_default) {
+				return a.is_default ? -1 : 1;
+			}
+			return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+		});
+	}
+
+	async function submitNewGroup(event: SubmitEvent) {
+		event.preventDefault();
+		const name = newGroupName.trim();
+		if (!name) {
+			return;
+		}
+		creatingGroup = true;
+		try {
+			const group = await createGroup(name);
+			groups = sortGroups([...groups, group]);
+			newGroupName = '';
+		} catch (cause) {
+			reportError(cause);
+		} finally {
+			creatingGroup = false;
+		}
+	}
+
+	function startEditGroup(group: Group) {
+		editingGroup = group.id;
+		groupNameDraft = group.name;
+	}
+
+	async function saveGroupName(id: number) {
+		const name = groupNameDraft.trim();
+		editingGroup = undefined;
+		const current = groups.find((g) => g.id === id);
+		if (!name || current?.name === name) {
+			return;
+		}
+		try {
+			const updated = await renameGroup(id, name);
+			groups = sortGroups(groups.map((g) => (g.id === id ? updated : g)));
+		} catch (cause) {
+			reportError(cause);
+		}
+	}
+
+	async function removeGroup(group: Group) {
+		if (!confirm(`Delete the Group "${group.name}"? Its Feeds move to the default Group.`)) {
+			return;
+		}
+		try {
+			await deleteGroup(group.id);
+			if (scope?.type === 'group' && scope.id === group.id) {
+				scope = undefined;
+			}
+			await refreshCounts();
+			await reload();
+		} catch (cause) {
+			reportError(cause);
+		}
+	}
+
+	function startEditFeed(feed: Feed) {
+		editingFeed = feed.id;
+		feedTitleDraft = feed.title;
+	}
+
+	async function saveFeedTitle(id: number) {
+		const title = feedTitleDraft.trim();
+		editingFeed = undefined;
+		const current = feeds.find((f) => f.id === id);
+		if (!title || current?.title === title) {
+			return;
+		}
+		try {
+			const updated = await updateFeed(id, { title });
+			feeds = feeds.map((f) => (f.id === id ? updated : f));
+		} catch (cause) {
+			reportError(cause);
+		}
+	}
+
+	async function moveFeed(feed: Feed, groupID: number) {
+		try {
+			const updated = await updateFeed(feed.id, { group_id: groupID });
+			feeds = feeds.map((f) => (f.id === feed.id ? updated : f));
+			await refreshCounts();
+		} catch (cause) {
+			reportError(cause);
+		}
+	}
+
+	async function toggleSuspend(feed: Feed) {
+		try {
+			const updated = await updateFeed(feed.id, { suspended: !feed.suspended });
+			feeds = feeds.map((f) => (f.id === feed.id ? updated : f));
+		} catch (cause) {
+			reportError(cause);
+		}
+	}
+
+	async function removeFeed(feed: Feed) {
+		if (!confirm(`Delete "${feed.title}" and every Entry it carried?`)) {
+			return;
+		}
+		try {
+			await deleteFeed(feed.id);
+			if (scope?.type === 'feed' && scope.id === feed.id) {
+				scope = undefined;
+			}
+			await refreshCounts();
+			await reload();
+		} catch (cause) {
+			reportError(cause);
 		}
 	}
 
@@ -356,19 +543,104 @@
 								All Feeds
 							</Sidebar.MenuButton>
 						</Sidebar.MenuItem>
-						{#each feeds as feed (feed.id)}
+
+						{#each groups as group (group.id)}
 							<Sidebar.MenuItem>
-								<Sidebar.MenuButton
-									data-testid="feed"
-									isActive={scope === feed.id}
-									aria-current={scope === feed.id}
-									onclick={() => scopeTo(feed.id)}
-								>
-									<span class="truncate">{feed.title}</span>
-								</Sidebar.MenuButton>
+								{#if editingGroup === group.id}
+									<Input
+										class="h-7 text-sm"
+										bind:value={groupNameDraft}
+										onblur={() => saveGroupName(group.id)}
+										onkeydown={(event) => {
+											if (event.key === 'Enter') saveGroupName(group.id);
+											if (event.key === 'Escape') editingGroup = undefined;
+										}}
+									/>
+								{:else}
+									<Sidebar.MenuButton
+										data-testid="group"
+										isActive={scope?.type === 'group' && scope.id === group.id}
+										aria-current={scope?.type === 'group' && scope.id === group.id}
+										onclick={() => scopeTo({ type: 'group', id: group.id })}
+									>
+										<span class="truncate font-medium">{group.name}</span>
+									</Sidebar.MenuButton>
+									<Sidebar.MenuBadge>{group.unread_count}</Sidebar.MenuBadge>
+								{/if}
 							</Sidebar.MenuItem>
+							{#if editingGroup !== group.id}
+								<div class="flex items-center gap-2 px-2 pb-1 text-xs text-muted-foreground">
+									<button type="button" class="hover:underline" onclick={() => startEditGroup(group)}>
+										Rename
+									</button>
+									{#if !group.is_default}
+										<button type="button" class="hover:underline" onclick={() => removeGroup(group)}>
+											Delete
+										</button>
+									{/if}
+								</div>
+							{/if}
+
+							<Sidebar.MenuSub>
+								{#each feedsByGroup.get(group.id) ?? [] as feed (feed.id)}
+									<Sidebar.MenuSubItem>
+										{#if editingFeed === feed.id}
+											<Input
+												class="h-7 text-sm"
+												bind:value={feedTitleDraft}
+												onblur={() => saveFeedTitle(feed.id)}
+												onkeydown={(event) => {
+													if (event.key === 'Enter') saveFeedTitle(feed.id);
+													if (event.key === 'Escape') editingFeed = undefined;
+												}}
+											/>
+										{:else}
+											<Sidebar.MenuSubButton
+												data-testid="feed"
+												isActive={scope?.type === 'feed' && scope.id === feed.id}
+												aria-current={scope?.type === 'feed' && scope.id === feed.id}
+												onclick={() => scopeTo({ type: 'feed', id: feed.id })}
+											>
+												<span class="truncate {feed.suspended ? 'text-muted-foreground italic' : ''}">
+													{feed.title}
+												</span>
+											</Sidebar.MenuSubButton>
+											<Sidebar.MenuBadge>{feed.unread_count}</Sidebar.MenuBadge>
+											<div class="flex flex-wrap items-center gap-2 px-2 pb-1 text-xs text-muted-foreground">
+												<button type="button" class="hover:underline" onclick={() => startEditFeed(feed)}>
+													Rename
+												</button>
+												<label class="sr-only" for={`move-feed-${feed.id}`}>Move {feed.title} to a Group</label>
+												<select
+													id={`move-feed-${feed.id}`}
+													class="h-6 rounded border border-input bg-transparent text-xs"
+													value={feed.group_id}
+													onchange={(event) =>
+														moveFeed(feed, Number((event.target as HTMLSelectElement).value))}
+												>
+													{#each groups as option (option.id)}
+														<option value={option.id}>{option.name}</option>
+													{/each}
+												</select>
+												<button type="button" class="hover:underline" onclick={() => toggleSuspend(feed)}>
+													{feed.suspended ? 'Resume' : 'Suspend'}
+												</button>
+												<button type="button" class="hover:underline" onclick={() => removeFeed(feed)}>
+													Delete
+												</button>
+											</div>
+										{/if}
+									</Sidebar.MenuSubItem>
+								{/each}
+							</Sidebar.MenuSub>
 						{/each}
 					</Sidebar.Menu>
+
+					<form class="mt-2 flex items-center gap-2 px-2" onsubmit={submitNewGroup}>
+						<Field.FieldLabel for="new-group" class="sr-only">New Group</Field.FieldLabel>
+						<Input id="new-group" class="h-7 text-sm" placeholder="New Group" bind:value={newGroupName} />
+						<Button type="submit" size="sm" variant="outline" disabled={creatingGroup}>Add</Button>
+					</form>
 				</Sidebar.GroupContent>
 			</Sidebar.Group>
 		</Sidebar.Content>
@@ -387,7 +659,7 @@
 				<Sidebar.Trigger class="-ml-1" />
 				<div class="flex flex-1 items-center justify-between gap-4">
 					<h2 data-testid="scope" class="truncate text-lg font-medium">
-						{scopedFeed ? scopedFeed.title : 'All Feeds'}
+						{scopeTitle}
 					</h2>
 					<Button variant="outline" size="sm" onclick={refresh} disabled={busy}>Refresh all</Button>
 				</div>

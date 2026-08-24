@@ -43,8 +43,15 @@ func New(deps Deps) *Handler {
 
 	h.mux.Handle("GET /api/feeds", h.requireSession(http.HandlerFunc(h.listFeeds)))
 	h.mux.Handle("POST /api/feeds", h.requireSession(http.HandlerFunc(h.createFeed)))
+	h.mux.Handle("PUT /api/feeds/{id}", h.requireSession(http.HandlerFunc(h.updateFeed)))
+	h.mux.Handle("DELETE /api/feeds/{id}", h.requireSession(http.HandlerFunc(h.deleteFeed)))
 	h.mux.Handle("POST /api/feeds/refresh", h.requireSession(http.HandlerFunc(h.refreshFeeds)))
 	h.mux.Handle("POST /api/feeds/{id}/refresh", h.requireSession(http.HandlerFunc(h.refreshFeed)))
+
+	h.mux.Handle("GET /api/groups", h.requireSession(http.HandlerFunc(h.listGroups)))
+	h.mux.Handle("POST /api/groups", h.requireSession(http.HandlerFunc(h.createGroup)))
+	h.mux.Handle("PUT /api/groups/{id}", h.requireSession(http.HandlerFunc(h.renameGroup)))
+	h.mux.Handle("DELETE /api/groups/{id}", h.requireSession(http.HandlerFunc(h.deleteGroup)))
 
 	h.mux.Handle("GET /api/entries", h.requireSession(http.HandlerFunc(h.listEntries)))
 	h.mux.Handle("PUT /api/entries/{id}/state", h.requireSession(http.HandlerFunc(h.setEntryState)))

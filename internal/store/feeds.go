@@ -24,6 +24,8 @@ type Feed struct {
 	URL       string
 	Title     string
 	SiteURL   string
+	GroupID   int64
+	Suspended bool
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
@@ -58,6 +60,9 @@ func (c Cursor) IsZero() bool { return c.ID == 0 && c.PublishedAt.IsZero() }
 type EntryQuery struct {
 	// FeedID scopes the page to one Feed; zero means every Feed.
 	FeedID int64
+	// GroupID scopes the page to one Group; zero means every Group. Ignored
+	// when FeedID is set.
+	GroupID int64
 	// UnreadOnly scopes the page to Entries not yet Read.
 	UnreadOnly bool
 	// After is the position the last page ended at.
@@ -66,15 +71,25 @@ type EntryQuery struct {
 	Limit int
 }
 
-// CreateFeed stores a new subscription and returns it with its assigned id. It
-// returns ErrFeedExists when this Feed URL is already subscribed.
+// CreateFeed stores a new subscription and returns it with its assigned id. A
+// zero GroupID is resolved to the default Group, so a Feed is never
+// unreachable. It returns ErrFeedExists when this Feed URL is already
+// subscribed.
 func (s *Store) CreateFeed(ctx context.Context, feed Feed, now time.Time) (Feed, error) {
+	if feed.GroupID == 0 {
+		groupID, err := s.defaultGroupID(ctx)
+		if err != nil {
+			return Feed{}, fmt.Errorf("create feed %s: %w", feed.URL, err)
+		}
+		feed.GroupID = groupID
+	}
+
 	err := s.db.QueryRowContext(ctx,
-		`INSERT INTO feeds (url, title, site_url, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?)
+		`INSERT INTO feeds (url, title, site_url, group_id, suspended, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT (url) DO NOTHING
 		 RETURNING id`,
-		feed.URL, feed.Title, feed.SiteURL, now.Unix(), now.Unix()).Scan(&feed.ID)
+		feed.URL, feed.Title, feed.SiteURL, feed.GroupID, boolToInt(feed.Suspended), now.Unix(), now.Unix()).Scan(&feed.ID)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		return Feed{}, ErrFeedExists
@@ -86,29 +101,39 @@ func (s *Store) CreateFeed(ctx context.Context, feed Feed, now time.Time) (Feed,
 	return feed, nil
 }
 
+const feedColumns = `id, url, title, site_url, group_id, suspended, created_at, updated_at`
+
+func scanFeed(row rowScanner) (Feed, error) {
+	var feed Feed
+	var suspended int64
+	var createdAt, updatedAt int64
+	if err := row.Scan(&feed.ID, &feed.URL, &feed.Title, &feed.SiteURL, &feed.GroupID,
+		&suspended, &createdAt, &updatedAt); err != nil {
+		return Feed{}, err
+	}
+	feed.Suspended = suspended != 0
+	feed.CreatedAt = time.Unix(createdAt, 0).UTC()
+	feed.UpdatedAt = time.Unix(updatedAt, 0).UTC()
+	return feed, nil
+}
+
 // Feed reads one subscription. It returns ErrNoFeed when there is no such Feed.
 func (s *Store) Feed(ctx context.Context, id int64) (Feed, error) {
-	var feed Feed
-	var createdAt, updatedAt int64
-	err := s.db.QueryRowContext(ctx,
-		`SELECT id, url, title, site_url, created_at, updated_at FROM feeds WHERE id = ?`, id).
-		Scan(&feed.ID, &feed.URL, &feed.Title, &feed.SiteURL, &createdAt, &updatedAt)
+	feed, err := scanFeed(s.db.QueryRowContext(ctx,
+		`SELECT `+feedColumns+` FROM feeds WHERE id = ?`, id))
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		return Feed{}, ErrNoFeed
 	case err != nil:
 		return Feed{}, fmt.Errorf("read feed %d: %w", id, err)
 	}
-	feed.CreatedAt = time.Unix(createdAt, 0).UTC()
-	feed.UpdatedAt = time.Unix(updatedAt, 0).UTC()
 	return feed, nil
 }
 
 // Feeds reads the whole collection, by title.
 func (s *Store) Feeds(ctx context.Context) ([]Feed, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, url, title, site_url, created_at, updated_at
-		 FROM feeds ORDER BY title COLLATE NOCASE, id`)
+		`SELECT `+feedColumns+` FROM feeds ORDER BY title COLLATE NOCASE, id`)
 	if err != nil {
 		return nil, fmt.Errorf("read feeds: %w", err)
 	}
@@ -116,16 +141,127 @@ func (s *Store) Feeds(ctx context.Context) ([]Feed, error) {
 
 	var feeds []Feed
 	for rows.Next() {
-		var feed Feed
-		var createdAt, updatedAt int64
-		if err := rows.Scan(&feed.ID, &feed.URL, &feed.Title, &feed.SiteURL, &createdAt, &updatedAt); err != nil {
+		feed, err := scanFeed(rows)
+		if err != nil {
 			return nil, fmt.Errorf("read feeds: %w", err)
 		}
-		feed.CreatedAt = time.Unix(createdAt, 0).UTC()
-		feed.UpdatedAt = time.Unix(updatedAt, 0).UTC()
 		feeds = append(feeds, feed)
 	}
 	return feeds, rows.Err()
+}
+
+// FeedPatch declares the fields of a Feed the reader wants to change; a nil
+// field is left as stored, so title, Group, and suspension can be changed
+// independently of one another in a single idempotent declaration.
+type FeedPatch struct {
+	Title     *string
+	GroupID   *int64
+	Suspended *bool
+}
+
+// UpdateFeed applies a FeedPatch to a Feed in one transaction, so a Group
+// that turns out not to exist changes nothing rather than leaving the Feed
+// half-updated. It returns ErrNoFeed when there is no such Feed, and
+// ErrNoGroup when GroupID names a Group that is not there.
+func (s *Store) UpdateFeed(ctx context.Context, id int64, patch FeedPatch, now time.Time) (Feed, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Feed{}, fmt.Errorf("update feed %d: %w", id, err)
+	}
+	defer tx.Rollback()
+
+	var exists int
+	err = tx.QueryRowContext(ctx, `SELECT 1 FROM feeds WHERE id = ?`, id).Scan(&exists)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return Feed{}, ErrNoFeed
+	case err != nil:
+		return Feed{}, fmt.Errorf("update feed %d: %w", id, err)
+	}
+
+	if patch.GroupID != nil {
+		var groupExists int
+		err = tx.QueryRowContext(ctx, `SELECT 1 FROM groups WHERE id = ?`, *patch.GroupID).Scan(&groupExists)
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			return Feed{}, ErrNoGroup
+		case err != nil:
+			return Feed{}, fmt.Errorf("update feed %d: %w", id, err)
+		}
+	}
+
+	if patch.Title != nil {
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE feeds SET title = ?, updated_at = ? WHERE id = ?`, *patch.Title, now.Unix(), id); err != nil {
+			return Feed{}, fmt.Errorf("update feed %d: %w", id, err)
+		}
+	}
+	if patch.GroupID != nil {
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE feeds SET group_id = ?, updated_at = ? WHERE id = ?`, *patch.GroupID, now.Unix(), id); err != nil {
+			return Feed{}, fmt.Errorf("update feed %d: %w", id, err)
+		}
+	}
+	if patch.Suspended != nil {
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE feeds SET suspended = ?, updated_at = ? WHERE id = ?`,
+			boolToInt(*patch.Suspended), now.Unix(), id); err != nil {
+			return Feed{}, fmt.Errorf("update feed %d: %w", id, err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return Feed{}, fmt.Errorf("update feed %d: %w", id, err)
+	}
+	return s.Feed(ctx, id)
+}
+
+// DeleteFeed removes a Feed and every Entry it carried, in one transaction. It
+// returns ErrNoFeed when there is no such Feed.
+func (s *Store) DeleteFeed(ctx context.Context, id int64) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("delete feed %d: %w", id, err)
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(ctx, `DELETE FROM entries WHERE feed_id = ?`, id); err != nil {
+		return fmt.Errorf("delete feed %d: %w", id, err)
+	}
+	result, err := tx.ExecContext(ctx, `DELETE FROM feeds WHERE id = ?`, id)
+	if err != nil {
+		return fmt.Errorf("delete feed %d: %w", id, err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("delete feed %d: %w", id, err)
+	}
+	if affected == 0 {
+		return ErrNoFeed
+	}
+	return tx.Commit()
+}
+
+// FeedUnreadCounts reads the number of unread Entries per Feed, omitting a
+// Feed with none, so callers know the rest are zero.
+func (s *Store) FeedUnreadCounts(ctx context.Context) (map[int64]int, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT feed_id, COUNT(*) FROM entries WHERE read = 0 GROUP BY feed_id`)
+	if err != nil {
+		return nil, fmt.Errorf("read unread counts: %w", err)
+	}
+	defer rows.Close()
+
+	counts := make(map[int64]int)
+	for rows.Next() {
+		var feedID int64
+		var count int
+		if err := rows.Scan(&feedID, &count); err != nil {
+			return nil, fmt.Errorf("read unread counts: %w", err)
+		}
+		counts[feedID] = count
+	}
+	return counts, rows.Err()
 }
 
 // SaveEntries stores what a Feed carried, in one transaction. An Entry the
@@ -178,6 +314,9 @@ func (s *Store) Entries(ctx context.Context, q EntryQuery) ([]Entry, error) {
 	if q.FeedID != 0 {
 		where = append(where, "e.feed_id = ?")
 		args = append(args, q.FeedID)
+	} else if q.GroupID != 0 {
+		where = append(where, "f.group_id = ?")
+		args = append(args, q.GroupID)
 	}
 	if q.UnreadOnly {
 		where = append(where, "e.read = 0")

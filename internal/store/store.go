@@ -23,6 +23,21 @@ type Store struct {
 	db *sql.DB
 }
 
+// rowScanner is satisfied by both *sql.Row and *sql.Rows, so a single scan
+// function can read one row or iterate many.
+type rowScanner interface {
+	Scan(dest ...any) error
+}
+
+// boolToInt renders a bool the way every boolean column in this schema
+// stores one: 0 or 1.
+func boolToInt(b bool) int64 {
+	if b {
+		return 1
+	}
+	return 0
+}
+
 // Open creates the data directory and database file if they do not exist,
 // applies every pending migration, and returns a ready store.
 func Open(ctx context.Context, dataDir string) (*Store, error) {

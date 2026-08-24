@@ -18,6 +18,19 @@ export interface Feed {
 	url: string;
 	title: string;
 	site_url: string;
+	group_id: number;
+	suspended: boolean;
+	unread_count: number;
+	created_at: string;
+}
+
+/** Group is a named set of Feeds, used to scope reading to one part of the
+ * collection. */
+export interface Group {
+	id: number;
+	name: string;
+	is_default: boolean;
+	unread_count: number;
 	created_at: string;
 }
 
@@ -116,6 +129,50 @@ export async function addFeed(url: string): Promise<Feed> {
 	return body.feed;
 }
 
+/**
+ * updateFeed changes a Feed's title, Group, and/or suspended state. Only the
+ * fields given are changed, and returns the Feed as stored.
+ */
+export async function updateFeed(
+	id: number,
+	changes: { title?: string; group_id?: number; suspended?: boolean }
+): Promise<Feed> {
+	const response = await send('PUT', `/feeds/${id}`, 'Could not update that Feed', changes);
+	const body = (await response.json()) as { feed: Feed };
+	return body.feed;
+}
+
+/** deleteFeed removes a Feed and every Entry it carried. */
+export async function deleteFeed(id: number): Promise<void> {
+	await send('DELETE', `/feeds/${id}`, 'Could not delete that Feed');
+}
+
+/** listGroups is the reader's whole set of Groups, by name. */
+export async function listGroups(): Promise<Group[]> {
+	const response = await send('GET', '/groups', 'Could not load your Groups');
+	const body = (await response.json()) as { groups: Group[] | null };
+	return body.groups ?? [];
+}
+
+/** createGroup adds a new Group. */
+export async function createGroup(name: string): Promise<Group> {
+	const response = await send('POST', '/groups', 'Could not create that Group', { name });
+	const body = (await response.json()) as { group: Group };
+	return body.group;
+}
+
+/** renameGroup sets a Group's name and returns it as stored. */
+export async function renameGroup(id: number, name: string): Promise<Group> {
+	const response = await send('PUT', `/groups/${id}`, 'Could not rename that Group', { name });
+	const body = (await response.json()) as { group: Group };
+	return body.group;
+}
+
+/** deleteGroup removes a Group, moving its Feeds to the default Group. */
+export async function deleteGroup(id: number): Promise<void> {
+	await send('DELETE', `/groups/${id}`, 'Could not delete that Group');
+}
+
 /** refreshFeeds re-reads every Feed now, and reports the ones that failed. */
 export async function refreshFeeds(): Promise<{ feed_id: number; error: string }[]> {
 	const response = await send('POST', '/feeds/refresh', 'Could not refresh your Feeds');
@@ -125,11 +182,20 @@ export async function refreshFeeds(): Promise<{ feed_id: number; error: string }
 
 /** listEntries reads one page of the reading list. */
 export async function listEntries(
-	options: { feed?: number; unread?: boolean; cursor?: string; limit?: number } = {}
+	options: {
+		feed?: number;
+		group?: number;
+		unread?: boolean;
+		cursor?: string;
+		limit?: number;
+	} = {}
 ): Promise<EntryPage> {
 	const query = new URLSearchParams();
 	if (options.feed !== undefined) {
 		query.set('feed', String(options.feed));
+	}
+	if (options.group !== undefined) {
+		query.set('group', String(options.group));
 	}
 	if (options.unread !== undefined) {
 		query.set('unread', String(options.unread));

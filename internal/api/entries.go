@@ -51,7 +51,7 @@ func viewEntry(entry store.Entry) entryView {
 }
 
 // listEntries is the reading list: newest first, one page at a time, optionally
-// scoped to a single Feed.
+// scoped to a single Feed or Group.
 func (h *Handler) listEntries(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 
@@ -63,6 +63,14 @@ func (h *Handler) listEntries(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		q.FeedID = feedID
+	}
+	if raw := query.Get("group"); raw != "" {
+		groupID, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil {
+			h.writeError(w, r, http.StatusBadRequest, "group must be a Group id")
+			return
+		}
+		q.GroupID = groupID
 	}
 	if raw := query.Get("unread"); raw != "" {
 		unread, err := strconv.ParseBool(raw)

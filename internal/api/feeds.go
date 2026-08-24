@@ -17,20 +17,26 @@ const maxFeedBody = 8 << 10
 
 // feedView is one Feed as the API presents it.
 type feedView struct {
-	ID        int64     `json:"id"`
-	URL       string    `json:"url"`
-	Title     string    `json:"title"`
-	SiteURL   string    `json:"site_url"`
-	CreatedAt time.Time `json:"created_at"`
+	ID          int64     `json:"id"`
+	URL         string    `json:"url"`
+	Title       string    `json:"title"`
+	SiteURL     string    `json:"site_url"`
+	GroupID     int64     `json:"group_id"`
+	Suspended   bool      `json:"suspended"`
+	UnreadCount int       `json:"unread_count"`
+	CreatedAt   time.Time `json:"created_at"`
 }
 
-func viewFeed(feed store.Feed) feedView {
+func viewFeed(feed store.Feed, unreadCounts map[int64]int) feedView {
 	return feedView{
-		ID:        feed.ID,
-		URL:       feed.URL,
-		Title:     feed.Title,
-		SiteURL:   feed.SiteURL,
-		CreatedAt: feed.CreatedAt,
+		ID:          feed.ID,
+		URL:         feed.URL,
+		Title:       feed.Title,
+		SiteURL:     feed.SiteURL,
+		GroupID:     feed.GroupID,
+		Suspended:   feed.Suspended,
+		UnreadCount: unreadCounts[feed.ID],
+		CreatedAt:   feed.CreatedAt,
 	}
 }
 
@@ -62,13 +68,18 @@ func (h *Handler) createFeed(w http.ResponseWriter, r *http.Request) {
 	case err != nil:
 		h.serverError(w, r, err)
 	default:
-		h.writeJSON(w, r, http.StatusCreated, map[string]any{"feed": viewFeed(feed)})
+		h.writeJSON(w, r, http.StatusCreated, map[string]any{"feed": viewFeed(feed, nil)})
 	}
 }
 
-// listFeeds is the reader's whole collection.
+// listFeeds is the reader's whole collection, with each one's unread count.
 func (h *Handler) listFeeds(w http.ResponseWriter, r *http.Request) {
 	feeds, err := h.deps.Store.Feeds(r.Context())
+	if err != nil {
+		h.serverError(w, r, err)
+		return
+	}
+	counts, err := h.deps.Store.FeedUnreadCounts(r.Context())
 	if err != nil {
 		h.serverError(w, r, err)
 		return
@@ -76,7 +87,7 @@ func (h *Handler) listFeeds(w http.ResponseWriter, r *http.Request) {
 
 	views := make([]feedView, 0, len(feeds))
 	for _, feed := range feeds {
-		views = append(views, viewFeed(feed))
+		views = append(views, viewFeed(feed, counts))
 	}
 	h.writeJSON(w, r, http.StatusOK, map[string]any{"feeds": views})
 }
@@ -110,6 +121,78 @@ func (h *Handler) refreshFeed(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, r, http.StatusNotFound, "no such Feed")
 	case isFetchFailure(err):
 		h.writeError(w, r, http.StatusBadGateway, err.Error())
+	case err != nil:
+		h.serverError(w, r, err)
+	default:
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+// updateFeedRequest declares the fields of a Feed the reader wants to change;
+// an absent field is left as stored, so title, Group and suspension can be
+// changed independently of one another.
+type updateFeedRequest struct {
+	Title     *string `json:"title"`
+	GroupID   *int64  `json:"group_id"`
+	Suspended *bool   `json:"suspended"`
+}
+
+// updateFeed changes a Feed's title, Group, and/or suspended state, applying
+// every change in one transaction so a Group that turns out not to exist
+// changes nothing. Only the fields present in the request are changed.
+func (h *Handler) updateFeed(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		h.writeError(w, r, http.StatusNotFound, "no such Feed")
+		return
+	}
+
+	var body updateFeedRequest
+	if err := json.NewDecoder(io.LimitReader(r.Body, maxFeedBody)).Decode(&body); err != nil {
+		h.writeError(w, r, http.StatusBadRequest, "expected a JSON object with title, group_id, and/or suspended")
+		return
+	}
+	if body.Title == nil && body.GroupID == nil && body.Suspended == nil {
+		h.writeError(w, r, http.StatusBadRequest, "expected at least one of title, group_id, or suspended")
+		return
+	}
+
+	feed, err := h.deps.Store.UpdateFeed(r.Context(), id, store.FeedPatch{
+		Title:     body.Title,
+		GroupID:   body.GroupID,
+		Suspended: body.Suspended,
+	}, h.deps.Clock.Now())
+	switch {
+	case errors.Is(err, store.ErrNoFeed):
+		h.writeError(w, r, http.StatusNotFound, "no such Feed")
+		return
+	case errors.Is(err, store.ErrNoGroup):
+		h.writeError(w, r, http.StatusUnprocessableEntity, "no such Group")
+		return
+	case err != nil:
+		h.serverError(w, r, err)
+		return
+	}
+
+	counts, err := h.deps.Store.FeedUnreadCounts(r.Context())
+	if err != nil {
+		h.serverError(w, r, err)
+		return
+	}
+	h.writeJSON(w, r, http.StatusOK, map[string]any{"feed": viewFeed(feed, counts)})
+}
+
+// deleteFeed removes a Feed and every Entry it carried.
+func (h *Handler) deleteFeed(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		h.writeError(w, r, http.StatusNotFound, "no such Feed")
+		return
+	}
+
+	switch err := h.deps.Store.DeleteFeed(r.Context(), id); {
+	case errors.Is(err, store.ErrNoFeed):
+		h.writeError(w, r, http.StatusNotFound, "no such Feed")
 	case err != nil:
 		h.serverError(w, r, err)
 	default:
