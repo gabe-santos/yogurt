@@ -34,25 +34,43 @@ type Harness struct {
 	stop func()
 }
 
+// Option adjusts the configuration a harness boots with.
+type Option func(*config.Config)
+
+// BlockPrivateFetch keeps the application's default refusal to fetch private
+// network addresses in place. Every harness relaxes it by default, because the
+// fake publisher listens on loopback.
+func BlockPrivateFetch() Option {
+	return func(cfg *config.Config) { cfg.AllowPrivateFetch = false }
+}
+
 // New boots the application against a fresh temporary data directory. The
 // returned harness is torn down when the test ends.
-func New(t *testing.T) *Harness {
+func New(t *testing.T, opts ...Option) *Harness {
 	t.Helper()
-	return NewInDir(t, t.TempDir())
+	return NewInDir(t, t.TempDir(), opts...)
 }
 
 // NewInDir boots the application against a given data directory, so that a test
 // can restart the application over data it already wrote.
-func NewInDir(t *testing.T, dataDir string) *Harness {
+func NewInDir(t *testing.T, dataDir string, opts ...Option) *Harness {
 	t.Helper()
 
 	fake := clock.NewFake(time.Date(2026, 1, 2, 15, 4, 5, 0, time.UTC))
 	publisher := NewPublisher(t)
 
-	application, err := app.New(config.Config{
+	cfg := config.Config{
 		DataDir:  dataDir,
 		Password: Password,
-	}, app.Deps{Clock: fake, Logger: testLogger(t)})
+		// The fake publisher is on loopback, which the application refuses to
+		// fetch unless told otherwise.
+		AllowPrivateFetch: true,
+	}
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+
+	application, err := app.New(cfg, app.Deps{Clock: fake, Logger: testLogger(t)})
 	if err != nil {
 		t.Fatalf("boot application: %v", err)
 	}

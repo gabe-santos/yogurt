@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -24,6 +25,10 @@ type Config struct {
 	Password string
 	// SessionTTL is how long a session stays valid.
 	SessionTTL time.Duration
+	// AllowPrivateFetch lets Feed fetches reach private, loopback and
+	// link-local addresses. Off by default, so that a malicious Feed URL
+	// cannot make this app probe the network it runs on.
+	AllowPrivateFetch bool
 	// LogLevel is the minimum level of emitted logs.
 	LogLevel slog.Level
 }
@@ -71,6 +76,13 @@ func Load() (Config, error) {
 			return Config{}, fmt.Errorf("%sLOG_LEVEL: %w", Prefix, err)
 		}
 		cfg.LogLevel = level
+	}
+	if v, ok := lookup("ALLOW_PRIVATE_FETCH"); ok {
+		allow, err := strconv.ParseBool(v)
+		if err != nil {
+			return Config{}, fmt.Errorf("%sALLOW_PRIVATE_FETCH: %w", Prefix, err)
+		}
+		cfg.AllowPrivateFetch = allow
 	}
 
 	if cfg.Password == "" {
