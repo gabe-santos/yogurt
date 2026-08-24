@@ -50,6 +50,8 @@ export interface Entry {
   published_at: string;
   content: string;
   read: boolean;
+  starred: boolean;
+  archived: boolean;
 }
 
 /** EntryPage is one page of the reading list, newest first. */
@@ -222,26 +224,36 @@ export async function refreshFeeds(): Promise<
   return body.failures ?? [];
 }
 
+export interface EntrySelectionOptions {
+  feed?: number;
+  group?: number;
+  unread?: boolean;
+  starred?: boolean;
+  archived?: boolean;
+}
+
+function entrySelectionQuery(options: EntrySelectionOptions): URLSearchParams {
+  const query = new URLSearchParams();
+  for (const key of [
+    'feed',
+    'group',
+    'unread',
+    'starred',
+    'archived',
+  ] as const) {
+    const value = options[key];
+    if (value !== undefined) {
+      query.set(key, String(value));
+    }
+  }
+  return query;
+}
+
 /** listEntries reads one page of the reading list. */
 export async function listEntries(
-  options: {
-    feed?: number;
-    group?: number;
-    unread?: boolean;
-    cursor?: string;
-    limit?: number;
-  } = {},
+  options: EntrySelectionOptions & { cursor?: string; limit?: number } = {},
 ): Promise<EntryPage> {
-  const query = new URLSearchParams();
-  if (options.feed !== undefined) {
-    query.set('feed', String(options.feed));
-  }
-  if (options.group !== undefined) {
-    query.set('group', String(options.group));
-  }
-  if (options.unread !== undefined) {
-    query.set('unread', String(options.unread));
-  }
+  const query = entrySelectionQuery(options);
   if (options.cursor) {
     query.set('cursor', options.cursor);
   }
@@ -258,21 +270,28 @@ export async function listEntries(
   return { entries: body.entries ?? [], next_cursor: body.next_cursor ?? '' };
 }
 
-/**
- * setEntryRead declares an Entry's Read state — an idempotent declaration, not
- * a toggle — and returns the Entry as stored.
- */
-export async function setEntryRead(id: number, read: boolean): Promise<Entry> {
+/** setEntryState declares complete reader-owned state, never a toggle. */
+export async function setEntryState(
+  id: number,
+  state: Pick<Entry, 'read' | 'starred' | 'archived'>,
+): Promise<Entry> {
   const response = await send(
     'PUT',
     `/entries/${id}/state`,
     'Could not update that Entry',
-    {
-      read,
-    },
+    state,
   );
   const body = (await response.json()) as { entry: Entry };
   return body.entry;
+}
+
+/** markEntriesRead declares Read for exactly one filter and scope. */
+export async function markEntriesRead(
+  options: EntrySelectionOptions,
+): Promise<void> {
+  const query = entrySelectionQuery(options);
+  const path = query.size > 0 ? `/entries/state?${query}` : '/entries/state';
+  await send('PUT', path, 'Could not mark those Entries Read', { read: true });
 }
 
 /** getSettings reads the reader's preferences. */

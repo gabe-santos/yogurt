@@ -19,13 +19,14 @@
     listFeeds,
     listGroups,
     logOut,
+    markEntriesRead,
     refreshFeeds,
     renameGroup,
-    setEntryRead,
+    setEntryState,
     setSettings,
     updateFeed,
   } from "$lib/api";
-  import type { Entry, Feed, Group } from "$lib/api";
+  import type { Entry, EntrySelectionOptions, Feed, Group } from "$lib/api";
   import EntryDrawer from "$lib/EntryDrawer.svelte";
   import { formatPublished } from "$lib/format";
   import HelpDialog from "$lib/HelpDialog.svelte";
@@ -35,6 +36,39 @@
   /** Scope is what the reading list is narrowed to: a single Feed, a single
    * Group, or (when undefined) every Feed. */
   type Scope = { type: "feed"; id: number } | { type: "group"; id: number };
+  type Filter = "all" | "unread" | "starred" | "archive";
+  type FilterDefinition = {
+    query: EntrySelectionOptions;
+    includes: (entry: Entry) => boolean;
+    empty: string;
+    canMarkAllRead: boolean;
+  };
+  const filterDefinitions: Record<Filter, FilterDefinition> = {
+    all: {
+      query: {},
+      includes: (entry) => !entry.archived,
+      empty: "Nothing to read here yet.",
+      canMarkAllRead: true,
+    },
+    unread: {
+      query: { unread: true },
+      includes: (entry) => !entry.archived && !entry.read,
+      empty: "Nothing unread here.",
+      canMarkAllRead: true,
+    },
+    starred: {
+      query: { starred: true },
+      includes: (entry) => !entry.archived && entry.starred,
+      empty: "Nothing Starred here.",
+      canMarkAllRead: true,
+    },
+    archive: {
+      query: { archived: true },
+      includes: (entry) => entry.archived,
+      empty: "The Archive is empty.",
+      canMarkAllRead: false,
+    },
+  };
 
   // The reading list is the server's, and this page mutates it as the reader
   // works, so it owns the copy rather than deriving one from a load function.
@@ -43,7 +77,7 @@
   let entries = $state<Entry[]>([]);
   let cursor = $state("");
   let scope = $state<Scope | undefined>(undefined);
-  let filter = $state<"all" | "unread">("all");
+  let filter = $state<Filter>("all");
   let loading = $state(true);
 
   // The current Entry is the keyboard's notion of position in the list,
@@ -56,6 +90,7 @@
   // Entries the reader has declared unread by hand this session: mark-on-open
   // must never re-mark them Read just because j/k passed back through them.
   let manuallyUnread = $state<Set<number>>(new Set());
+  let pendingEntryIDs = $state<Set<number>>(new Set());
 
   let address = $state("");
   let subscribing = $state(false);
@@ -116,12 +151,16 @@
     }
   });
 
-  /** scopeQuery maps the current Scope onto listEntries' feed/group options,
-   * so reload and loadMore cannot drift on how a Scope becomes a query. */
-  function scopeQuery(current: Scope | undefined) {
+  /** selectionQuery is the single client mapping for both list reads and
+   * mark-all-read, so bulk state cannot drift beyond the visible selection. */
+  function selectionQuery(
+    currentScope: Scope | undefined = scope,
+    currentFilter: Filter = filter,
+  ): EntrySelectionOptions {
     return {
-      feed: current?.type === "feed" ? current.id : undefined,
-      group: current?.type === "group" ? current.id : undefined,
+      feed: currentScope?.type === "feed" ? currentScope.id : undefined,
+      group: currentScope?.type === "group" ? currentScope.id : undefined,
+      ...filterDefinitions[currentFilter].query,
     };
   }
 
@@ -135,10 +174,7 @@
   /** reload replaces the list with the first page of the current scope and
    * filter, clearing keyboard position: the underlying list changed under it. */
   async function reload() {
-    const page = await listEntries({
-      ...scopeQuery(scope),
-      unread: filter === "unread",
-    });
+    const page = await listEntries(selectionQuery());
     entries = page.entries;
     cursor = page.next_cursor;
     currentIndex = undefined;
@@ -198,6 +234,7 @@
   }
 
   async function scopeTo(next: Scope | undefined) {
+    if (busy) return;
     scope = next;
     busy = true;
     try {
@@ -207,8 +244,8 @@
     }
   }
 
-  async function setFilter(next: "all" | "unread") {
-    if (filter === next) {
+  async function setFilter(next: Filter) {
+    if (busy || filter === next) {
       return;
     }
     filter = next;
@@ -223,11 +260,7 @@
   async function loadMore() {
     busy = true;
     try {
-      const page = await listEntries({
-        ...scopeQuery(scope),
-        unread: filter === "unread",
-        cursor,
-      });
+      const page = await listEntries({ ...selectionQuery(), cursor });
       entries = [...entries, ...page.entries];
       cursor = page.next_cursor;
     } finally {
@@ -241,30 +274,128 @@
     await goto("/login");
   }
 
-  /** applyRead sets an Entry's Read state optimistically, correcting the list
-   * if the server refuses it. A manual change is remembered so that j/k
-   * navigating back to an Entry the reader declared unread by hand does not
-   * let mark-on-open silently override it again. */
-  async function applyRead(index: number, read: boolean, manual = false) {
+  type EntryState = Pick<Entry, "read" | "starred" | "archived">;
+
+  /** applyEntryState declares complete state optimistically. Rejection restores
+   * only this Entry, so another Entry's concurrent success cannot be erased. */
+  async function applyEntryState(
+    index: number,
+    state: EntryState,
+    manualRead = false,
+  ) {
     const previous = entries[index];
-    entries[index] = { ...previous, read };
-    if (manual && !read) {
-      manuallyUnread.add(previous.id);
-    } else if (manual) {
-      manuallyUnread.delete(previous.id);
+    if (busy || pendingEntryIDs.has(previous.id)) return;
+
+    const previousCurrent = currentIndex;
+    const previousOpen = openIndex;
+    const previousManualUnread = manuallyUnread.has(previous.id);
+    const mutationFilter = filter;
+    const mutationScope = scope;
+    pendingEntryIDs = new Set([...pendingEntryIDs, previous.id]);
+    const optimistic = {
+      ...previous,
+      ...state,
+      read: state.archived ? true : state.read,
+    };
+
+    if (!filterDefinitions[filter].includes(optimistic)) {
+      entries = entries.filter((entry) => entry.id !== previous.id);
+      if (currentIndex !== undefined) {
+        currentIndex =
+          entries.length === 0
+            ? undefined
+            : Math.min(currentIndex > index ? currentIndex - 1 : currentIndex, entries.length - 1);
+      }
+      if (openIndex === index) {
+        openIndex = undefined;
+      } else if (openIndex !== undefined && openIndex > index) {
+        openIndex--;
+      }
+    } else {
+      entries[index] = optimistic;
+    }
+    const optimisticCurrentID =
+      currentIndex === undefined ? undefined : entries[currentIndex]?.id;
+    const optimisticOpenID = openIndex === undefined ? undefined : entries[openIndex]?.id;
+    if (manualRead && !state.read) {
+      manuallyUnread = new Set([...manuallyUnread, previous.id]);
+    } else if (manualRead) {
+      manuallyUnread = new Set([...manuallyUnread].filter((id) => id !== previous.id));
+    }
+
+    let stored: Entry;
+    try {
+      stored = await setEntryState(previous.id, state);
+    } catch (cause) {
+      pendingEntryIDs = new Set([...pendingEntryIDs].filter((id) => id !== previous.id));
+      if (filter !== mutationFilter || scope !== mutationScope) {
+        await reload();
+      } else {
+        const activeCurrentID =
+          currentIndex === undefined ? undefined : entries[currentIndex]?.id;
+        const activeOpenID = openIndex === undefined ? undefined : entries[openIndex]?.id;
+        const existingIndex = entries.findIndex((entry) => entry.id === previous.id);
+        if (filterDefinitions[filter].includes(previous)) {
+          if (existingIndex >= 0) {
+            entries[existingIndex] = previous;
+          } else {
+            entries = [...entries, previous].sort(
+              (a, b) => b.published_at.localeCompare(a.published_at) || b.id - a.id,
+            );
+          }
+        } else if (existingIndex >= 0) {
+          entries = entries.filter((entry) => entry.id !== previous.id);
+        }
+        const selectionMoved =
+          activeCurrentID !== optimisticCurrentID || activeOpenID !== optimisticOpenID;
+        if (selectionMoved) {
+          const current = entries.findIndex((entry) => entry.id === activeCurrentID);
+          const open = entries.findIndex((entry) => entry.id === activeOpenID);
+          currentIndex = current < 0 ? undefined : current;
+          openIndex = open < 0 ? undefined : open;
+        } else {
+          currentIndex = previousCurrent;
+          openIndex = previousOpen;
+        }
+      }
+      if (previousManualUnread) {
+        manuallyUnread = new Set([...manuallyUnread, previous.id]);
+      } else {
+        manuallyUnread = new Set([...manuallyUnread].filter((id) => id !== previous.id));
+      }
+      reportError(cause);
+      return;
+    }
+
+    pendingEntryIDs = new Set([...pendingEntryIDs].filter((id) => id !== stored.id));
+    if (filter !== mutationFilter || scope !== mutationScope) {
+      await reload();
+    } else {
+      const storedIndex = entries.findIndex((entry) => entry.id === stored.id);
+      if (filterDefinitions[filter].includes(stored)) {
+        if (storedIndex >= 0) entries[storedIndex] = stored;
+      } else if (storedIndex >= 0) {
+        entries = entries.filter((entry) => entry.id !== stored.id);
+      }
     }
     try {
-      const stored = await setEntryRead(previous.id, read);
-      entries[index] = stored;
       await refreshCounts();
-    } catch {
-      entries[index] = previous;
-      notice = "Could not update that Entry.";
+    } catch (cause) {
+      reportError(cause);
     }
   }
 
+  function applyRead(index: number, read: boolean, manual = false) {
+    const entry = entries[index];
+    return applyEntryState(
+      index,
+      { read, starred: entry.starred, archived: entry.archived },
+      manual,
+    );
+  }
+
   function moveCurrent(delta: number) {
-    if (entries.length === 0) {
+    if (busy || entries.length === 0) {
       return;
     }
     const base = currentIndex ?? (delta > 0 ? -1 : entries.length);
@@ -276,7 +407,7 @@
   }
 
   function openCurrent() {
-    if (entries.length === 0) {
+    if (busy || entries.length === 0) {
       return;
     }
     if (currentIndex === undefined) {
@@ -287,13 +418,14 @@
   }
 
   function openEntryAt(index: number) {
+    if (busy) return;
     currentIndex = index;
     openIndex = index;
     maybeMarkOnOpen(index);
   }
 
   function closeDrawer() {
-    openIndex = undefined;
+    if (!busy) openIndex = undefined;
   }
 
   function maybeMarkOnOpen(index: number) {
@@ -305,10 +437,76 @@
 
   function toggleReadCurrent() {
     const index = openIndex ?? currentIndex;
-    if (index === undefined) {
+    if (index === undefined || entries[index].archived) {
       return;
     }
     void applyRead(index, !entries[index].read, true);
+  }
+
+  function toggleStarCurrent() {
+    const index = openIndex ?? currentIndex;
+    if (index === undefined) {
+      return;
+    }
+    const entry = entries[index];
+    void applyEntryState(index, {
+      read: entry.read,
+      starred: !entry.starred,
+      archived: entry.archived,
+    });
+  }
+
+  function archiveCurrent() {
+    const index = openIndex ?? currentIndex;
+    if (index === undefined || entries[index].archived) {
+      return;
+    }
+    const entry = entries[index];
+    void applyEntryState(index, {
+      read: true,
+      starred: entry.starred,
+      archived: true,
+    });
+  }
+
+  async function markAllRead() {
+    if (busy || !filterDefinitions[filter].canMarkAllRead) return;
+    busy = true;
+    const previousEntries = [...entries];
+    const previousCursor = cursor;
+    const previousCurrent = currentIndex;
+    const previousOpen = openIndex;
+    const previousManualUnread = new Set(manuallyUnread);
+
+    entries = entries
+      .map((entry) => ({ ...entry, read: true }))
+      .filter(filterDefinitions[filter].includes);
+    if (entries.length !== previousEntries.length) {
+      cursor = "";
+      currentIndex = undefined;
+      openIndex = undefined;
+    }
+    manuallyUnread = new Set();
+    try {
+      await markEntriesRead(selectionQuery());
+    } catch (cause) {
+      entries = previousEntries;
+      cursor = previousCursor;
+      currentIndex = previousCurrent;
+      openIndex = previousOpen;
+      manuallyUnread = previousManualUnread;
+      reportError(cause);
+      busy = false;
+      return;
+    }
+    try {
+      await refreshCounts();
+      notice = "Marked this view Read.";
+    } catch (cause) {
+      reportError(cause);
+    } finally {
+      busy = false;
+    }
   }
 
   async function toggleMarkOnOpen() {
@@ -766,25 +964,27 @@
     <div class="mx-auto flex w-full max-w-3xl flex-col gap-4 p-6">
       <div class="flex items-center gap-2">
         <Sidebar.Trigger class="-ml-1" />
-        <div class="flex flex-1 items-center justify-between gap-4">
+        <div class="flex flex-1 flex-wrap items-center justify-between gap-3">
           <h2 data-testid="scope" class="truncate text-lg font-medium">
             {scopeTitle}
           </h2>
-          <Button variant="outline" size="sm" onclick={refresh} disabled={busy}
-            >Refresh all</Button
-          >
+          <div class="flex items-center gap-2">
+            {#if filterDefinitions[filter].canMarkAllRead}
+              <Button variant="outline" size="sm" onclick={markAllRead} disabled={busy || entries.length === 0}>
+                Mark all read
+              </Button>
+            {/if}
+            <Button variant="outline" size="sm" onclick={refresh} disabled={busy}>Refresh all</Button>
+          </div>
         </div>
       </div>
 
-      <Tabs.Root
-        value={filter}
-        onValueChange={(value) => setFilter(value as "all" | "unread")}
-      >
+      <Tabs.Root value={filter} onValueChange={(value) => setFilter(value as Filter)}>
         <Tabs.List aria-label="Filter">
           <Tabs.Trigger value="all" data-testid="filter-all">All</Tabs.Trigger>
-          <Tabs.Trigger value="unread" data-testid="filter-unread"
-            >Unread</Tabs.Trigger
-          >
+          <Tabs.Trigger value="unread" data-testid="filter-unread">Unread</Tabs.Trigger>
+          <Tabs.Trigger value="starred" data-testid="filter-starred">Starred</Tabs.Trigger>
+          <Tabs.Trigger value="archive" data-testid="filter-archive">Archive</Tabs.Trigger>
         </Tabs.List>
       </Tabs.Root>
 
@@ -800,9 +1000,7 @@
         <p class="text-muted-foreground">
           {feeds.length === 0
             ? "No Feeds yet. Add one to start reading."
-            : filter === "unread"
-              ? "Nothing unread here."
-              : "Nothing to read here yet."}
+            : filterDefinitions[filter].empty}
         </p>
       {:else}
         <ul class="flex flex-col divide-y divide-border">
@@ -822,9 +1020,11 @@
                   {entry.title || entry.url}
                 </span>
                 <span class="text-xs text-muted-foreground">
-                  {entry.feed_title} · {formatPublished(
-                    entry.published_at,
-                  )}{entry.read ? "" : " · unread"}
+                  {entry.feed_title} · {formatPublished(entry.published_at)}{entry.read
+                    ? ""
+                    : " · unread"}{entry.starred ? " · Starred" : ""}{entry.archived
+                    ? " · Archived"
+                    : ""}
                 </span>
               </button>
             </li>
@@ -855,7 +1055,10 @@
     onClose={closeDrawer}
     onPrev={() => moveCurrent(-1)}
     onNext={() => moveCurrent(1)}
+    busy={busy || pendingEntryIDs.has(openEntry.id)}
     onToggleRead={toggleReadCurrent}
+    onToggleStar={toggleStarCurrent}
+    onArchive={archiveCurrent}
   />
 {/if}
 

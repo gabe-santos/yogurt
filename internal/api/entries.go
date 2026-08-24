@@ -31,6 +31,8 @@ type entryView struct {
 	PublishedAt time.Time `json:"published_at"`
 	Content     string    `json:"content"`
 	Read        bool      `json:"read"`
+	Starred     bool      `json:"starred"`
+	Archived    bool      `json:"archived"`
 }
 
 // viewEntry presents an Entry, sanitising its publisher-supplied content
@@ -47,39 +49,67 @@ func viewEntry(entry store.Entry) entryView {
 		PublishedAt: entry.PublishedAt,
 		Content:     sanitize.HTML(entry.Content),
 		Read:        entry.Read,
+		Starred:     entry.Starred,
+		Archived:    entry.Archived,
 	}
 }
 
-// listEntries is the reading list: newest first, one page at a time, optionally
-// scoped to a single Feed or Group.
-func (h *Handler) listEntries(w http.ResponseWriter, r *http.Request) {
+// parseEntrySelection maps the shared scope and filter query onto the Store's
+// one selection type for both listing and mark-all-read.
+func (h *Handler) parseEntrySelection(w http.ResponseWriter, r *http.Request) (store.EntrySelection, bool) {
 	query := r.URL.Query()
-
-	q := store.EntryQuery{Limit: defaultPageSize}
+	var selection store.EntrySelection
 	if raw := query.Get("feed"); raw != "" {
 		feedID, err := strconv.ParseInt(raw, 10, 64)
 		if err != nil {
 			h.writeError(w, r, http.StatusBadRequest, "feed must be a Feed id")
-			return
+			return store.EntrySelection{}, false
 		}
-		q.FeedID = feedID
+		selection.FeedID = feedID
 	}
 	if raw := query.Get("group"); raw != "" {
 		groupID, err := strconv.ParseInt(raw, 10, 64)
 		if err != nil {
 			h.writeError(w, r, http.StatusBadRequest, "group must be a Group id")
-			return
+			return store.EntrySelection{}, false
 		}
-		q.GroupID = groupID
+		selection.GroupID = groupID
 	}
 	if raw := query.Get("unread"); raw != "" {
 		unread, err := strconv.ParseBool(raw)
 		if err != nil {
 			h.writeError(w, r, http.StatusBadRequest, "unread must be true or false")
-			return
+			return store.EntrySelection{}, false
 		}
-		q.UnreadOnly = unread
+		selection.UnreadOnly = unread
 	}
+	if raw := query.Get("starred"); raw != "" {
+		starred, err := strconv.ParseBool(raw)
+		if err != nil {
+			h.writeError(w, r, http.StatusBadRequest, "starred must be true or false")
+			return store.EntrySelection{}, false
+		}
+		selection.StarredOnly = starred
+	}
+	if raw := query.Get("archived"); raw != "" {
+		archived, err := strconv.ParseBool(raw)
+		if err != nil {
+			h.writeError(w, r, http.StatusBadRequest, "archived must be true or false")
+			return store.EntrySelection{}, false
+		}
+		selection.ArchivedOnly = archived
+	}
+	return selection, true
+}
+
+// listEntries is the reading list: newest first, one page at a time.
+func (h *Handler) listEntries(w http.ResponseWriter, r *http.Request) {
+	selection, ok := h.parseEntrySelection(w, r)
+	if !ok {
+		return
+	}
+	query := r.URL.Query()
+	q := store.EntryQuery{EntrySelection: selection, Limit: defaultPageSize}
 	if raw := query.Get("limit"); raw != "" {
 		limit, err := strconv.Atoi(raw)
 		if err != nil || limit < 1 {
@@ -150,15 +180,16 @@ func decodeCursor(raw string) (store.Cursor, error) {
 // to read.
 const maxEntryStateBody = 1 << 10
 
-// entryStateRequest is the desired state of an Entry, per ADR-0004: an
-// idempotent declaration, not a toggle, so that replaying the same request
-// twice is harmless.
+// entryStateRequest is the complete desired state of an Entry, per ADR-0004.
+// Pointers distinguish explicit false from a missing field.
 type entryStateRequest struct {
-	Read bool `json:"read"`
+	Read     *bool `json:"read"`
+	Starred  *bool `json:"starred"`
+	Archived *bool `json:"archived"`
 }
 
-// setEntryState declares an Entry's Read state by hand, overriding whatever
-// opening it did automatically.
+// setEntryState declares an Entry's complete reader-owned state. Archived
+// implies Read in the store, where that invariant cannot be bypassed.
 func (h *Handler) setEntryState(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
@@ -167,12 +198,15 @@ func (h *Handler) setEntryState(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body entryStateRequest
-	if err := json.NewDecoder(io.LimitReader(r.Body, maxEntryStateBody)).Decode(&body); err != nil {
-		h.writeError(w, r, http.StatusBadRequest, "expected a JSON object with a read flag")
+	if err := json.NewDecoder(io.LimitReader(r.Body, maxEntryStateBody)).Decode(&body); err != nil ||
+		body.Read == nil || body.Starred == nil || body.Archived == nil {
+		h.writeError(w, r, http.StatusBadRequest, "expected read, starred, and archived flags")
 		return
 	}
 
-	entry, err := h.deps.Store.SetEntryRead(r.Context(), id, body.Read, h.deps.Clock.Now())
+	entry, err := h.deps.Store.SetEntryState(r.Context(), id, store.EntryState{
+		Read: *body.Read, Starred: *body.Starred, Archived: *body.Archived,
+	}, h.deps.Clock.Now())
 	switch {
 	case errors.Is(err, store.ErrNoEntry):
 		h.writeError(w, r, http.StatusNotFound, "no such Entry")
@@ -181,4 +215,25 @@ func (h *Handler) setEntryState(w http.ResponseWriter, r *http.Request) {
 	default:
 		h.writeJSON(w, r, http.StatusOK, map[string]any{"entry": viewEntry(entry)})
 	}
+}
+
+// setEntriesRead marks exactly the selected filter and scope Read.
+func (h *Handler) setEntriesRead(w http.ResponseWriter, r *http.Request) {
+	selection, ok := h.parseEntrySelection(w, r)
+	if !ok {
+		return
+	}
+	var body struct {
+		Read *bool `json:"read"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, maxEntryStateBody)).Decode(&body); err != nil ||
+		body.Read == nil || !*body.Read {
+		h.writeError(w, r, http.StatusBadRequest, "read must be true")
+		return
+	}
+	if err := h.deps.Store.MarkEntriesRead(r.Context(), selection, h.deps.Clock.Now()); err != nil {
+		h.serverError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

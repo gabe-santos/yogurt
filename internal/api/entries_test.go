@@ -84,11 +84,17 @@ func TestTheEntryListCanBeScopedToOneFeed(t *testing.T) {
 	}
 }
 
-// setEntryState declares an Entry's Read state and returns it as stored.
-func setEntryState(t *testing.T, h *apitest.Harness, id int64, read bool) *apitest.Response {
+type entryState struct {
+	Read     bool `json:"read"`
+	Starred  bool `json:"starred"`
+	Archived bool `json:"archived"`
+}
+
+// setEntryState declares an Entry's complete state and returns it as stored.
+func setEntryState(t *testing.T, h *apitest.Harness, id int64, state entryState) *apitest.Response {
 	t.Helper()
 	path := "/api/entries/" + strconv.FormatInt(id, 10) + "/state"
-	return h.Do(http.MethodPut, path, map[string]any{"read": read})
+	return h.Do(http.MethodPut, path, state)
 }
 
 func TestOpeningAnEntryMarksItReadByHandAndUnreadReversesIt(t *testing.T) {
@@ -104,7 +110,7 @@ func TestOpeningAnEntryMarksItReadByHandAndUnreadReversesIt(t *testing.T) {
 	var body struct {
 		Entry entryView `json:"entry"`
 	}
-	setEntryState(t, h, entry.ID, true).ExpectStatus(http.StatusOK).JSON(&body)
+	setEntryState(t, h, entry.ID, entryState{Read: true}).ExpectStatus(http.StatusOK).JSON(&body)
 	if !body.Entry.Read {
 		t.Fatal("marking an Entry read did not report it as Read")
 	}
@@ -113,13 +119,13 @@ func TestOpeningAnEntryMarksItReadByHandAndUnreadReversesIt(t *testing.T) {
 	}
 
 	// Idempotent: declaring the same state twice is harmless, per ADR-0004.
-	setEntryState(t, h, entry.ID, true).ExpectStatus(http.StatusOK).JSON(&body)
+	setEntryState(t, h, entry.ID, entryState{Read: true}).ExpectStatus(http.StatusOK).JSON(&body)
 	if !body.Entry.Read {
 		t.Fatal("replaying the same read declaration lost the state")
 	}
 
 	// Manual unread always overrides.
-	setEntryState(t, h, entry.ID, false).ExpectStatus(http.StatusOK).JSON(&body)
+	setEntryState(t, h, entry.ID, entryState{Read: false}).ExpectStatus(http.StatusOK).JSON(&body)
 	if body.Entry.Read {
 		t.Fatal("marking an Entry unread did not report it as unread")
 	}
@@ -128,9 +134,15 @@ func TestOpeningAnEntryMarksItReadByHandAndUnreadReversesIt(t *testing.T) {
 	}
 }
 
-func TestSettingStateOnAMissingEntryIsRefused(t *testing.T) {
+func TestSettingStateOnAMissingEntryOrWithMissingFieldsIsRefused(t *testing.T) {
 	h := loggedIn(t)
-	setEntryState(t, h, 999999, true).ExpectStatus(http.StatusNotFound)
+	setEntryState(t, h, 999999, entryState{Read: true}).ExpectStatus(http.StatusNotFound)
+	entry := listEntries(t, h, "").Entries
+	if len(entry) != 0 {
+		t.Fatal("new reader unexpectedly has Entries")
+	}
+	h.Do(http.MethodPut, "/api/entries/1/state", map[string]bool{"read": true}).
+		ExpectStatus(http.StatusBadRequest)
 }
 
 func TestTheUnreadFilterScopesTheEntryList(t *testing.T) {
@@ -145,7 +157,7 @@ func TestTheUnreadFilterScopesTheEntryList(t *testing.T) {
 		t.Fatalf("unscoped list = %d entries, want 2", len(all.Entries))
 	}
 
-	setEntryState(t, h, all.Entries[0].ID, true).ExpectStatus(http.StatusOK)
+	setEntryState(t, h, all.Entries[0].ID, entryState{Read: true}).ExpectStatus(http.StatusOK)
 
 	unread := listEntries(t, h, "unread=true")
 	if len(unread.Entries) != 1 {
@@ -176,5 +188,115 @@ func TestEntryContentIsSanitisedAgainstDangerousMarkup(t *testing.T) {
 	}
 	if strings.Contains(entry.Content, "onerror") {
 		t.Errorf("sanitised content = %q, still carries an event handler", entry.Content)
+	}
+}
+
+func TestAnEntryCanBeStarredUnstarredAndListedAsStarred(t *testing.T) {
+	h := loggedIn(t)
+	feedURL := h.Publisher.Serve("/feed.xml", apitest.RSS("The Publisher", "",
+		apitest.Item{ID: "one", Title: "One", Published: published},
+		apitest.Item{ID: "two", Title: "Two", Published: published.Add(time.Second)}))
+	subscribe(t, h, feedURL)
+	entries := listEntries(t, h, "").Entries
+	starredID := entries[0].ID
+
+	state := entryState{Starred: true}
+	var body struct {
+		Entry entryView `json:"entry"`
+	}
+	setEntryState(t, h, starredID, state).ExpectStatus(http.StatusOK).JSON(&body)
+	if !body.Entry.Starred {
+		t.Fatal("starring an Entry did not report it as Starred")
+	}
+
+	// Replaying the same declaration is harmless.
+	setEntryState(t, h, starredID, state).ExpectStatus(http.StatusOK).JSON(&body)
+	if !body.Entry.Starred {
+		t.Fatal("replaying the Starred declaration lost the state")
+	}
+	starred := listEntries(t, h, "starred=true").Entries
+	if len(starred) != 1 || starred[0].ID != starredID {
+		t.Fatalf("Starred view = %#v, want only Entry %d", starred, starredID)
+	}
+
+	state.Starred = false
+	setEntryState(t, h, starredID, state).ExpectStatus(http.StatusOK).JSON(&body)
+	if body.Entry.Starred {
+		t.Fatal("unstarring an Entry still reports it as Starred")
+	}
+	if got := listEntries(t, h, "starred=true").Entries; len(got) != 0 {
+		t.Fatalf("Starred view after unstarring = %#v, want empty", got)
+	}
+}
+
+func TestArchivingAnEntryImpliesReadAndLeavesOnlyTheArchiveView(t *testing.T) {
+	h := loggedIn(t)
+	feedURL := h.Publisher.Serve("/feed.xml", apitest.RSS("The Publisher", "",
+		apitest.Item{ID: "one", Title: "One", Published: published},
+		apitest.Item{ID: "two", Title: "Two", Published: published.Add(time.Second)}))
+	subscribe(t, h, feedURL)
+	entries := listEntries(t, h, "").Entries
+	archivedID := entries[0].ID
+
+	var body struct {
+		Entry entryView `json:"entry"`
+	}
+	setEntryState(t, h, archivedID, entryState{
+		Read: false, Starred: true, Archived: true,
+	}).ExpectStatus(http.StatusOK).JSON(&body)
+	if !body.Entry.Archived || !body.Entry.Read {
+		t.Fatalf("archived state = (Archived %t, Read %t), want both true", body.Entry.Archived, body.Entry.Read)
+	}
+
+	for _, query := range []string{"", "unread=true", "starred=true"} {
+		for _, entry := range listEntries(t, h, query).Entries {
+			if entry.ID == archivedID {
+				t.Errorf("Entry %d still appears in view %q after archiving", archivedID, query)
+			}
+		}
+	}
+	archived := listEntries(t, h, "archived=true").Entries
+	if len(archived) != 1 || archived[0].ID != archivedID {
+		t.Fatalf("Archive view = %#v, want only Entry %d", archived, archivedID)
+	}
+	h.Do(http.MethodPut, "/api/entries/state?archived=true", map[string]bool{"read": false}).
+		ExpectStatus(http.StatusBadRequest)
+	if got := listEntries(t, h, "archived=true").Entries[0]; !got.Read {
+		t.Fatal("rejected bulk unread declaration still made an Archived Entry unread")
+	}
+}
+
+func TestMarkAllReadAffectsOnlyTheCurrentFilterAndScope(t *testing.T) {
+	h := loggedIn(t)
+	oneURL := h.Publisher.Serve("/one.xml", apitest.RSS("One", "",
+		apitest.Item{ID: "one-a", Title: "One A", Published: published},
+		apitest.Item{ID: "one-b", Title: "One B", Published: published.Add(time.Second)}))
+	twoURL := h.Publisher.Serve("/two.xml", apitest.RSS("Two", "",
+		apitest.Item{ID: "two-a", Title: "Two A", Published: published.Add(2 * time.Second)}))
+	one := subscribe(t, h, oneURL)
+	two := subscribe(t, h, twoURL)
+	oneEntries := listEntries(t, h, feedQuery(one)).Entries
+	twoEntry := listEntries(t, h, feedQuery(two)).Entries[0]
+
+	star := func(entry entryView) {
+		setEntryState(t, h, entry.ID, entryState{Starred: true}).ExpectStatus(http.StatusOK)
+	}
+	star(oneEntries[0])
+	star(twoEntry)
+
+	path := "/api/entries/state?" + feedQuery(one) + "&starred=true"
+	h.Do(http.MethodPut, path, map[string]bool{"read": true}).ExpectStatus(http.StatusNoContent)
+
+	oneEntries = listEntries(t, h, feedQuery(one)).Entries
+	for _, entry := range oneEntries {
+		if entry.ID == oneEntries[0].ID && entry.Title == "One B" && !entry.Read {
+			t.Error("the Starred Entry in the selected Feed is still unread")
+		}
+		if entry.Title == "One A" && entry.Read {
+			t.Error("the unstarred Entry in the selected Feed was marked Read")
+		}
+	}
+	if got := listEntries(t, h, feedQuery(two)).Entries[0]; got.Read {
+		t.Error("a Starred Entry outside the selected Feed was marked Read")
 	}
 }

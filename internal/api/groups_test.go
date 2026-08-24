@@ -303,7 +303,7 @@ func TestUnreadCountsPerFeedAndGroupStayCorrectAsEntriesAreRead(t *testing.T) {
 	}
 
 	page := listEntries(t, h, feedQuery(feed))
-	setEntryState(t, h, page.Entries[0].ID, true)
+	setEntryState(t, h, page.Entries[0].ID, entryState{Read: true})
 
 	feeds = listFeeds(t, h)
 	if feeds[0].UnreadCount != 1 {

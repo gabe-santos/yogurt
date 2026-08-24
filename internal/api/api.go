@@ -54,6 +54,7 @@ func New(deps Deps) *Handler {
 	h.mux.Handle("DELETE /api/groups/{id}", h.requireSession(http.HandlerFunc(h.deleteGroup)))
 
 	h.mux.Handle("GET /api/entries", h.requireSession(http.HandlerFunc(h.listEntries)))
+	h.mux.Handle("PUT /api/entries/state", h.requireSession(http.HandlerFunc(h.setEntriesRead)))
 	h.mux.Handle("PUT /api/entries/{id}/state", h.requireSession(http.HandlerFunc(h.setEntryState)))
 
 	h.mux.Handle("GET /api/settings", h.requireSession(http.HandlerFunc(h.getSettings)))

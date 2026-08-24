@@ -32,6 +32,8 @@ type entryView struct {
 	PublishedAt string `json:"published_at"`
 	Content     string `json:"content"`
 	Read        bool   `json:"read"`
+	Starred     bool   `json:"starred"`
+	Archived    bool   `json:"archived"`
 }
 
 type entryPage struct {

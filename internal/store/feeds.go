@@ -61,9 +61,11 @@ type Entry struct {
 	URL         string
 	Content     string
 	PublishedAt time.Time
-	// Read is set once the reader has seen this Entry, by hand or by opening
-	// it. It is untouched by SaveEntries.
-	Read bool
+	// Read, Starred, and Archived belong to the reader and are untouched by
+	// SaveEntries. Archived always implies Read.
+	Read     bool
+	Starred  bool
+	Archived bool
 }
 
 // Cursor is a position in the newest-first reading list. The zero value is the
@@ -76,15 +78,23 @@ type Cursor struct {
 // IsZero reports whether the cursor points at the top of the list.
 func (c Cursor) IsZero() bool { return c.ID == 0 && c.PublishedAt.IsZero() }
 
-// EntryQuery selects a page of the reading list.
-type EntryQuery struct {
-	// FeedID scopes the page to one Feed; zero means every Feed.
+// EntrySelection is the filter and scope shared by list and bulk state changes.
+type EntrySelection struct {
+	// FeedID scopes the selection to one Feed; zero means every Feed.
 	FeedID int64
-	// GroupID scopes the page to one Group; zero means every Group. Ignored
+	// GroupID scopes the selection to one Group; zero means every Group. Ignored
 	// when FeedID is set.
 	GroupID int64
-	// UnreadOnly scopes the page to Entries not yet Read.
-	UnreadOnly bool
+	// UnreadOnly and StarredOnly narrow the active reading list. ArchivedOnly
+	// selects the Archive instead; every other selection excludes Archived Entries.
+	UnreadOnly   bool
+	StarredOnly  bool
+	ArchivedOnly bool
+}
+
+// EntryQuery selects a page of the reading list.
+type EntryQuery struct {
+	EntrySelection
 	// After is the position the last page ended at.
 	After Cursor
 	// Limit is the largest number of Entries to return.
@@ -422,20 +432,36 @@ func (s *Store) SaveEntries(ctx context.Context, feedID int64, entries []Entry, 
 	return tx.Commit()
 }
 
-// Entries reads one page of the reading list, newest first.
-func (s *Store) Entries(ctx context.Context, q EntryQuery) ([]Entry, error) {
-	where := make([]string, 0, 3)
-	args := make([]any, 0, 4)
-	if q.FeedID != 0 {
+// entryWhere renders the one filter-and-scope definition used by both listing
+// and bulk state declarations, so mark-all-read cannot select more than the UI.
+func entryWhere(selection EntrySelection) ([]string, []any) {
+	where := make([]string, 0, 5)
+	args := make([]any, 0, 2)
+	if selection.FeedID != 0 {
 		where = append(where, "e.feed_id = ?")
-		args = append(args, q.FeedID)
-	} else if q.GroupID != 0 {
+		args = append(args, selection.FeedID)
+	} else if selection.GroupID != 0 {
 		where = append(where, "f.group_id = ?")
-		args = append(args, q.GroupID)
+		args = append(args, selection.GroupID)
 	}
-	if q.UnreadOnly {
-		where = append(where, "e.read = 0")
+	if selection.ArchivedOnly {
+		where = append(where, "e.archived = 1")
+	} else {
+		where = append(where, "e.archived = 0")
+		if selection.UnreadOnly {
+			where = append(where, "e.read = 0")
+		}
+		if selection.StarredOnly {
+			where = append(where, "e.starred = 1")
+		}
 	}
+	return where, args
+}
+
+// Entries reads one page of the reading list, newest first. Archived Entries
+// are excluded unless ArchivedOnly selects the Archive view.
+func (s *Store) Entries(ctx context.Context, q EntryQuery) ([]Entry, error) {
+	where, args := entryWhere(q.EntrySelection)
 	if !q.After.IsZero() {
 		// Keyset paging: strictly older than the last Entry of the page before,
 		// with the id settling identical timestamps.
@@ -443,12 +469,11 @@ func (s *Store) Entries(ctx context.Context, q EntryQuery) ([]Entry, error) {
 		args = append(args, q.After.PublishedAt.Unix(), q.After.PublishedAt.Unix(), q.After.ID)
 	}
 
-	query := `SELECT e.id, e.feed_id, f.title, e.guid, e.title, e.url, e.content, e.published_at, e.read
-		 FROM entries e JOIN feeds f ON f.id = e.feed_id`
-	if len(where) > 0 {
-		query += " WHERE " + strings.Join(where, " AND ")
-	}
-	query += " ORDER BY e.published_at DESC, e.id DESC LIMIT ?"
+	query := `SELECT e.id, e.feed_id, f.title, e.guid, e.title, e.url, e.content,
+			e.published_at, e.read, e.starred, e.archived
+		 FROM entries e JOIN feeds f ON f.id = e.feed_id
+		 WHERE ` + strings.Join(where, " AND ") +
+		" ORDER BY e.published_at DESC, e.id DESC LIMIT ?"
 	args = append(args, q.Limit)
 
 	rows, err := s.db.QueryContext(ctx, query, args...)
@@ -460,14 +485,15 @@ func (s *Store) Entries(ctx context.Context, q EntryQuery) ([]Entry, error) {
 	var entries []Entry
 	for rows.Next() {
 		var entry Entry
-		var publishedAt int64
-		var read int64
+		var publishedAt, read, starred, archived int64
 		if err := rows.Scan(&entry.ID, &entry.FeedID, &entry.FeedTitle, &entry.GUID,
-			&entry.Title, &entry.URL, &entry.Content, &publishedAt, &read); err != nil {
+			&entry.Title, &entry.URL, &entry.Content, &publishedAt, &read, &starred, &archived); err != nil {
 			return nil, fmt.Errorf("read entries: %w", err)
 		}
 		entry.PublishedAt = time.Unix(publishedAt, 0).UTC()
 		entry.Read = read != 0
+		entry.Starred = starred != 0
+		entry.Archived = archived != 0
 		entries = append(entries, entry)
 	}
 	return entries, rows.Err()
@@ -477,13 +503,14 @@ func (s *Store) Entries(ctx context.Context, q EntryQuery) ([]Entry, error) {
 // Entry.
 func (s *Store) Entry(ctx context.Context, id int64) (Entry, error) {
 	var entry Entry
-	var publishedAt, read int64
+	var publishedAt, read, starred, archived int64
 	err := s.db.QueryRowContext(ctx,
-		`SELECT e.id, e.feed_id, f.title, e.guid, e.title, e.url, e.content, e.published_at, e.read
+		`SELECT e.id, e.feed_id, f.title, e.guid, e.title, e.url, e.content,
+			e.published_at, e.read, e.starred, e.archived
 		 FROM entries e JOIN feeds f ON f.id = e.feed_id
 		 WHERE e.id = ?`, id).
 		Scan(&entry.ID, &entry.FeedID, &entry.FeedTitle, &entry.GUID, &entry.Title,
-			&entry.URL, &entry.Content, &publishedAt, &read)
+			&entry.URL, &entry.Content, &publishedAt, &read, &starred, &archived)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		return Entry{}, ErrNoEntry
@@ -492,28 +519,51 @@ func (s *Store) Entry(ctx context.Context, id int64) (Entry, error) {
 	}
 	entry.PublishedAt = time.Unix(publishedAt, 0).UTC()
 	entry.Read = read != 0
+	entry.Starred = starred != 0
+	entry.Archived = archived != 0
 	return entry, nil
 }
 
-// SetEntryRead sets an Entry's Read state by hand — an idempotent declaration,
-// not a toggle — overriding whatever opening it did automatically, and returns
-// the Entry as stored. It returns ErrNoEntry when there is no such Entry.
-func (s *Store) SetEntryRead(ctx context.Context, id int64, read bool, now time.Time) (Entry, error) {
-	readValue := 0
-	if read {
-		readValue = 1
+// EntryState is the complete reader-owned state of an Entry. It is declared as
+// values rather than toggles so replaying the same mutation is harmless.
+type EntryState struct {
+	Read     bool
+	Starred  bool
+	Archived bool
+}
+
+// SetEntryState declares an Entry's reader-owned state and returns it as
+// stored. Archived always implies Read. A replay leaves updated_at untouched.
+func (s *Store) SetEntryState(ctx context.Context, id int64, state EntryState, now time.Time) (Entry, error) {
+	if state.Archived {
+		state.Read = true
 	}
-	result, err := s.db.ExecContext(ctx,
-		`UPDATE entries SET read = ?, updated_at = ? WHERE id = ?`, readValue, now.Unix(), id)
+	read, starred, archived := boolToInt(state.Read), boolToInt(state.Starred), boolToInt(state.Archived)
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE entries SET read = ?, starred = ?, archived = ?, updated_at = ?
+		 WHERE id = ? AND (read <> ? OR starred <> ? OR archived <> ?)`,
+		read, starred, archived, now.Unix(), id, read, starred, archived)
 	if err != nil {
-		return Entry{}, fmt.Errorf("set entry read: %w", err)
-	}
-	affected, err := result.RowsAffected()
-	if err != nil {
-		return Entry{}, fmt.Errorf("set entry read: %w", err)
-	}
-	if affected == 0 {
-		return Entry{}, ErrNoEntry
+		return Entry{}, fmt.Errorf("set entry state: %w", err)
 	}
 	return s.Entry(ctx, id)
+}
+
+// MarkEntriesRead marks every Entry in selection Read. It uses the same
+// selection as Entries and updates only unread rows, so a replay has no
+// additional effect and Archived can never be made unread through this path.
+func (s *Store) MarkEntriesRead(ctx context.Context, selection EntrySelection, now time.Time) error {
+	where, selectionArgs := entryWhere(selection)
+	args := make([]any, 0, len(selectionArgs)+1)
+	args = append(args, now.Unix())
+	args = append(args, selectionArgs...)
+	query := `UPDATE entries SET read = 1, updated_at = ?
+		 WHERE id IN (
+			 SELECT e.id FROM entries e JOIN feeds f ON f.id = e.feed_id
+			 WHERE ` + strings.Join(where, " AND ") +
+		") AND read = 0"
+	if _, err := s.db.ExecContext(ctx, query, args...); err != nil {
+		return fmt.Errorf("mark Entries read: %w", err)
+	}
+	return nil
 }
