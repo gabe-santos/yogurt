@@ -30,6 +30,7 @@ export interface Entry {
 	url: string;
 	published_at: string;
 	content: string;
+	read: boolean;
 }
 
 /** EntryPage is one page of the reading list, newest first. */
@@ -37,6 +38,12 @@ export interface EntryPage {
 	entries: Entry[];
 	/** next_cursor is empty once the list is exhausted. */
 	next_cursor: string;
+}
+
+/** Settings are the reader's own preferences. */
+export interface Settings {
+	/** mark_on_open is on by default: opening an Entry marks it Read. */
+	mark_on_open: boolean;
 }
 
 async function request(method: string, path: string, body?: unknown): Promise<Response> {
@@ -118,11 +125,14 @@ export async function refreshFeeds(): Promise<{ feed_id: number; error: string }
 
 /** listEntries reads one page of the reading list. */
 export async function listEntries(
-	options: { feed?: number; cursor?: string; limit?: number } = {}
+	options: { feed?: number; unread?: boolean; cursor?: string; limit?: number } = {}
 ): Promise<EntryPage> {
 	const query = new URLSearchParams();
 	if (options.feed !== undefined) {
 		query.set('feed', String(options.feed));
+	}
+	if (options.unread !== undefined) {
+		query.set('unread', String(options.unread));
 	}
 	if (options.cursor) {
 		query.set('cursor', options.cursor);
@@ -135,4 +145,28 @@ export async function listEntries(
 	const response = await send('GET', path, 'Could not load your Entries');
 	const body = (await response.json()) as { entries: Entry[] | null; next_cursor: string };
 	return { entries: body.entries ?? [], next_cursor: body.next_cursor ?? '' };
+}
+
+/**
+ * setEntryRead declares an Entry's Read state — an idempotent declaration, not
+ * a toggle — and returns the Entry as stored.
+ */
+export async function setEntryRead(id: number, read: boolean): Promise<Entry> {
+	const response = await send('PUT', `/entries/${id}/state`, 'Could not update that Entry', { read });
+	const body = (await response.json()) as { entry: Entry };
+	return body.entry;
+}
+
+/** getSettings reads the reader's preferences. */
+export async function getSettings(): Promise<Settings> {
+	const response = await send('GET', '/settings', 'Could not load your settings');
+	const body = (await response.json()) as { settings: Settings };
+	return body.settings;
+}
+
+/** setSettings declares the reader's preferences, replacing whatever they held. */
+export async function setSettings(settings: Settings): Promise<Settings> {
+	const response = await send('PUT', '/settings', 'Could not update your settings', settings);
+	const body = (await response.json()) as { settings: Settings };
+	return body.settings;
 }

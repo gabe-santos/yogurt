@@ -3,6 +3,7 @@ package api_test
 import (
 	"net/http"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -80,5 +81,100 @@ func TestTheEntryListCanBeScopedToOneFeed(t *testing.T) {
 	// Unscoped, the list is every Feed's Entries together, still newest first.
 	if got := entryTitles(listEntries(t, h, "").Entries); !equalStrings(got, []string{"From Two", "From One"}) {
 		t.Errorf("unscoped entries = %v, want both Feeds newest first", got)
+	}
+}
+
+// setEntryState declares an Entry's Read state and returns it as stored.
+func setEntryState(t *testing.T, h *apitest.Harness, id int64, read bool) *apitest.Response {
+	t.Helper()
+	path := "/api/entries/" + strconv.FormatInt(id, 10) + "/state"
+	return h.Do(http.MethodPut, path, map[string]any{"read": read})
+}
+
+func TestOpeningAnEntryMarksItReadByHandAndUnreadReversesIt(t *testing.T) {
+	h := loggedIn(t)
+	feedURL := h.Publisher.Serve("/feed.xml", apitest.RSS("The Publisher", "",
+		apitest.Item{ID: "one", Title: "One", Published: published}))
+	feed := subscribe(t, h, feedURL)
+	entry := listEntries(t, h, feedQuery(feed)).Entries[0]
+	if entry.Read {
+		t.Fatal("a freshly stored Entry is already Read")
+	}
+
+	var body struct {
+		Entry entryView `json:"entry"`
+	}
+	setEntryState(t, h, entry.ID, true).ExpectStatus(http.StatusOK).JSON(&body)
+	if !body.Entry.Read {
+		t.Fatal("marking an Entry read did not report it as Read")
+	}
+	if got := listEntries(t, h, feedQuery(feed)).Entries[0]; !got.Read {
+		t.Error("the reading list still reports the Entry as unread")
+	}
+
+	// Idempotent: declaring the same state twice is harmless, per ADR-0004.
+	setEntryState(t, h, entry.ID, true).ExpectStatus(http.StatusOK).JSON(&body)
+	if !body.Entry.Read {
+		t.Fatal("replaying the same read declaration lost the state")
+	}
+
+	// Manual unread always overrides.
+	setEntryState(t, h, entry.ID, false).ExpectStatus(http.StatusOK).JSON(&body)
+	if body.Entry.Read {
+		t.Fatal("marking an Entry unread did not report it as unread")
+	}
+	if got := listEntries(t, h, feedQuery(feed)).Entries[0]; got.Read {
+		t.Error("the reading list still reports the Entry as read")
+	}
+}
+
+func TestSettingStateOnAMissingEntryIsRefused(t *testing.T) {
+	h := loggedIn(t)
+	setEntryState(t, h, 999999, true).ExpectStatus(http.StatusNotFound)
+}
+
+func TestTheUnreadFilterScopesTheEntryList(t *testing.T) {
+	h := loggedIn(t)
+	feedURL := h.Publisher.Serve("/feed.xml", apitest.RSS("The Publisher", "",
+		apitest.Item{ID: "one", Title: "One", Published: published},
+		apitest.Item{ID: "two", Title: "Two", Published: published.Add(1)}))
+	subscribe(t, h, feedURL)
+
+	all := listEntries(t, h, "")
+	if len(all.Entries) != 2 {
+		t.Fatalf("unscoped list = %d entries, want 2", len(all.Entries))
+	}
+
+	setEntryState(t, h, all.Entries[0].ID, true).ExpectStatus(http.StatusOK)
+
+	unread := listEntries(t, h, "unread=true")
+	if len(unread.Entries) != 1 {
+		t.Fatalf("unread list = %d entries, want 1", len(unread.Entries))
+	}
+	if unread.Entries[0].ID != all.Entries[1].ID {
+		t.Errorf("unread list carried the Read Entry")
+	}
+}
+
+func TestEntryContentIsSanitisedAgainstDangerousMarkup(t *testing.T) {
+	h := loggedIn(t)
+	feedURL := h.Publisher.Serve("/feed.xml", apitest.RSS("The Publisher", "",
+		apitest.Item{
+			ID:        "one",
+			Title:     "One",
+			Published: published,
+			Content:   `<p>safe text</p><script>alert(1)</script><img src=x onerror=alert(2)>`,
+		}))
+	feed := subscribe(t, h, feedURL)
+
+	entry := listEntries(t, h, feedQuery(feed)).Entries[0]
+	if want := "safe text"; !strings.Contains(entry.Content, want) {
+		t.Errorf("sanitised content = %q, lost the safe text %q", entry.Content, want)
+	}
+	if strings.Contains(entry.Content, "<script") {
+		t.Errorf("sanitised content = %q, still carries a script tag", entry.Content)
+	}
+	if strings.Contains(entry.Content, "onerror") {
+		t.Errorf("sanitised content = %q, still carries an event handler", entry.Content)
 	}
 }

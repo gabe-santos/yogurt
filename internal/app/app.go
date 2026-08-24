@@ -74,6 +74,7 @@ func New(cfg config.Config, deps Deps) (*App, error) {
 		Pull: pull.New(db, fetch.New(fetch.Options{
 			AllowPrivate: cfg.AllowPrivateFetch,
 		}), deps.Clock, deps.Logger),
+		Clock:  deps.Clock,
 		Logger: deps.Logger,
 		SPA:    spa,
 	})

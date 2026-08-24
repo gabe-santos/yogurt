@@ -9,6 +9,7 @@ import (
 	"net/http"
 
 	"github.com/gabe-santos/rss-reader/internal/auth"
+	"github.com/gabe-santos/rss-reader/internal/clock"
 	"github.com/gabe-santos/rss-reader/internal/pull"
 	"github.com/gabe-santos/rss-reader/internal/store"
 )
@@ -20,6 +21,7 @@ type Deps struct {
 	Limiter  *auth.Limiter
 	Store    *store.Store
 	Pull     *pull.Service
+	Clock    clock.Clock
 	Logger   *slog.Logger
 	// SPA is the compiled frontend, or nil when the binary carries none.
 	SPA fs.FS
@@ -43,7 +45,12 @@ func New(deps Deps) *Handler {
 	h.mux.Handle("POST /api/feeds", h.requireSession(http.HandlerFunc(h.createFeed)))
 	h.mux.Handle("POST /api/feeds/refresh", h.requireSession(http.HandlerFunc(h.refreshFeeds)))
 	h.mux.Handle("POST /api/feeds/{id}/refresh", h.requireSession(http.HandlerFunc(h.refreshFeed)))
+
 	h.mux.Handle("GET /api/entries", h.requireSession(http.HandlerFunc(h.listEntries)))
+	h.mux.Handle("PUT /api/entries/{id}/state", h.requireSession(http.HandlerFunc(h.setEntryState)))
+
+	h.mux.Handle("GET /api/settings", h.requireSession(http.HandlerFunc(h.getSettings)))
+	h.mux.Handle("PUT /api/settings", h.requireSession(http.HandlerFunc(h.setSettings)))
 
 	h.mux.HandleFunc("GET /", h.spa)
 

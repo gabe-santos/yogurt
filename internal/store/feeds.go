@@ -15,6 +15,9 @@ var ErrFeedExists = errors.New("already subscribed to this Feed")
 // ErrNoFeed reports a Feed that is not there.
 var ErrNoFeed = errors.New("no such Feed")
 
+// ErrNoEntry reports an Entry that is not there.
+var ErrNoEntry = errors.New("no such Entry")
+
 // Feed is one subscription.
 type Feed struct {
 	ID        int64
@@ -36,6 +39,9 @@ type Entry struct {
 	URL         string
 	Content     string
 	PublishedAt time.Time
+	// Read is set once the reader has seen this Entry, by hand or by opening
+	// it. It is untouched by SaveEntries.
+	Read bool
 }
 
 // Cursor is a position in the newest-first reading list. The zero value is the
@@ -52,6 +58,8 @@ func (c Cursor) IsZero() bool { return c.ID == 0 && c.PublishedAt.IsZero() }
 type EntryQuery struct {
 	// FeedID scopes the page to one Feed; zero means every Feed.
 	FeedID int64
+	// UnreadOnly scopes the page to Entries not yet Read.
+	UnreadOnly bool
 	// After is the position the last page ended at.
 	After Cursor
 	// Limit is the largest number of Entries to return.
@@ -165,11 +173,14 @@ func (s *Store) SaveEntries(ctx context.Context, feedID int64, entries []Entry, 
 
 // Entries reads one page of the reading list, newest first.
 func (s *Store) Entries(ctx context.Context, q EntryQuery) ([]Entry, error) {
-	where := make([]string, 0, 2)
+	where := make([]string, 0, 3)
 	args := make([]any, 0, 4)
 	if q.FeedID != 0 {
 		where = append(where, "e.feed_id = ?")
 		args = append(args, q.FeedID)
+	}
+	if q.UnreadOnly {
+		where = append(where, "e.read = 0")
 	}
 	if !q.After.IsZero() {
 		// Keyset paging: strictly older than the last Entry of the page before,
@@ -178,7 +189,7 @@ func (s *Store) Entries(ctx context.Context, q EntryQuery) ([]Entry, error) {
 		args = append(args, q.After.PublishedAt.Unix(), q.After.PublishedAt.Unix(), q.After.ID)
 	}
 
-	query := `SELECT e.id, e.feed_id, f.title, e.guid, e.title, e.url, e.content, e.published_at
+	query := `SELECT e.id, e.feed_id, f.title, e.guid, e.title, e.url, e.content, e.published_at, e.read
 		 FROM entries e JOIN feeds f ON f.id = e.feed_id`
 	if len(where) > 0 {
 		query += " WHERE " + strings.Join(where, " AND ")
@@ -196,12 +207,59 @@ func (s *Store) Entries(ctx context.Context, q EntryQuery) ([]Entry, error) {
 	for rows.Next() {
 		var entry Entry
 		var publishedAt int64
+		var read int64
 		if err := rows.Scan(&entry.ID, &entry.FeedID, &entry.FeedTitle, &entry.GUID,
-			&entry.Title, &entry.URL, &entry.Content, &publishedAt); err != nil {
+			&entry.Title, &entry.URL, &entry.Content, &publishedAt, &read); err != nil {
 			return nil, fmt.Errorf("read entries: %w", err)
 		}
 		entry.PublishedAt = time.Unix(publishedAt, 0).UTC()
+		entry.Read = read != 0
 		entries = append(entries, entry)
 	}
 	return entries, rows.Err()
+}
+
+// Entry reads one Entry by id. It returns ErrNoEntry when there is no such
+// Entry.
+func (s *Store) Entry(ctx context.Context, id int64) (Entry, error) {
+	var entry Entry
+	var publishedAt, read int64
+	err := s.db.QueryRowContext(ctx,
+		`SELECT e.id, e.feed_id, f.title, e.guid, e.title, e.url, e.content, e.published_at, e.read
+		 FROM entries e JOIN feeds f ON f.id = e.feed_id
+		 WHERE e.id = ?`, id).
+		Scan(&entry.ID, &entry.FeedID, &entry.FeedTitle, &entry.GUID, &entry.Title,
+			&entry.URL, &entry.Content, &publishedAt, &read)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return Entry{}, ErrNoEntry
+	case err != nil:
+		return Entry{}, fmt.Errorf("read entry %d: %w", id, err)
+	}
+	entry.PublishedAt = time.Unix(publishedAt, 0).UTC()
+	entry.Read = read != 0
+	return entry, nil
+}
+
+// SetEntryRead sets an Entry's Read state by hand — an idempotent declaration,
+// not a toggle — overriding whatever opening it did automatically, and returns
+// the Entry as stored. It returns ErrNoEntry when there is no such Entry.
+func (s *Store) SetEntryRead(ctx context.Context, id int64, read bool, now time.Time) (Entry, error) {
+	readValue := 0
+	if read {
+		readValue = 1
+	}
+	result, err := s.db.ExecContext(ctx,
+		`UPDATE entries SET read = ?, updated_at = ? WHERE id = ?`, readValue, now.Unix(), id)
+	if err != nil {
+		return Entry{}, fmt.Errorf("set entry read: %w", err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return Entry{}, fmt.Errorf("set entry read: %w", err)
+	}
+	if affected == 0 {
+		return Entry{}, ErrNoEntry
+	}
+	return s.Entry(ctx, id)
 }

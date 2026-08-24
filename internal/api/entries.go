@@ -2,13 +2,16 @@ package api
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/gabe-santos/rss-reader/internal/sanitize"
 	"github.com/gabe-santos/rss-reader/internal/store"
 )
 
@@ -27,8 +30,13 @@ type entryView struct {
 	URL         string    `json:"url"`
 	PublishedAt time.Time `json:"published_at"`
 	Content     string    `json:"content"`
+	Read        bool      `json:"read"`
 }
 
+// viewEntry presents an Entry, sanitising its publisher-supplied content
+// against dangerous markup here rather than at ingest: the stored Entry stays
+// what the publisher sent, per CONTEXT.md, and every reader — including one
+// stored before this sanitisation existed — gets the same guarantee.
 func viewEntry(entry store.Entry) entryView {
 	return entryView{
 		ID:          entry.ID,
@@ -37,7 +45,8 @@ func viewEntry(entry store.Entry) entryView {
 		Title:       entry.Title,
 		URL:         entry.URL,
 		PublishedAt: entry.PublishedAt,
-		Content:     entry.Content,
+		Content:     sanitize.HTML(entry.Content),
+		Read:        entry.Read,
 	}
 }
 
@@ -54,6 +63,14 @@ func (h *Handler) listEntries(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		q.FeedID = feedID
+	}
+	if raw := query.Get("unread"); raw != "" {
+		unread, err := strconv.ParseBool(raw)
+		if err != nil {
+			h.writeError(w, r, http.StatusBadRequest, "unread must be true or false")
+			return
+		}
+		q.UnreadOnly = unread
 	}
 	if raw := query.Get("limit"); raw != "" {
 		limit, err := strconv.Atoi(raw)
@@ -119,4 +136,41 @@ func decodeCursor(raw string) (store.Cursor, error) {
 		return store.Cursor{}, fmt.Errorf("cursor entry: %w", err)
 	}
 	return store.Cursor{PublishedAt: time.Unix(seconds, 0).UTC(), ID: entryID}, nil
+}
+
+// maxEntryStateBody caps how much of a state-mutation request we are willing
+// to read.
+const maxEntryStateBody = 1 << 10
+
+// entryStateRequest is the desired state of an Entry, per ADR-0004: an
+// idempotent declaration, not a toggle, so that replaying the same request
+// twice is harmless.
+type entryStateRequest struct {
+	Read bool `json:"read"`
+}
+
+// setEntryState declares an Entry's Read state by hand, overriding whatever
+// opening it did automatically.
+func (h *Handler) setEntryState(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		h.writeError(w, r, http.StatusNotFound, "no such Entry")
+		return
+	}
+
+	var body entryStateRequest
+	if err := json.NewDecoder(io.LimitReader(r.Body, maxEntryStateBody)).Decode(&body); err != nil {
+		h.writeError(w, r, http.StatusBadRequest, "expected a JSON object with a read flag")
+		return
+	}
+
+	entry, err := h.deps.Store.SetEntryRead(r.Context(), id, body.Read, h.deps.Clock.Now())
+	switch {
+	case errors.Is(err, store.ErrNoEntry):
+		h.writeError(w, r, http.StatusNotFound, "no such Entry")
+	case err != nil:
+		h.serverError(w, r, err)
+	default:
+		h.writeJSON(w, r, http.StatusOK, map[string]any{"entry": viewEntry(entry)})
+	}
 }
