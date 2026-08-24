@@ -1,0 +1,2 @@
+Keeps this directory in git so that `go:embed` has something to match before the
+frontend has been built. The build writes into ./spa, which is not committed.

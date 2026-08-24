@@ -1,0 +1,12 @@
+# Build output
+/bin/
+/internal/webui/dist/spa/
+
+# Runtime data
+/data/
+
+# Frontend
+/web/node_modules/
+/web/.svelte-kit/
+/web/test-results/
+/web/playwright-report/

@@ -1,0 +1,92 @@
+// Package config reads the application's settings from the environment.
+package config
+
+import (
+	"errors"
+	"fmt"
+	"log/slog"
+	"os"
+	"strings"
+	"time"
+)
+
+// Prefix is applied to every environment variable this application reads.
+const Prefix = "READER_"
+
+// Config is the whole of the application's configuration. Every field has a
+// working default except the password, which must be supplied.
+type Config struct {
+	// Addr is the listening address of the HTTP server.
+	Addr string
+	// DataDir holds the SQLite database file.
+	DataDir string
+	// Password is the reader's login password.
+	Password string
+	// SessionTTL is how long a session stays valid.
+	SessionTTL time.Duration
+	// LogLevel is the minimum level of emitted logs.
+	LogLevel slog.Level
+}
+
+// Defaults are the settings used when the environment says nothing.
+func Defaults() Config {
+	return Config{
+		Addr:       ":8080",
+		DataDir:    "./data",
+		SessionTTL: 30 * 24 * time.Hour,
+		LogLevel:   slog.LevelInfo,
+	}
+}
+
+// ErrNoPassword reports a missing password setting, the one thing a self-hoster
+// must supply.
+var ErrNoPassword = errors.New(Prefix + "PASSWORD is required")
+
+// Load reads the configuration from the environment, applying defaults.
+func Load() (Config, error) {
+	cfg := Defaults()
+
+	if v, ok := lookup("ADDR"); ok {
+		cfg.Addr = v
+	}
+	if v, ok := lookup("DATA_DIR"); ok {
+		cfg.DataDir = v
+	}
+	if v, ok := lookup("PASSWORD"); ok {
+		cfg.Password = v
+	}
+	if v, ok := lookup("SESSION_TTL"); ok {
+		ttl, err := time.ParseDuration(v)
+		if err != nil {
+			return Config{}, fmt.Errorf("%sSESSION_TTL: %w", Prefix, err)
+		}
+		if ttl <= 0 {
+			return Config{}, fmt.Errorf("%sSESSION_TTL must be positive, got %q", Prefix, v)
+		}
+		cfg.SessionTTL = ttl
+	}
+	if v, ok := lookup("LOG_LEVEL"); ok {
+		var level slog.Level
+		if err := level.UnmarshalText([]byte(v)); err != nil {
+			return Config{}, fmt.Errorf("%sLOG_LEVEL: %w", Prefix, err)
+		}
+		cfg.LogLevel = level
+	}
+
+	if cfg.Password == "" {
+		return Config{}, ErrNoPassword
+	}
+	return cfg, nil
+}
+
+func lookup(name string) (string, bool) {
+	v, ok := os.LookupEnv(Prefix + name)
+	if !ok {
+		return "", false
+	}
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return "", false
+	}
+	return v, true
+}
