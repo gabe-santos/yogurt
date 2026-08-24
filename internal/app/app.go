@@ -36,9 +36,12 @@ type App struct {
 	logger  *slog.Logger
 	store   *store.Store
 	handler http.Handler
+	pull    *pull.Service
+	cancel  context.CancelFunc
 }
 
-// New opens the database, applies migrations, and wires the HTTP surface.
+// New opens the database, applies migrations, and wires the HTTP surface. It
+// also starts the background Feed schedule, which runs until Close.
 func New(cfg config.Config, deps Deps) (*App, error) {
 	if deps.Clock == nil {
 		deps.Clock = clock.System{}
@@ -66,26 +69,38 @@ func New(cfg config.Config, deps Deps) (*App, error) {
 		spa = nil
 	}
 
+	pullService := pull.New(db, fetch.New(fetch.Options{
+		AllowPrivate: cfg.AllowPrivateFetch,
+	}), deps.Clock, deps.Logger, cfg.PollInterval)
+
 	handler := api.New(api.Deps{
 		Password: password,
 		Sessions: auth.NewSessions(db, deps.Clock, cfg.SessionTTL),
 		Limiter:  auth.NewLimiter(deps.Clock),
 		Store:    db,
-		Pull: pull.New(db, fetch.New(fetch.Options{
-			AllowPrivate: cfg.AllowPrivateFetch,
-		}), deps.Clock, deps.Logger),
-		Clock:  deps.Clock,
-		Logger: deps.Logger,
-		SPA:    spa,
+		Pull:     pullService,
+		Clock:    deps.Clock,
+		Logger:   deps.Logger,
+		SPA:      spa,
 	})
-	return &App{cfg: cfg, logger: deps.Logger, store: db, handler: handler}, nil
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go pullService.Run(ctx, cfg.PollTick)
+
+	return &App{
+		cfg: cfg, logger: deps.Logger, store: db, handler: handler,
+		pull: pullService, cancel: cancel,
+	}, nil
 }
 
 // Handler is the application's HTTP surface.
 func (a *App) Handler() http.Handler { return a.handler }
 
-// Close releases the database.
-func (a *App) Close() error { return a.store.Close() }
+// Close stops the background Feed schedule and releases the database.
+func (a *App) Close() error {
+	a.cancel()
+	return a.store.Close()
+}
 
 // Serve runs the HTTP server until the context is cancelled, then shuts down
 // gracefully.

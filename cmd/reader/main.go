@@ -1,6 +1,5 @@
 // Command reader is the whole application: one binary serving the API, the
-// embedded single-page app, and (later) the feed pull worker over one SQLite
-// file.
+// embedded single-page app, and the feed pull worker, over one SQLite file.
 package main
 
 import (

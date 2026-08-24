@@ -1,6 +1,7 @@
 // Package pull subscribes to Feeds and reads them: fetch, parse, and store what
 // the publisher carried. It is the only place that turns a Feed document into
-// Entries.
+// Entries, and the only place a Feed is checked — on demand or on its own
+// schedule.
 package pull
 
 import (
@@ -8,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -15,12 +17,18 @@ import (
 	"github.com/gabe-santos/rss-reader/internal/clock"
 	"github.com/gabe-santos/rss-reader/internal/feed"
 	"github.com/gabe-santos/rss-reader/internal/fetch"
+	"github.com/gabe-santos/rss-reader/internal/pullpolicy"
 	"github.com/gabe-santos/rss-reader/internal/store"
 )
 
 // concurrency bounds how many Feeds are fetched at once, so that refreshing
 // hundreds of Feeds is quick without opening hundreds of connections.
 const concurrency = 8
+
+// defaultTick is how often the schedule wakes to look for a due Feed, when the
+// caller has no opinion. It only needs to be finer than the shortest interval
+// a reader could plausibly configure.
+const defaultTick = time.Minute
 
 // ErrNoFeed reports an address that is reachable but carries no Feed, and
 // advertises none.
@@ -39,17 +47,24 @@ type FetchError struct {
 func (e *FetchError) Error() string { return fmt.Sprintf("could not fetch %s: %v", e.URL, e.Err) }
 func (e *FetchError) Unwrap() error { return e.Err }
 
-// Service subscribes to Feeds and refreshes them.
+// Service subscribes to Feeds, refreshes them on demand, and polls them on
+// their own schedule.
 type Service struct {
-	store  *store.Store
-	client *fetch.Client
-	clock  clock.Clock
-	logger *slog.Logger
+	store    *store.Store
+	client   *fetch.Client
+	clock    clock.Clock
+	logger   *slog.Logger
+	interval time.Duration
 }
 
-// New wires a pull service.
-func New(db *store.Store, client *fetch.Client, now clock.Clock, logger *slog.Logger) *Service {
-	return &Service{store: db, client: client, clock: now, logger: logger}
+// New wires a pull service. interval is how often a Feed is checked when
+// nothing else — a publisher's hint, or a run of failures — says otherwise; a
+// non-positive interval falls back to pullpolicy.DefaultInterval.
+func New(db *store.Store, client *fetch.Client, now clock.Clock, logger *slog.Logger, interval time.Duration) *Service {
+	if interval <= 0 {
+		interval = pullpolicy.DefaultInterval
+	}
+	return &Service{store: db, client: client, clock: now, logger: logger, interval: interval}
 }
 
 // Subscribe validates an address, discovering the Feed on it when the address is
@@ -96,6 +111,10 @@ func (s *Service) Subscribe(ctx context.Context, rawURL string) (store.Feed, err
 	if err := s.store.SaveEntries(ctx, saved.ID, entriesOf(document, now), now); err != nil {
 		return store.Feed{}, err
 	}
+	s.recordSuccess(ctx, saved.ID, store.Feed{}, resp.Header, now)
+	if saved, err = s.store.Feed(ctx, saved.ID); err != nil {
+		return store.Feed{}, err
+	}
 	return saved, nil
 }
 
@@ -109,13 +128,53 @@ func (s *Service) Refresh(ctx context.Context, feedID int64) error {
 }
 
 // RefreshAll re-reads every Feed, a bounded number at a time, and returns the
-// ones that failed. A Feed that fails does not stop the others.
+// ones that failed. A Feed that fails does not stop the others. It reads every
+// Feed regardless of suspension or schedule, because "refresh" means refresh.
 func (s *Service) RefreshAll(ctx context.Context) (map[int64]error, error) {
 	feeds, err := s.store.Feeds(ctx)
 	if err != nil {
 		return nil, err
 	}
+	return s.refreshMany(ctx, feeds), nil
+}
 
+// PollDue re-reads every Feed whose schedule says it is due, skipping
+// suspended Feeds entirely. This is what the background schedule calls;
+// RefreshAll is what a reader's own "refresh everything" asks for, and does
+// not wait for the schedule.
+func (s *Service) PollDue(ctx context.Context) (map[int64]error, error) {
+	due, err := s.store.DueFeeds(ctx, s.clock.Now())
+	if err != nil {
+		return nil, err
+	}
+	return s.refreshMany(ctx, due), nil
+}
+
+// Run polls due Feeds on a schedule until ctx is cancelled. It is the only
+// place a Feed is checked without the reader asking. tick sets how often the
+// schedule wakes to look for a due Feed; a non-positive tick falls back to
+// defaultTick.
+func (s *Service) Run(ctx context.Context, tick time.Duration) {
+	if tick <= 0 {
+		tick = defaultTick
+	}
+	ticker := time.NewTicker(tick)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if _, err := s.PollDue(ctx); err != nil {
+				s.logger.ErrorContext(ctx, "poll due feeds", "error", err)
+			}
+		}
+	}
+}
+
+// refreshMany re-reads a set of Feeds concurrently, bounded by concurrency,
+// and returns the ones that failed.
+func (s *Service) refreshMany(ctx context.Context, feeds []store.Feed) map[int64]error {
 	var (
 		mu       sync.Mutex
 		failures = make(map[int64]error)
@@ -139,28 +198,97 @@ func (s *Service) RefreshAll(ctx context.Context) (map[int64]error, error) {
 		}()
 	}
 	wait.Wait()
-
-	return failures, nil
+	return failures
 }
 
+// refresh re-reads one Feed, sending whatever validators it holds from a
+// previous check so an unchanged Feed can be confirmed without resending its
+// whole document, and records the outcome — success or failure — as this
+// Feed's new fetch state.
 func (s *Service) refresh(ctx context.Context, subscribed store.Feed) error {
-	resp, err := s.get(ctx, subscribed.URL)
+	resp, err := s.client.Get(ctx, subscribed.URL, fetch.Conditional{
+		ETag:         subscribed.ETag,
+		LastModified: subscribed.LastModified,
+	})
+	now := s.clock.Now()
 	if err != nil {
-		return err
+		s.recordFailure(ctx, subscribed, err.Error(), nil, now)
+		return &FetchError{URL: subscribed.URL, Err: err}
 	}
+
+	if resp.StatusCode == http.StatusNotModified {
+		// Nothing to reparse: the publisher confirmed this Feed is unchanged,
+		// which is what a conditional request is for.
+		s.recordSuccess(ctx, subscribed.ID, subscribed, resp.Header, now)
+		return nil
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		cause := fmt.Errorf("the publisher answered %d", resp.StatusCode)
+		s.recordFailure(ctx, subscribed, cause.Error(), resp.Header, now)
+		return &FetchError{URL: subscribed.URL, Err: cause}
+	}
+
 	document, err := feed.Parse(resp.Body, resp.URL)
 	if err != nil {
-		return fmt.Errorf("%s: %w", subscribed.URL, err)
+		cause := fmt.Errorf("%s: %w", subscribed.URL, err)
+		s.recordFailure(ctx, subscribed, cause.Error(), resp.Header, now)
+		return cause
 	}
 
-	now := s.clock.Now()
-	return s.store.SaveEntries(ctx, subscribed.ID, entriesOf(document, now), now)
+	if err := s.store.SaveEntries(ctx, subscribed.ID, entriesOf(document, now), now); err != nil {
+		return err
+	}
+	s.recordSuccess(ctx, subscribed.ID, subscribed, resp.Header, now)
+	return nil
 }
 
-// get fetches a document, treating a refusal from the publisher as a failure to
-// fetch rather than as content.
+// recordSuccess stores the fetch state after a check that succeeded, whether
+// or not the Feed had changed. A validator the response did not repeat (a 304
+// commonly omits both) is kept from the previous check rather than erased.
+func (s *Service) recordSuccess(ctx context.Context, feedID int64, previous store.Feed, header http.Header, now time.Time) {
+	etag := header.Get("ETag")
+	if etag == "" {
+		etag = previous.ETag
+	}
+	lastModified := header.Get("Last-Modified")
+	if lastModified == "" {
+		lastModified = previous.LastModified
+	}
+
+	next := pullpolicy.NextCheck(now, s.interval, pullpolicy.HintsFromHeader(header, now))
+	if err := s.store.RecordFetchResult(ctx, feedID, store.FetchResult{
+		ETag:         etag,
+		LastModified: lastModified,
+		Success:      true,
+		NextCheckAt:  next,
+	}, now); err != nil {
+		s.logger.WarnContext(ctx, "record fetch success", "feed", feedID, "error", err)
+	}
+}
+
+// recordFailure stores the fetch state after a check that failed. header is
+// nil when the failure happened before a response arrived at all.
+func (s *Service) recordFailure(ctx context.Context, previous store.Feed, message string, header http.Header, now time.Time) {
+	hints := pullpolicy.Hints{RetryAfter: pullpolicy.HintsFromHeader(header, now).RetryAfter}
+	failures := previous.ConsecutiveFailures + 1
+	next := pullpolicy.NextCheckAfterFailure(now, s.interval, hints, failures)
+	if err := s.store.RecordFetchResult(ctx, previous.ID, store.FetchResult{
+		ETag:                previous.ETag,
+		LastModified:        previous.LastModified,
+		Success:             false,
+		Error:               message,
+		ConsecutiveFailures: failures,
+		NextCheckAt:         next,
+	}, now); err != nil {
+		s.logger.WarnContext(ctx, "record fetch failure", "feed", previous.ID, "error", err)
+	}
+}
+
+// get fetches a document unconditionally, treating a refusal from the
+// publisher as a failure to fetch rather than as content. It is used only by
+// Subscribe, which holds no validators yet.
 func (s *Service) get(ctx context.Context, rawURL string) (*fetch.Response, error) {
-	resp, err := s.client.Get(ctx, rawURL)
+	resp, err := s.client.Get(ctx, rawURL, fetch.Conditional{})
 	if err != nil {
 		return nil, &FetchError{URL: rawURL, Err: err}
 	}

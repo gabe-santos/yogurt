@@ -98,10 +98,19 @@ func New(opts Options) *Client {
 const accept = "application/atom+xml, application/rss+xml, application/feed+json, " +
 	"application/xml;q=0.9, text/xml;q=0.9, text/html;q=0.8, */*;q=0.5"
 
-// Get fetches one document. A response the publisher refused — any status — is
-// returned rather than treated as an error; only failing to get a response at
-// all is an error.
-func (c *Client) Get(ctx context.Context, rawURL string) (*Response, error) {
+// Conditional carries the validators a previous fetch received, so a
+// publisher that has not changed since can answer "not modified" instead of
+// resending the whole document. The zero value asks for the document
+// unconditionally.
+type Conditional struct {
+	ETag         string
+	LastModified string
+}
+
+// Get fetches one document. A response the publisher refused — any status,
+// including 304 Not Modified — is returned rather than treated as an error;
+// only failing to get a response at all is an error.
+func (c *Client) Get(ctx context.Context, rawURL string, cond Conditional) (*Response, error) {
 	target, err := ParseURL(rawURL)
 	if err != nil {
 		return nil, err
@@ -113,6 +122,12 @@ func (c *Client) Get(ctx context.Context, rawURL string) (*Response, error) {
 	}
 	req.Header.Set("User-Agent", c.userAgent)
 	req.Header.Set("Accept", accept)
+	if cond.ETag != "" {
+		req.Header.Set("If-None-Match", cond.ETag)
+	}
+	if cond.LastModified != "" {
+		req.Header.Set("If-Modified-Since", cond.LastModified)
+	}
 
 	resp, err := c.http.Do(req)
 	if err != nil {

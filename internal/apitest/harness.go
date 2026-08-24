@@ -44,6 +44,20 @@ func BlockPrivateFetch() Option {
 	return func(cfg *config.Config) { cfg.AllowPrivateFetch = false }
 }
 
+// PollInterval sets how often a Feed is checked when nothing else says
+// otherwise, for tests that want to observe the schedule without a real
+// interval's wait.
+func PollInterval(d time.Duration) Option {
+	return func(cfg *config.Config) { cfg.PollInterval = d }
+}
+
+// PollTick sets how often the background schedule wakes to look for a due
+// Feed, for tests that want to observe scheduled polling within a bounded
+// real-time wait instead of a production-sized tick.
+func PollTick(d time.Duration) Option {
+	return func(cfg *config.Config) { cfg.PollTick = d }
+}
+
 // New boots the application against a fresh temporary data directory. The
 // returned harness is torn down when the test ends.
 func New(t *testing.T, opts ...Option) *Harness {

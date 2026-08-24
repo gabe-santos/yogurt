@@ -28,6 +28,26 @@ type Feed struct {
 	Suspended bool
 	CreatedAt time.Time
 	UpdatedAt time.Time
+
+	// ETag and LastModified are the validators from the last response this
+	// application read, sent back as conditional-request headers so an
+	// unchanged Feed can be confirmed without resending its whole document.
+	ETag         string
+	LastModified string
+	// NextCheckAt is when the schedule should next check this Feed, per
+	// pullpolicy. The zero value means due now.
+	NextCheckAt time.Time
+	// LastCheckedAt and LastSuccessAt are the zero value until this Feed's
+	// first check, so a Feed the schedule has not reached yet is
+	// distinguishable from one that keeps failing.
+	LastCheckedAt time.Time
+	LastSuccessAt time.Time
+	// LastError is what the most recent failed check reported, empty after a
+	// successful one.
+	LastError string
+	// ConsecutiveFailures counts failed checks since the last success, and
+	// drives backoff.
+	ConsecutiveFailures int
 }
 
 // Entry is one item a Feed carried. FeedTitle is filled by reads, not writes:
@@ -101,20 +121,35 @@ func (s *Store) CreateFeed(ctx context.Context, feed Feed, now time.Time) (Feed,
 	return feed, nil
 }
 
-const feedColumns = `id, url, title, site_url, group_id, suspended, created_at, updated_at`
+const feedColumns = `id, url, title, site_url, group_id, suspended, created_at, updated_at,
+	etag, last_modified, next_check_at, last_checked_at, last_success_at, last_error, consecutive_failures`
 
 func scanFeed(row rowScanner) (Feed, error) {
 	var feed Feed
 	var suspended int64
-	var createdAt, updatedAt int64
+	var createdAt, updatedAt, nextCheckAt, lastCheckedAt, lastSuccessAt int64
 	if err := row.Scan(&feed.ID, &feed.URL, &feed.Title, &feed.SiteURL, &feed.GroupID,
-		&suspended, &createdAt, &updatedAt); err != nil {
+		&suspended, &createdAt, &updatedAt,
+		&feed.ETag, &feed.LastModified, &nextCheckAt, &lastCheckedAt, &lastSuccessAt,
+		&feed.LastError, &feed.ConsecutiveFailures); err != nil {
 		return Feed{}, err
 	}
 	feed.Suspended = suspended != 0
 	feed.CreatedAt = time.Unix(createdAt, 0).UTC()
 	feed.UpdatedAt = time.Unix(updatedAt, 0).UTC()
+	feed.NextCheckAt = unixOrZero(nextCheckAt)
+	feed.LastCheckedAt = unixOrZero(lastCheckedAt)
+	feed.LastSuccessAt = unixOrZero(lastSuccessAt)
 	return feed, nil
+}
+
+// unixOrZero reads a stored "0 means unset" epoch column as Go's zero Time,
+// rather than the misleading instant 1970-01-01.
+func unixOrZero(v int64) time.Time {
+	if v == 0 {
+		return time.Time{}
+	}
+	return time.Unix(v, 0).UTC()
 }
 
 // Feed reads one subscription. It returns ErrNoFeed when there is no such Feed.
@@ -240,6 +275,86 @@ func (s *Store) DeleteFeed(ctx context.Context, id int64) error {
 		return ErrNoFeed
 	}
 	return tx.Commit()
+}
+
+// FetchResult declares what the store should now believe about a Feed's
+// remote state after one attempt to check it, successful or not. It is
+// computed by the pull package, not the store: pullpolicy decides NextCheckAt,
+// and the store only persists the decision.
+type FetchResult struct {
+	ETag         string
+	LastModified string
+	Success      bool
+	// Error is the failure's message. Ignored when Success is true.
+	Error string
+	// ConsecutiveFailures is the new count after this attempt. Ignored when
+	// Success is true, since a success resets it to zero.
+	ConsecutiveFailures int
+	NextCheckAt         time.Time
+}
+
+// RecordFetchResult updates a Feed's fetch state after an attempt to check it.
+// A successful attempt clears the error and failure count and advances both
+// last_checked_at and last_success_at; a failed attempt advances only
+// last_checked_at and records why. It returns ErrNoFeed when there is no such
+// Feed.
+func (s *Store) RecordFetchResult(ctx context.Context, id int64, result FetchResult, now time.Time) error {
+	lastError := ""
+	failures := 0
+	if !result.Success {
+		lastError = result.Error
+		failures = result.ConsecutiveFailures
+	}
+
+	query := `UPDATE feeds SET etag = ?, last_modified = ?, last_checked_at = ?,
+		last_error = ?, consecutive_failures = ?, next_check_at = ?, updated_at = ?`
+	args := []any{
+		result.ETag, result.LastModified, now.Unix(),
+		lastError, failures, result.NextCheckAt.Unix(), now.Unix(),
+	}
+	if result.Success {
+		query += `, last_success_at = ?`
+		args = append(args, now.Unix())
+	}
+	query += ` WHERE id = ?`
+	args = append(args, id)
+
+	outcome, err := s.db.ExecContext(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("record fetch result for feed %d: %w", id, err)
+	}
+	affected, err := outcome.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("record fetch result for feed %d: %w", id, err)
+	}
+	if affected == 0 {
+		return ErrNoFeed
+	}
+	return nil
+}
+
+// DueFeeds reads every non-suspended Feed whose schedule says it should be
+// checked by now, soonest-due first. This is what the background scheduler
+// polls; a manual refresh reads every Feed instead, regardless of schedule or
+// suspension.
+func (s *Store) DueFeeds(ctx context.Context, now time.Time) ([]Feed, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+feedColumns+` FROM feeds WHERE suspended = 0 AND next_check_at <= ? ORDER BY next_check_at`,
+		now.Unix())
+	if err != nil {
+		return nil, fmt.Errorf("read due feeds: %w", err)
+	}
+	defer rows.Close()
+
+	var feeds []Feed
+	for rows.Next() {
+		feed, err := scanFeed(rows)
+		if err != nil {
+			return nil, fmt.Errorf("read due feeds: %w", err)
+		}
+		feeds = append(feeds, feed)
+	}
+	return feeds, rows.Err()
 }
 
 // FeedUnreadCounts reads the number of unread Entries per Feed, omitting a

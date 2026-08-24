@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/gabe-santos/rss-reader/internal/pullpolicy"
 )
 
 // Prefix is applied to every environment variable this application reads.
@@ -31,15 +33,23 @@ type Config struct {
 	AllowPrivateFetch bool
 	// LogLevel is the minimum level of emitted logs.
 	LogLevel slog.Level
+	// PollInterval is how often a Feed is checked when nothing else — a
+	// publisher's hint, or a run of failures — says otherwise.
+	PollInterval time.Duration
+	// PollTick is how often the background schedule wakes to look for a due
+	// Feed. It only needs to be finer than PollInterval.
+	PollTick time.Duration
 }
 
 // Defaults are the settings used when the environment says nothing.
 func Defaults() Config {
 	return Config{
-		Addr:       ":8080",
-		DataDir:    "./data",
-		SessionTTL: 30 * 24 * time.Hour,
-		LogLevel:   slog.LevelInfo,
+		Addr:         ":8080",
+		DataDir:      "./data",
+		SessionTTL:   30 * 24 * time.Hour,
+		LogLevel:     slog.LevelInfo,
+		PollInterval: pullpolicy.DefaultInterval,
+		PollTick:     time.Minute,
 	}
 }
 
@@ -83,6 +93,26 @@ func Load() (Config, error) {
 			return Config{}, fmt.Errorf("%sALLOW_PRIVATE_FETCH: %w", Prefix, err)
 		}
 		cfg.AllowPrivateFetch = allow
+	}
+	if v, ok := lookup("POLL_INTERVAL"); ok {
+		interval, err := time.ParseDuration(v)
+		if err != nil {
+			return Config{}, fmt.Errorf("%sPOLL_INTERVAL: %w", Prefix, err)
+		}
+		if interval <= 0 {
+			return Config{}, fmt.Errorf("%sPOLL_INTERVAL must be positive, got %q", Prefix, v)
+		}
+		cfg.PollInterval = interval
+	}
+	if v, ok := lookup("POLL_TICK"); ok {
+		tick, err := time.ParseDuration(v)
+		if err != nil {
+			return Config{}, fmt.Errorf("%sPOLL_TICK: %w", Prefix, err)
+		}
+		if tick <= 0 {
+			return Config{}, fmt.Errorf("%sPOLL_TICK must be positive, got %q", Prefix, v)
+		}
+		cfg.PollTick = tick
 	}
 
 	if cfg.Password == "" {

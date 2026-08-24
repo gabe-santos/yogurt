@@ -17,7 +17,7 @@ VALUES (1, 'Unsorted', 1, unixepoch(), unixepoch());
 -- Every existing and future Feed belongs to exactly one Group; the default
 -- backfills every Feed subscribed before Groups existed. suspended lets a
 -- noisy Feed go quiet without deleting its history.
-ALTER TABLE feeds ADD COLUMN group_id INTEGER NOT NULL DEFAULT 1 REFERENCES groups (id);
+ALTER TABLE feeds ADD COLUMN group_id INTEGER NOT NULL DEFAULT 1;
 ALTER TABLE feeds ADD COLUMN suspended INTEGER NOT NULL DEFAULT 0;
 
 CREATE INDEX feeds_group_id ON feeds (group_id);

@@ -24,9 +24,10 @@ type Publisher struct {
 	t      *testing.T
 	server *httptest.Server
 
-	mu   sync.Mutex
-	docs map[string]Document
-	hits map[string]int
+	mu       sync.Mutex
+	docs     map[string]Document
+	hits     map[string]int
+	requests map[string]http.Header
 }
 
 // NewPublisher starts a fake publisher that serves nothing until documents are
@@ -35,9 +36,10 @@ func NewPublisher(t *testing.T) *Publisher {
 	t.Helper()
 
 	p := &Publisher{
-		t:    t,
-		docs: make(map[string]Document),
-		hits: make(map[string]int),
+		t:        t,
+		docs:     make(map[string]Document),
+		hits:     make(map[string]int),
+		requests: make(map[string]http.Header),
 	}
 	p.server = httptest.NewServer(http.HandlerFunc(p.serve))
 	t.Cleanup(p.server.Close)
@@ -66,10 +68,20 @@ func (p *Publisher) Hits(path string) int {
 	return p.hits[path]
 }
 
+// LastRequest is the headers of the most recent request the publisher
+// received for a path, so a test can confirm a conditional validator was
+// actually sent.
+func (p *Publisher) LastRequest(path string) http.Header {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.requests[path]
+}
+
 func (p *Publisher) serve(w http.ResponseWriter, r *http.Request) {
 	p.mu.Lock()
 	doc, ok := p.docs[r.URL.Path]
 	p.hits[r.URL.Path]++
+	p.requests[r.URL.Path] = r.Header.Clone()
 	p.mu.Unlock()
 
 	if !ok {

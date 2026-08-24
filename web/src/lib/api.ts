@@ -12,7 +12,9 @@ export class ApiError extends Error {
   }
 }
 
-/** Feed is one subscription. */
+/** Feed is one subscription. last_checked_at and last_success_at are null
+ * until the Feed's first check, so silence before any check is
+ * distinguishable from a Feed that keeps failing. */
 export interface Feed {
   id: number;
   url: string;
@@ -22,6 +24,10 @@ export interface Feed {
   suspended: boolean;
   unread_count: number;
   created_at: string;
+  last_checked_at: string | null;
+  last_success_at: string | null;
+  last_error: string;
+  consecutive_failures: number;
 }
 
 /** Group is a named set of Feeds, used to scope reading to one part of the

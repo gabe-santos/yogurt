@@ -15,29 +15,48 @@ import (
 // maxFeedBody caps how much of a create-Feed request we are willing to read.
 const maxFeedBody = 8 << 10
 
-// feedView is one Feed as the API presents it.
+// feedView is one Feed as the API presents it. LastCheckedAt and
+// LastSuccessAt are nil until the Feed's first check, so silence before any
+// check is distinguishable from a Feed that keeps failing.
 type feedView struct {
-	ID          int64     `json:"id"`
-	URL         string    `json:"url"`
-	Title       string    `json:"title"`
-	SiteURL     string    `json:"site_url"`
-	GroupID     int64     `json:"group_id"`
-	Suspended   bool      `json:"suspended"`
-	UnreadCount int       `json:"unread_count"`
-	CreatedAt   time.Time `json:"created_at"`
+	ID                  int64      `json:"id"`
+	URL                 string     `json:"url"`
+	Title               string     `json:"title"`
+	SiteURL             string     `json:"site_url"`
+	GroupID             int64      `json:"group_id"`
+	Suspended           bool       `json:"suspended"`
+	UnreadCount         int        `json:"unread_count"`
+	CreatedAt           time.Time  `json:"created_at"`
+	LastCheckedAt       *time.Time `json:"last_checked_at"`
+	LastSuccessAt       *time.Time `json:"last_success_at"`
+	LastError           string     `json:"last_error"`
+	ConsecutiveFailures int        `json:"consecutive_failures"`
 }
 
 func viewFeed(feed store.Feed, unreadCounts map[int64]int) feedView {
 	return feedView{
-		ID:          feed.ID,
-		URL:         feed.URL,
-		Title:       feed.Title,
-		SiteURL:     feed.SiteURL,
-		GroupID:     feed.GroupID,
-		Suspended:   feed.Suspended,
-		UnreadCount: unreadCounts[feed.ID],
-		CreatedAt:   feed.CreatedAt,
+		ID:                  feed.ID,
+		URL:                 feed.URL,
+		Title:               feed.Title,
+		SiteURL:             feed.SiteURL,
+		GroupID:             feed.GroupID,
+		Suspended:           feed.Suspended,
+		UnreadCount:         unreadCounts[feed.ID],
+		CreatedAt:           feed.CreatedAt,
+		LastCheckedAt:       zeroToNil(feed.LastCheckedAt),
+		LastSuccessAt:       zeroToNil(feed.LastSuccessAt),
+		LastError:           feed.LastError,
+		ConsecutiveFailures: feed.ConsecutiveFailures,
 	}
+}
+
+// zeroToNil renders a Feed's never-checked zero Time as absent rather than as
+// the misleading instant 1970-01-01.
+func zeroToNil(t time.Time) *time.Time {
+	if t.IsZero() {
+		return nil
+	}
+	return &t
 }
 
 type createFeedRequest struct {

@@ -653,6 +653,14 @@
                         >
                           {feed.title}
                         </span>
+                        {#if feed.last_error}
+                          <span
+                            class="text-destructive"
+                            title={`Failing since ${feed.last_checked_at ? formatPublished(feed.last_checked_at) : "unknown"}: ${feed.last_error}`}
+                          >
+                            ⚠
+                          </span>
+                        {/if}
                       </Sidebar.MenuSubButton>
                       <Sidebar.MenuBadge>{feed.unread_count}</Sidebar.MenuBadge>
                       <div
@@ -696,6 +704,20 @@
                         >
                           Delete
                         </button>
+                        <span
+                          class={feed.last_error ? "text-destructive" : ""}
+                          title={feed.last_checked_at
+                            ? `Last checked ${formatPublished(feed.last_checked_at)}`
+                            : "Not checked yet"}
+                        >
+                          {#if feed.last_error}
+                            Failing: {feed.last_error}
+                          {:else if feed.last_success_at}
+                            Checked {formatPublished(feed.last_success_at)}
+                          {:else}
+                            Not checked yet
+                          {/if}
+                        </span>
                       </div>
                     {/if}
                   </Sidebar.MenuSubItem>
