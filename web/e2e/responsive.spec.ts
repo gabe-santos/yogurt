@@ -24,14 +24,18 @@ test('on a phone-sized viewport the sidebar is a sheet and reading still works',
   await page.getByRole('button', { name: 'Toggle Sidebar' }).click();
   await expect(sidebarSheet).toBeVisible();
   await expect(sidebarSheet.getByLabel('Feed or site address')).toBeVisible();
-  await expect(sidebarSheet.getByRole('button', { name: 'All Feeds' })).toBeVisible();
+  await expect(
+    sidebarSheet.getByRole('button', { name: 'All Feeds' }),
+  ).toBeVisible();
 
   await page.keyboard.press('Escape');
   await expect(sidebarSheet).toBeHidden();
 
   // The Entry list stays a single, full-width column rather than wrapping
   // into columns or overflowing the viewport.
-  const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+  const scrollWidth = await page.evaluate(
+    () => document.documentElement.scrollWidth,
+  );
   expect(scrollWidth).toBeLessThanOrEqual(390);
 
   // Reading behaviour — open, next/previous, close — survives the narrow
@@ -43,10 +47,14 @@ test('on a phone-sized viewport the sidebar is a sheet and reading still works',
   const firstContent = await page.getByTestId('entry-content').textContent();
 
   await page.keyboard.press('j');
-  await expect(page.getByTestId('entry-content')).not.toHaveText(firstContent ?? '');
+  await expect(page.getByTestId('entry-content')).not.toHaveText(
+    firstContent ?? '',
+  );
 
   await page.keyboard.press('k');
-  await expect(page.getByTestId('entry-content')).toHaveText(firstContent ?? '');
+  await expect(page.getByTestId('entry-content')).toHaveText(
+    firstContent ?? '',
+  );
 
   await page.keyboard.press('Escape');
   await expect(drawer).toBeHidden();

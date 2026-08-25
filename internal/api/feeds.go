@@ -31,6 +31,11 @@ type feedView struct {
 	LastSuccessAt       *time.Time `json:"last_success_at"`
 	LastError           string     `json:"last_error"`
 	ConsecutiveFailures int        `json:"consecutive_failures"`
+	// IconStoredAt is absent for a Feed with no Feed Icon, and doubles as the
+	// icon endpoint's cache-busting version. IconCheckedAt is absent until
+	// the Feed's first icon check, present regardless of outcome after that.
+	IconStoredAt  *time.Time `json:"icon_stored_at"`
+	IconCheckedAt *time.Time `json:"icon_checked_at"`
 }
 
 func viewFeed(feed store.Feed, unreadCounts map[int64]int) feedView {
@@ -47,6 +52,8 @@ func viewFeed(feed store.Feed, unreadCounts map[int64]int) feedView {
 		LastSuccessAt:       zeroToNil(feed.LastSuccessAt),
 		LastError:           feed.LastError,
 		ConsecutiveFailures: feed.ConsecutiveFailures,
+		IconStoredAt:        zeroToNil(feed.IconStoredAt),
+		IconCheckedAt:       zeroToNil(feed.IconCheckedAt),
 	}
 }
 
@@ -216,6 +223,39 @@ func (h *Handler) deleteFeed(w http.ResponseWriter, r *http.Request) {
 		h.serverError(w, r, err)
 	default:
 		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+// getFeedIcon serves a Feed's stored Feed Icon from this app's own origin,
+// rather than the caller hotlinking the publisher's copy — which would tell
+// every publisher this reader saw their headline, for every Entry, whether
+// it was opened or not (ADR-0008). The response is cached aggressively but
+// marked private, since it sits behind this app's own session rather than
+// being safe for a shared cache to store; callers version the URL with the
+// Feed's icon_stored_at so a changed icon invalidates the cache and an
+// unchanged one is never refetched.
+func (h *Handler) getFeedIcon(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		h.writeError(w, r, http.StatusNotFound, "no such Feed Icon")
+		return
+	}
+
+	data, mediaType, err := h.deps.Store.FeedIcon(r.Context(), id)
+	switch {
+	case errors.Is(err, store.ErrNoFeed), errors.Is(err, store.ErrNoIcon):
+		h.writeError(w, r, http.StatusNotFound, "no such Feed Icon")
+		return
+	case err != nil:
+		h.serverError(w, r, err)
+		return
+	}
+
+	w.Header().Set("Content-Type", mediaType)
+	w.Header().Set("Cache-Control", "private, max-age=31536000, immutable")
+	w.WriteHeader(http.StatusOK)
+	if _, err := w.Write(data); err != nil {
+		h.deps.Logger.WarnContext(r.Context(), "write response", "path", r.URL.Path, "error", err)
 	}
 }
 

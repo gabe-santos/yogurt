@@ -48,6 +48,14 @@ type Feed struct {
 	// ConsecutiveFailures counts failed checks since the last success, and
 	// drives backoff.
 	ConsecutiveFailures int
+	// IconStoredAt is when the Feed Icon was last stored, the zero value
+	// when the Feed has none. It also serves as the icon endpoint's
+	// cache-busting version.
+	IconStoredAt time.Time
+	// IconCheckedAt is when this Feed was last checked for an icon,
+	// regardless of outcome, the zero value when it has never been checked.
+	// It gates re-probing a site that has no usable icon.
+	IconCheckedAt time.Time
 }
 
 // Entry is one item a Feed carried. FeedTitle is filled by reads, not writes:
@@ -147,16 +155,19 @@ func (s *Store) CreateFeed(ctx context.Context, feed Feed, now time.Time) (Feed,
 }
 
 const feedColumns = `id, url, title, site_url, group_id, suspended, created_at, updated_at,
-	etag, last_modified, next_check_at, last_checked_at, last_success_at, last_error, consecutive_failures`
+	etag, last_modified, next_check_at, last_checked_at, last_success_at, last_error, consecutive_failures,
+	icon_stored_at, icon_checked_at`
 
 func scanFeed(row rowScanner) (Feed, error) {
 	var feed Feed
 	var suspended int64
 	var createdAt, updatedAt, nextCheckAt, lastCheckedAt, lastSuccessAt int64
+	var iconStoredAt, iconCheckedAt int64
 	if err := row.Scan(&feed.ID, &feed.URL, &feed.Title, &feed.SiteURL, &feed.GroupID,
 		&suspended, &createdAt, &updatedAt,
 		&feed.ETag, &feed.LastModified, &nextCheckAt, &lastCheckedAt, &lastSuccessAt,
-		&feed.LastError, &feed.ConsecutiveFailures); err != nil {
+		&feed.LastError, &feed.ConsecutiveFailures,
+		&iconStoredAt, &iconCheckedAt); err != nil {
 		return Feed{}, err
 	}
 	feed.Suspended = suspended != 0
@@ -165,6 +176,8 @@ func scanFeed(row rowScanner) (Feed, error) {
 	feed.NextCheckAt = unixOrZero(nextCheckAt)
 	feed.LastCheckedAt = unixOrZero(lastCheckedAt)
 	feed.LastSuccessAt = unixOrZero(lastSuccessAt)
+	feed.IconStoredAt = unixOrZero(iconStoredAt)
+	feed.IconCheckedAt = unixOrZero(iconCheckedAt)
 	return feed, nil
 }
 
@@ -355,6 +368,71 @@ func (s *Store) RecordFetchResult(ctx context.Context, id int64, result FetchRes
 	affected, err := outcome.RowsAffected()
 	if err != nil {
 		return fmt.Errorf("record fetch result for feed %d: %w", id, err)
+	}
+	if affected == 0 {
+		return ErrNoFeed
+	}
+	return nil
+}
+
+// ErrNoIcon reports a Feed that exists but has never stored a usable Feed
+// Icon.
+var ErrNoIcon = errors.New("no such Feed Icon")
+
+// FeedIcon reads a Feed's stored Feed Icon. It returns ErrNoFeed when there
+// is no such Feed, and ErrNoIcon when the Feed has none stored.
+func (s *Store) FeedIcon(ctx context.Context, id int64) (data []byte, mediaType string, err error) {
+	var iconStoredAt int64
+	err = s.db.QueryRowContext(ctx,
+		`SELECT icon_data, icon_media_type, icon_stored_at FROM feeds WHERE id = ?`, id,
+	).Scan(&data, &mediaType, &iconStoredAt)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return nil, "", ErrNoFeed
+	case err != nil:
+		return nil, "", fmt.Errorf("read feed icon %d: %w", id, err)
+	}
+	if iconStoredAt == 0 || len(data) == 0 {
+		return nil, "", ErrNoIcon
+	}
+	return data, mediaType, nil
+}
+
+// SetFeedIcon stores a Feed's Feed Icon, advancing both its stored-at and
+// checked-at timestamps: stored-at so the serving endpoint's cache-busting
+// version changes, checked-at so this Feed is not re-probed again within the
+// re-probe window. It returns ErrNoFeed when there is no such Feed.
+func (s *Store) SetFeedIcon(ctx context.Context, id int64, data []byte, mediaType string, now time.Time) error {
+	outcome, err := s.db.ExecContext(ctx,
+		`UPDATE feeds SET icon_data = ?, icon_media_type = ?, icon_stored_at = ?, icon_checked_at = ? WHERE id = ?`,
+		data, mediaType, now.Unix(), now.Unix(), id)
+	if err != nil {
+		return fmt.Errorf("set feed icon %d: %w", id, err)
+	}
+	affected, err := outcome.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("set feed icon %d: %w", id, err)
+	}
+	if affected == 0 {
+		return ErrNoFeed
+	}
+	return nil
+}
+
+// MarkFeedIconChecked records that a Feed was checked for an icon and none
+// was found, advancing icon_checked_at without touching any icon already
+// stored — so a site that briefly stops advertising one does not cost the
+// reader an icon it already has. It returns ErrNoFeed when there is no such
+// Feed.
+func (s *Store) MarkFeedIconChecked(ctx context.Context, id int64, now time.Time) error {
+	outcome, err := s.db.ExecContext(ctx,
+		`UPDATE feeds SET icon_checked_at = ? WHERE id = ?`, now.Unix(), id)
+	if err != nil {
+		return fmt.Errorf("mark feed icon checked %d: %w", id, err)
+	}
+	affected, err := outcome.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("mark feed icon checked %d: %w", id, err)
 	}
 	if affected == 0 {
 		return ErrNoFeed

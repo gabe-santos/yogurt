@@ -35,10 +35,14 @@ const page = `<!doctype html>
   <head>
     <title>The Daily Cave</title>
     <link rel="alternate" type="application/rss+xml" href="/feed.xml">
+    <link rel="icon" type="image/svg+xml" href="/icon.svg">
   </head>
   <body><p>A page, not a Feed.</p></body>
 </html>
 `;
+
+// The Daily Cave's Feed Icon: a tiny SVG, stored byte-for-byte per ADR-0008.
+const icon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><circle cx="16" cy="16" r="16" fill="orange"/></svg>`;
 
 // The Articles the Feed's items link to. Both carry enough prose for
 // extraction to recognise an Article, so Reader View and Original View can be
@@ -79,6 +83,7 @@ const article = (title) => `<!doctype html>
 const documents = {
   '/feed.xml': { type: 'application/rss+xml; charset=utf-8', body: feed },
   '/': { type: 'text/html; charset=utf-8', body: page },
+  '/icon.svg': { type: 'image/svg+xml', body: icon },
   // Fire allows being framed: Original View embeds it.
   '/fire': {
     type: 'text/html; charset=utf-8',

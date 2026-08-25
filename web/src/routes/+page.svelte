@@ -16,6 +16,7 @@
     createGroup,
     deleteFeed,
     deleteGroup,
+    feedIconUrl,
     getSettings,
     listEntries,
     listFeeds,
@@ -38,6 +39,7 @@
     Settings,
   } from "$lib/api";
   import EntryDrawer from "$lib/EntryDrawer.svelte";
+  import EntryRow from "$lib/EntryRow.svelte";
   import { formatPublished } from "$lib/format";
   import DeviceTokensDialog from "$lib/DeviceTokensDialog.svelte";
   import HelpDialog from "$lib/HelpDialog.svelte";
@@ -91,6 +93,19 @@
   let scope = $state<Scope | undefined>(undefined);
   let filter = $state<Filter>("all");
   let loading = $state(true);
+
+  // feedsByID resolves an Entry's Feed Icon from data this page already
+  // holds, so the list costs no extra request to show one.
+  const feedsByID = $derived.by(() => {
+    const map = new Map<number, Feed>();
+    for (const feed of feeds) map.set(feed.id, feed);
+    return map;
+  });
+
+  function iconForEntry(entry: Entry): string | undefined {
+    const feed = feedsByID.get(entry.feed_id);
+    return feed ? feedIconUrl(feed) : undefined;
+  }
 
   // The current Entry is the keyboard's notion of position in the list,
   // independent of whether the reading drawer is open. Opening the drawer
@@ -1100,29 +1115,12 @@
       {:else}
         <ul class="flex flex-col divide-y divide-border">
           {#each entries as entry, index (entry.id)}
-            <li>
-              <button
-                type="button"
-                data-testid="entry"
-                aria-current={index === currentIndex}
-                class="flex w-full flex-col gap-1 py-3 text-left hover:bg-accent/50 aria-[current=true]:bg-accent"
-                onclick={() => openEntryAt(index)}
-              >
-                <span
-                  class="font-medium underline-offset-2 hover:underline"
-                  class:text-muted-foreground={entry.read}
-                >
-                  {entry.title || entry.url}
-                </span>
-                <span class="text-xs text-muted-foreground">
-                  {entry.feed_title} · {formatPublished(entry.published_at)}{entry.read
-                    ? ""
-                    : " · unread"}{entry.starred ? " · Starred" : ""}{entry.archived
-                    ? " · Archived"
-                    : ""}
-                </span>
-              </button>
-            </li>
+            <EntryRow
+              {entry}
+              isCurrent={index === currentIndex}
+              iconUrl={iconForEntry(entry)}
+              onClick={() => openEntryAt(index)}
+            />
           {/each}
         </ul>
 

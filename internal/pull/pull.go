@@ -121,6 +121,7 @@ func (s *Service) SubscribeInGroup(ctx context.Context, rawURL string, groupID i
 		return store.Feed{}, err
 	}
 	s.recordSuccess(ctx, saved.ID, store.Feed{}, resp.Header, now)
+	s.discoverIcon(ctx, saved.ID, document.SiteURL, now)
 	if saved, err = s.store.Feed(ctx, saved.ID); err != nil {
 		return store.Feed{}, err
 	}
@@ -267,6 +268,7 @@ func (s *Service) refresh(ctx context.Context, subscribed store.Feed) error {
 		// Nothing to reparse: the publisher confirmed this Feed is unchanged,
 		// which is what a conditional request is for.
 		s.recordSuccess(ctx, subscribed.ID, subscribed, resp.Header, now)
+		s.maybeDiscoverIcon(ctx, subscribed, now)
 		return nil
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
@@ -286,7 +288,18 @@ func (s *Service) refresh(ctx context.Context, subscribed store.Feed) error {
 		return err
 	}
 	s.recordSuccess(ctx, subscribed.ID, subscribed, resp.Header, now)
+	s.maybeDiscoverIcon(ctx, subscribed, now)
 	return nil
+}
+
+// maybeDiscoverIcon runs icon discovery for a Feed that just polled
+// successfully, when it is due per iconDue. It never affects whether the
+// poll itself succeeded: it runs after the fetch state is already recorded,
+// and every path inside discoverIcon is best-effort.
+func (s *Service) maybeDiscoverIcon(ctx context.Context, subscribed store.Feed, now time.Time) {
+	if iconDue(subscribed, now) {
+		s.discoverIcon(ctx, subscribed.ID, subscribed.SiteURL, now)
+	}
 }
 
 // recordSuccess stores the fetch state after a check that succeeded, whether

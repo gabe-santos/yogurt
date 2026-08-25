@@ -14,13 +14,15 @@ import (
 var published = time.Date(2026, 1, 1, 9, 0, 0, 0, time.UTC)
 
 type feedView struct {
-	ID          int64  `json:"id"`
-	URL         string `json:"url"`
-	Title       string `json:"title"`
-	SiteURL     string `json:"site_url"`
-	GroupID     int64  `json:"group_id"`
-	Suspended   bool   `json:"suspended"`
-	UnreadCount int    `json:"unread_count"`
+	ID            int64      `json:"id"`
+	URL           string     `json:"url"`
+	Title         string     `json:"title"`
+	SiteURL       string     `json:"site_url"`
+	GroupID       int64      `json:"group_id"`
+	Suspended     bool       `json:"suspended"`
+	UnreadCount   int        `json:"unread_count"`
+	IconStoredAt  *time.Time `json:"icon_stored_at"`
+	IconCheckedAt *time.Time `json:"icon_checked_at"`
 }
 
 type entryView struct {
@@ -364,6 +366,7 @@ func TestFeedAndEntryEndpointsRequireASession(t *testing.T) {
 		ExpectStatus(http.StatusUnauthorized)
 	h.Do(http.MethodPost, "/api/feeds/refresh", nil).ExpectStatus(http.StatusUnauthorized)
 	h.Do(http.MethodPost, "/api/feeds/1/refresh", nil).ExpectStatus(http.StatusUnauthorized)
+	h.Do(http.MethodGet, "/api/feeds/1/icon", nil).ExpectStatus(http.StatusUnauthorized)
 	h.Do(http.MethodGet, "/api/entries", nil).ExpectStatus(http.StatusUnauthorized)
 	h.Do(http.MethodPut, "/api/entries/1/state", map[string]any{"read": true}).
 		ExpectStatus(http.StatusUnauthorized)

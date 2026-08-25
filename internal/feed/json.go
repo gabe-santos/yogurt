@@ -38,11 +38,11 @@ func parseJSONFeed(body []byte, base *url.URL) (Document, error) {
 
 	doc := Document{
 		Title:   strings.TrimSpace(parsed.Title),
-		SiteURL: resolve(base, parsed.HomePageURL),
+		SiteURL: Resolve(base, parsed.HomePageURL),
 		Items:   make([]Item, 0, len(parsed.Items)),
 	}
 	for _, item := range parsed.Items {
-		link := resolve(base, item.URL)
+		link := Resolve(base, item.URL)
 		doc.Items = append(doc.Items, Item{
 			ID:          firstNonEmpty(item.ID, link),
 			Title:       strings.TrimSpace(item.Title),

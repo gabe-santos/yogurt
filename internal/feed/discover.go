@@ -49,10 +49,10 @@ func Discover(body []byte, base *url.URL) []string {
 					break
 				}
 			}
-			if !isAlternate(rel) || !feedTypes[normalizeType(linkType)] {
+			if !HasRelToken(rel, "alternate") || !feedTypes[NormalizeType(linkType)] {
 				continue
 			}
-			if resolved := resolve(base, href); resolved != "" && !seen[resolved] {
+			if resolved := Resolve(base, href); resolved != "" && !seen[resolved] {
 				seen[resolved] = true
 				found = append(found, resolved)
 			}
@@ -60,20 +60,21 @@ func Discover(body []byte, base *url.URL) []string {
 	}
 }
 
-// isAlternate reports whether a rel attribute marks an alternate
-// representation of the page, which is how a Feed is advertised.
-func isAlternate(rel string) bool {
+// HasRelToken reports whether a link's rel attribute carries token, per the
+// space-separated link-types syntax HTML uses for rel. It is shared by Feed
+// autodiscovery (token "alternate") and Feed Icon discovery (token "icon").
+func HasRelToken(rel, token string) bool {
 	for _, value := range strings.Fields(strings.ToLower(rel)) {
-		if value == "alternate" {
+		if value == token {
 			return true
 		}
 	}
 	return false
 }
 
-// normalizeType drops the parameters and case from a content type, leaving the
-// media type itself.
-func normalizeType(value string) string {
+// NormalizeType drops the parameters and case from a content type, leaving
+// the media type itself.
+func NormalizeType(value string) string {
 	if index := strings.IndexByte(value, ';'); index >= 0 {
 		value = value[:index]
 	}

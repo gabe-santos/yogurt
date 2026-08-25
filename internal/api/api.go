@@ -50,6 +50,7 @@ func New(deps Deps) *Handler {
 	h.mux.Handle("DELETE /api/feeds/{id}", h.requireAuth(http.HandlerFunc(h.deleteFeed)))
 	h.mux.Handle("POST /api/feeds/refresh", h.requireAuth(http.HandlerFunc(h.refreshFeeds)))
 	h.mux.Handle("POST /api/feeds/{id}/refresh", h.requireAuth(http.HandlerFunc(h.refreshFeed)))
+	h.mux.Handle("GET /api/feeds/{id}/icon", h.requireAuth(http.HandlerFunc(h.getFeedIcon)))
 
 	h.mux.Handle("GET /api/groups", h.requireAuth(http.HandlerFunc(h.listGroups)))
 	h.mux.Handle("POST /api/groups", h.requireAuth(http.HandlerFunc(h.createGroup)))

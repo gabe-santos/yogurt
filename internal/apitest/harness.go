@@ -17,6 +17,7 @@ import (
 	"github.com/gabe-santos/rss-reader/internal/app"
 	"github.com/gabe-santos/rss-reader/internal/clock"
 	"github.com/gabe-santos/rss-reader/internal/config"
+	"github.com/gabe-santos/rss-reader/internal/store"
 )
 
 // Password is the configured password every harness boots with.
@@ -30,6 +31,11 @@ type Harness struct {
 	Server    *httptest.Server
 	Client    *http.Client
 	DataDir   string
+	// Store is the application's database, for tests to seed states no HTTP
+	// request can produce: a Feed created before Feed Icon discovery existed
+	// (icon_checked_at never set), or an icon stored without a live
+	// publisher to discover it from.
+	Store *store.Store
 
 	stop func()
 }
@@ -118,6 +124,7 @@ func NewInDir(t *testing.T, dataDir string, opts ...Option) *Harness {
 		Server:    server,
 		Client:    &http.Client{Jar: jar},
 		DataDir:   dataDir,
+		Store:     application.Store(),
 		stop: func() {
 			once.Do(func() {
 				server.Close()

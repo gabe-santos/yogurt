@@ -14,6 +14,36 @@ test('the reader opens an Entry, reads it, and triages by keyboard', async ({
   await page.getByRole('button', { name: 'Subscribe' }).click();
   await expect(page.getByTestId('entry')).toHaveCount(2);
 
+  // The Feed Icon slot renders the publisher's real, stored icon —
+  // discovered at subscribe time — rather than the monogram fallback, and
+  // stays decorative to assistive technology.
+  await expect(page.getByTestId('feed-icon').first()).toHaveAttribute(
+    'aria-hidden',
+    'true',
+  );
+  await expect(
+    page.getByTestId('feed-icon').first().locator('img'),
+  ).toBeVisible();
+
+  // A Feed Icon that fails to load falls back to the monogram rather than a
+  // broken image. The icon response is cached aggressively (immutable), so
+  // the browser's own HTTP cache is disabled first — otherwise a reload
+  // would never re-request it, and the aborted route would never fire.
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Network.setCacheDisabled', { cacheDisabled: true });
+  await page.route('**/api/feeds/*/icon*', (route) => route.abort());
+  await page.reload();
+  await expect(
+    page.getByTestId('feed-icon').first().locator('img'),
+  ).toHaveCount(0);
+  await expect(page.getByTestId('feed-icon').first()).toContainText('T');
+  await page.unroute('**/api/feeds/*/icon*');
+  await page.reload();
+  await expect(
+    page.getByTestId('feed-icon').first().locator('img'),
+  ).toBeVisible();
+  await cdp.detach();
+
   // Newest first: Wheels, then Fire.
   const entries = page.getByTestId('entry');
   await expect(entries.nth(0)).toContainText('unread');
@@ -59,6 +89,7 @@ test('the reader opens an Entry, reads it, and triages by keyboard', async ({
   await expect(page.getByTestId('entry').first()).toContainText(
     'Wheels: a review',
   );
+  await expect(page.getByTestId('feed-icon').first()).toBeVisible();
 
   await page.getByTestId('filter-all').click();
   await expect(page.getByTestId('entry')).toHaveCount(2);
@@ -116,6 +147,7 @@ test('the reader opens an Entry, reads it, and triages by keyboard', async ({
   // with Read implied by the server-owned invariant.
   await page.getByTestId('filter-starred').click();
   await expect(page.getByTestId('entry')).toHaveCount(1);
+  await expect(page.getByTestId('feed-icon').first()).toBeVisible();
   await page.getByTestId('entry').click();
   const archived = page.waitForResponse(
     (response) =>
@@ -131,6 +163,7 @@ test('the reader opens an Entry, reads it, and triages by keyboard', async ({
   await expect(page.getByTestId('entry')).toHaveCount(1);
   await expect(page.getByTestId('entry')).toContainText('Archived');
   await expect(page.getByTestId('entry')).not.toContainText('unread');
+  await expect(page.getByTestId('feed-icon').first()).toBeVisible();
   await page.getByTestId('entry').click();
   await expect(
     page.getByRole('button', { name: 'Unstar', exact: true }),

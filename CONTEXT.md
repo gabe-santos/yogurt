@@ -14,6 +14,10 @@ _Avoid_: Channel, source, stream, subscription
 A named set of Feeds, used to scope reading to one part of the collection. A Feed belongs to exactly one Group, and Groups do not nest.
 _Avoid_: Folder, category, tag, collection
 
+**Feed Icon**:
+The small square image that identifies a Feed, shown beside the publisher's name on every Entry from that Feed. One per Feed, independent of any Entry's contents.
+_Avoid_: Favicon, avatar, logo, feed image
+
 ### Reading
 
 **Entry**:
@@ -23,6 +27,10 @@ _Avoid_: Item, post, story, article (when the Feed's own item is meant)
 **Article**:
 The document at an Entry's link — the publisher's own web page, distinct from the Entry that points at it.
 _Avoid_: Page, content, full text
+
+**Preview Image**:
+A single representative image for one Entry, derived from its Article rather than supplied by the Feed. Absent whenever the Article offers none.
+_Avoid_: Thumbnail, hero, cover, og image, social image
 
 **Reader View**:
 An Article reduced to its main text and images and re-rendered in this app's own markup.

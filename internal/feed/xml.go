@@ -70,11 +70,11 @@ type rssItem struct {
 func (d rssDocument) document(base *url.URL) Document {
 	doc := Document{
 		Title:   strings.TrimSpace(d.Channel.Title),
-		SiteURL: resolve(base, firstNonEmpty(d.Channel.Links...)),
+		SiteURL: Resolve(base, firstNonEmpty(d.Channel.Links...)),
 		Items:   make([]Item, 0, len(d.Channel.Items)),
 	}
 	for _, item := range d.Channel.Items {
-		link := resolve(base, item.Link)
+		link := Resolve(base, item.Link)
 		doc.Items = append(doc.Items, Item{
 			ID:          firstNonEmpty(item.GUID, link),
 			Title:       strings.TrimSpace(item.Title),
@@ -126,11 +126,11 @@ func (t atomText) value() string {
 func (d atomDocument) document(base *url.URL) Document {
 	doc := Document{
 		Title:   d.Title.value(),
-		SiteURL: resolve(base, alternateLink(d.Links)),
+		SiteURL: Resolve(base, alternateLink(d.Links)),
 		Items:   make([]Item, 0, len(d.Entries)),
 	}
 	for _, entry := range d.Entries {
-		link := resolve(base, alternateLink(entry.Links))
+		link := Resolve(base, alternateLink(entry.Links))
 		doc.Items = append(doc.Items, Item{
 			ID:          firstNonEmpty(entry.ID, link),
 			Title:       entry.Title.value(),

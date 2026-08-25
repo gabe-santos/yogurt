@@ -53,9 +53,11 @@ func trimLeadingSpace(body []byte) []byte {
 	return bytes.TrimLeft(bytes.TrimPrefix(body, []byte("\uFEFF")), " \t\r\n")
 }
 
-// resolve turns a link the publisher supplied into an absolute URL, dropping
-// anything that is neither.
-func resolve(base *url.URL, link string) string {
+// Resolve turns a link the publisher supplied into an absolute URL, dropping
+// anything that is neither. Shared by Feed parsing and Feed Icon discovery,
+// which both resolve publisher-supplied links against the document's own
+// address.
+func Resolve(base *url.URL, link string) string {
 	link = strings.TrimSpace(link)
 	if link == "" {
 		return ""

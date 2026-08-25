@@ -37,6 +37,20 @@ test('the reader subscribes to a site and reads what it published', async ({
   );
   await expect(page.getByTestId('entry')).toHaveCount(2);
 
+  // The Feed Icon slot (a monogram, until a real icon exists) survives
+  // scoping to the Feed's Group and appears in search results too.
+  await page.getByTestId('group').first().click();
+  await expect(page.getByTestId('entry')).toHaveCount(2);
+  await expect(page.getByTestId('feed-icon').first()).toBeVisible();
+
+  await page.getByTestId('open-search').click();
+  await page.getByTestId('search-input').fill('Wheels');
+  await expect(page.getByTestId('search-result')).toHaveCount(1);
+  await expect(
+    page.getByTestId('search-result').getByTestId('feed-icon'),
+  ).toBeVisible();
+  await page.keyboard.press('Escape');
+
   // The list survives a reload, because the Entries are on the server.
   await page.reload();
   await expect(page.getByTestId('entry')).toHaveCount(2);

@@ -14,7 +14,9 @@ export class ApiError extends Error {
 
 /** Feed is one subscription. last_checked_at and last_success_at are null
  * until the Feed's first check, so silence before any check is
- * distinguishable from a Feed that keeps failing. */
+ * distinguishable from a Feed that keeps failing. icon_stored_at is null
+ * until the Feed has a Feed Icon, and doubles as a cache-busting version for
+ * feedIconUrl. icon_checked_at is null until the Feed's first icon check. */
 export interface Feed {
   id: number;
   url: string;
@@ -28,6 +30,16 @@ export interface Feed {
   last_success_at: string | null;
   last_error: string;
   consecutive_failures: number;
+  icon_stored_at: string | null;
+  icon_checked_at: string | null;
+}
+
+/** feedIconUrl is where a Feed's stored Feed Icon is served from, versioned
+ * by icon_stored_at so a changed icon invalidates the browser's cache and an
+ * unchanged one is never refetched. Absent when the Feed has none. */
+export function feedIconUrl(feed: Feed): string | undefined {
+  if (!feed.icon_stored_at) return undefined;
+  return `/api/feeds/${feed.id}/icon?v=${encodeURIComponent(feed.icon_stored_at)}`;
 }
 
 /** Group is a named set of Feeds, used to scope reading to one part of the
@@ -425,7 +437,9 @@ export async function listDeviceTokens(): Promise<DeviceToken[]> {
     '/device-tokens',
     'Could not load your device tokens',
   );
-  const body = (await response.json()) as { device_tokens: DeviceToken[] | null };
+  const body = (await response.json()) as {
+    device_tokens: DeviceToken[] | null;
+  };
   return body.device_tokens ?? [];
 }
 
@@ -440,10 +454,17 @@ export async function createDeviceToken(
     'Could not create that device token',
     { name },
   );
-  return (await response.json()) as { device_token: DeviceToken; token: string };
+  return (await response.json()) as {
+    device_token: DeviceToken;
+    token: string;
+  };
 }
 
 /** revokeDeviceToken ends a device token immediately. */
 export async function revokeDeviceToken(id: number): Promise<void> {
-  await send('DELETE', `/device-tokens/${id}`, 'Could not revoke that device token');
+  await send(
+    'DELETE',
+    `/device-tokens/${id}`,
+    'Could not revoke that device token',
+  );
 }

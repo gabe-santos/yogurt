@@ -2,6 +2,7 @@
   import * as Dialog from '$lib/components/ui/dialog';
   import { ApiError, search as runSearch } from '$lib/api';
   import type { Feed, SearchEntry } from '$lib/api';
+  import FeedIcon from '$lib/FeedIcon.svelte';
   import { formatPublished } from '$lib/format';
 
   interface Props {
@@ -134,8 +135,11 @@
                 <span class="text-xs text-muted-foreground">Feed · {result.feed.unread_count} unread</span>
               {:else}
                 <span class="font-medium">{result.entry.title || result.entry.url}</span>
-                <span class="text-xs text-muted-foreground">
-                  {result.entry.feed_title} · {formatPublished(result.entry.published_at)}
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <FeedIcon feedTitle={result.entry.feed_title} />
+                  <span>
+                    {result.entry.feed_title} · {formatPublished(result.entry.published_at)}
+                  </span>
                 </span>
                 {#if result.entry.snippet}
                   <span class="text-xs text-muted-foreground">{result.entry.snippet}</span>

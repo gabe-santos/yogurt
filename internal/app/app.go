@@ -112,6 +112,11 @@ func New(cfg config.Config, deps Deps) (*App, error) {
 // Handler is the application's HTTP surface.
 func (a *App) Handler() http.Handler { return a.handler }
 
+// Store is the application's database, for apitest.Harness to seed states no
+// HTTP request can reach, such as a Feed from before a feature that only
+// ever writes state through Subscribe or a scheduled poll.
+func (a *App) Store() *store.Store { return a.store }
+
 // Close stops the background Feed schedule and releases the database.
 func (a *App) Close() error {
 	a.cancel()
