@@ -17,6 +17,7 @@ import (
 	"github.com/gabe-santos/rss-reader/internal/auth"
 	"github.com/gabe-santos/rss-reader/internal/clock"
 	"github.com/gabe-santos/rss-reader/internal/config"
+	"github.com/gabe-santos/rss-reader/internal/extraction"
 	"github.com/gabe-santos/rss-reader/internal/fetch"
 	"github.com/gabe-santos/rss-reader/internal/pull"
 	"github.com/gabe-santos/rss-reader/internal/store"
@@ -73,15 +74,21 @@ func New(cfg config.Config, deps Deps) (*App, error) {
 		AllowPrivate: cfg.AllowPrivateFetch,
 	}), deps.Clock, deps.Logger, cfg.PollInterval)
 
+	extractionService := extraction.New(fetch.New(fetch.Options{
+		AllowPrivate: cfg.AllowPrivateFetch,
+		Accept:       extraction.Accept,
+	}))
+
 	handler := api.New(api.Deps{
-		Password: password,
-		Sessions: auth.NewSessions(db, deps.Clock, cfg.SessionTTL),
-		Limiter:  auth.NewLimiter(deps.Clock),
-		Store:    db,
-		Pull:     pullService,
-		Clock:    deps.Clock,
-		Logger:   deps.Logger,
-		SPA:      spa,
+		Password:   password,
+		Sessions:   auth.NewSessions(db, deps.Clock, cfg.SessionTTL),
+		Limiter:    auth.NewLimiter(deps.Clock),
+		Store:      db,
+		Pull:       pullService,
+		Extraction: extractionService,
+		Clock:      deps.Clock,
+		Logger:     deps.Logger,
+		SPA:        spa,
 	})
 
 	ctx, cancel := context.WithCancel(context.Background())

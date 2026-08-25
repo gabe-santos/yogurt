@@ -61,6 +61,15 @@ export interface EntryPage {
   next_cursor: string;
 }
 
+/** Article is a publisher's page, reduced to its main text: Reader View. */
+export interface Article {
+  title: string;
+  html: string;
+  /** embeddable reports whether the publisher's page permits Original View
+   * to embed it. */
+  embeddable: boolean;
+}
+
 /** Settings are the reader's own preferences. */
 export interface Settings {
   /** mark_on_open is on by default: opening an Entry marks it Read. */
@@ -283,6 +292,21 @@ export async function setEntryState(
   );
   const body = (await response.json()) as { entry: Entry };
   return body.entry;
+}
+
+/**
+ * getArticle fetches Reader View for an Entry: the publisher's page, reduced
+ * to its main text. Extraction happens on the server the first time this is
+ * asked for an Entry's URL, and is stored and reused after that.
+ */
+export async function getArticle(entryId: number): Promise<Article> {
+  const response = await send(
+    'GET',
+    `/entries/${entryId}/article`,
+    'Could not extract that Article',
+  );
+  const body = (await response.json()) as { article: Article };
+  return body.article;
 }
 
 /** markEntriesRead declares Read for exactly one filter and scope. */

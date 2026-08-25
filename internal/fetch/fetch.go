@@ -4,6 +4,7 @@
 package fetch
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -37,6 +38,12 @@ type Options struct {
 	Timeout      time.Duration
 	MaxBody      int64
 	UserAgent    string
+	// Accept overrides the Accept header every request carries. The zero
+	// value asks for a Feed and settles for the web page that might
+	// advertise one, which is right for checking a Feed but wrong for
+	// fetching an Entry's own page to extract, where a publisher content-
+	// negotiating on Accept should be asked for HTML.
+	Accept string
 }
 
 // Client fetches documents over HTTP.
@@ -44,6 +51,7 @@ type Client struct {
 	http      *http.Client
 	maxBody   int64
 	userAgent string
+	accept    string
 }
 
 // Response is a fetched document, already drained.
@@ -91,11 +99,13 @@ func New(opts Options) *Client {
 		http:      &http.Client{Transport: transport, Timeout: opts.Timeout},
 		maxBody:   opts.MaxBody,
 		userAgent: opts.UserAgent,
+		accept:    cmp.Or(opts.Accept, defaultAccept),
 	}
 }
 
-// accept asks for a Feed, and settles for the web page that might advertise one.
-const accept = "application/atom+xml, application/rss+xml, application/feed+json, " +
+// defaultAccept asks for a Feed, and settles for the web page that might
+// advertise one.
+const defaultAccept = "application/atom+xml, application/rss+xml, application/feed+json, " +
 	"application/xml;q=0.9, text/xml;q=0.9, text/html;q=0.8, */*;q=0.5"
 
 // Conditional carries the validators a previous fetch received, so a
@@ -121,7 +131,7 @@ func (c *Client) Get(ctx context.Context, rawURL string, cond Conditional) (*Res
 		return nil, fmt.Errorf("build request for %s: %w", target, err)
 	}
 	req.Header.Set("User-Agent", c.userAgent)
-	req.Header.Set("Accept", accept)
+	req.Header.Set("Accept", c.accept)
 	if cond.ETag != "" {
 		req.Header.Set("If-None-Match", cond.ETag)
 	}

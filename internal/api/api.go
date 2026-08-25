@@ -10,19 +10,21 @@ import (
 
 	"github.com/gabe-santos/rss-reader/internal/auth"
 	"github.com/gabe-santos/rss-reader/internal/clock"
+	"github.com/gabe-santos/rss-reader/internal/extraction"
 	"github.com/gabe-santos/rss-reader/internal/pull"
 	"github.com/gabe-santos/rss-reader/internal/store"
 )
 
 // Deps are the collaborators the HTTP surface needs.
 type Deps struct {
-	Password *auth.Password
-	Sessions *auth.Sessions
-	Limiter  *auth.Limiter
-	Store    *store.Store
-	Pull     *pull.Service
-	Clock    clock.Clock
-	Logger   *slog.Logger
+	Password   *auth.Password
+	Sessions   *auth.Sessions
+	Limiter    *auth.Limiter
+	Store      *store.Store
+	Pull       *pull.Service
+	Extraction *extraction.Service
+	Clock      clock.Clock
+	Logger     *slog.Logger
 	// SPA is the compiled frontend, or nil when the binary carries none.
 	SPA fs.FS
 }
@@ -56,6 +58,7 @@ func New(deps Deps) *Handler {
 	h.mux.Handle("GET /api/entries", h.requireSession(http.HandlerFunc(h.listEntries)))
 	h.mux.Handle("PUT /api/entries/state", h.requireSession(http.HandlerFunc(h.setEntriesRead)))
 	h.mux.Handle("PUT /api/entries/{id}/state", h.requireSession(http.HandlerFunc(h.setEntryState)))
+	h.mux.Handle("GET /api/entries/{id}/article", h.requireSession(http.HandlerFunc(h.getArticle)))
 
 	h.mux.Handle("GET /api/settings", h.requireSession(http.HandlerFunc(h.getSettings)))
 	h.mux.Handle("PUT /api/settings", h.requireSession(http.HandlerFunc(h.setSettings)))

@@ -237,3 +237,62 @@ func (h *Handler) setEntriesRead(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
+
+// articleView is an extracted Article as the API presents it.
+type articleView struct {
+	Title      string `json:"title"`
+	HTML       string `json:"html"`
+	Embeddable bool   `json:"embeddable"`
+}
+
+func viewArticle(article store.Article) articleView {
+	return articleView{Title: article.Title, HTML: article.HTML, Embeddable: article.Embeddable}
+}
+
+// getArticle serves Reader View for an Entry: the publisher's page, reduced
+// to its main text. The first request for an Entry's URL extracts and stores
+// it; every request after that, for any Entry sharing the same URL, is served
+// from storage without refetching the publisher.
+func (h *Handler) getArticle(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		h.writeError(w, r, http.StatusNotFound, "no such Entry")
+		return
+	}
+
+	entry, err := h.deps.Store.Entry(r.Context(), id)
+	switch {
+	case errors.Is(err, store.ErrNoEntry):
+		h.writeError(w, r, http.StatusNotFound, "no such Entry")
+		return
+	case err != nil:
+		h.serverError(w, r, err)
+		return
+	}
+
+	article, err := h.deps.Store.Article(r.Context(), entry.URL)
+	switch {
+	case err == nil:
+		h.writeJSON(w, r, http.StatusOK, map[string]any{"article": viewArticle(article)})
+		return
+	case !errors.Is(err, store.ErrNoArticle):
+		h.serverError(w, r, err)
+		return
+	}
+
+	extracted, err := h.deps.Extraction.Extract(r.Context(), entry.URL)
+	if err != nil {
+		h.deps.Logger.WarnContext(r.Context(), "extract article", "url", entry.URL, "error", err)
+		h.writeError(w, r, http.StatusBadGateway, "could not extract the Article from the publisher's page")
+		return
+	}
+
+	stored := store.Article{
+		URL: entry.URL, Title: extracted.Title, HTML: extracted.HTML, Embeddable: extracted.Embeddable,
+	}
+	if err := h.deps.Store.SaveArticle(r.Context(), stored, h.deps.Clock.Now()); err != nil {
+		h.serverError(w, r, err)
+		return
+	}
+	h.writeJSON(w, r, http.StatusOK, map[string]any{"article": viewArticle(stored)})
+}
