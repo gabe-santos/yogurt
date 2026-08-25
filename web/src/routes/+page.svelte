@@ -8,6 +8,7 @@
   import * as Tabs from "$lib/components/ui/tabs";
   import * as Tooltip from "$lib/components/ui/tooltip";
   import { Skeleton } from "$lib/components/ui/skeleton";
+  import IconSwap from "$lib/IconSwap.svelte";
   import CircleHelpIcon from "@lucide/svelte/icons/circle-help";
   import InboxIcon from "@lucide/svelte/icons/inbox";
   import KeyRoundIcon from "@lucide/svelte/icons/key-round";
@@ -17,6 +18,9 @@
   import Settings2Icon from "@lucide/svelte/icons/settings-2";
   import XIcon from "@lucide/svelte/icons/x";
   import { onMount } from "svelte";
+  import { prefersReducedMotion } from "svelte/motion";
+  import { fly } from "svelte/transition";
+  import { cubicOut } from "svelte/easing";
   import { goto, invalidateAll, replaceState } from "$app/navigation";
   import {
     ApiError,
@@ -952,6 +956,19 @@
       return;
     }
   }
+
+  // A notice reports and leaves: the enter is soft, the exit softer and
+  // shorter, and neither runs for a reader who asked for less motion.
+  const noticeIn = $derived(
+    prefersReducedMotion.current
+      ? { duration: 0 }
+      : { y: -8, duration: 200, easing: cubicOut },
+  );
+  const noticeOut = $derived(
+    prefersReducedMotion.current
+      ? { duration: 0 }
+      : { y: -12, duration: 150, easing: cubicOut },
+  );
 </script>
 
 <svelte:window onkeydown={onKeydown} />
@@ -1014,11 +1031,14 @@
             aria-label="Subscribe"
             disabled={subscribing}
           >
-            {#if subscribing}
-              <LoaderCircleIcon class="animate-spin" />
-            {:else}
-              <PlusIcon />
-            {/if}
+            <IconSwap active={subscribing}>
+              {#snippet on()}
+                <LoaderCircleIcon class="animate-spin" />
+              {/snippet}
+              {#snippet off()}
+                <PlusIcon />
+              {/snippet}
+            </IconSwap>
           </Button>
         </div>
         {#if subscribeError}
@@ -1129,7 +1149,7 @@
 
                       {#if managing}
                         <div
-                          class="mt-1 mb-1.5 flex flex-col gap-2 rounded-xl bg-sidebar-accent/60 px-2 py-2 text-xs text-muted-foreground"
+                          class="mt-1 mb-1.5 flex flex-col gap-2 rounded-[calc(var(--radius)*1.8_+_8px)] bg-sidebar-accent/60 px-2 py-2 text-xs text-muted-foreground"
                         >
                           <!-- Two reversible acts side by side; the one that
                                cannot be undone sits alone at the bottom, where
@@ -1155,7 +1175,7 @@
                           </label>
                           <select
                             id={`move-feed-${feed.id}`}
-                            class="h-7 w-full min-w-0 rounded-xl border border-transparent bg-input/50 px-2 text-xs text-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
+                            class="h-7 w-full min-w-0 rounded-2xl border border-transparent bg-input/50 px-2 text-xs text-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
                             value={feed.group_id}
                             onchange={(event) =>
                               moveFeed(
@@ -1324,11 +1344,14 @@
                     onclick={refresh}
                     disabled={busy}
                   >
-                    {#if refreshing}
-                      <LoaderCircleIcon class="animate-spin" />
-                    {:else}
-                      <RefreshCwIcon />
-                    {/if}
+                    <IconSwap active={refreshing}>
+                      {#snippet on()}
+                        <LoaderCircleIcon class="animate-spin" />
+                      {/snippet}
+                      {#snippet off()}
+                        <RefreshCwIcon />
+                      {/snippet}
+                    </IconSwap>
                   </Button>
                 {/snippet}
               </Tooltip.Trigger>
@@ -1363,6 +1386,8 @@
           data-testid="notice"
           role="status"
           class="flex shrink-0 items-start gap-2 border-b border-border bg-muted/50 py-2 pr-1.5 pl-3 text-xs text-muted-foreground"
+          in:fly={noticeIn}
+          out:fly={noticeOut}
         >
           <span class="min-w-0 flex-1 pt-0.5">{notice}</span>
           <Button

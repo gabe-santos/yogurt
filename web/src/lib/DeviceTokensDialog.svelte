@@ -79,7 +79,7 @@
 		{/if}
 
 		{#if revealed}
-			<div class="flex flex-col gap-1 rounded-md border border-border bg-muted p-3">
+			<div class="flex flex-col gap-1 rounded-md bg-muted p-3 shadow-border">
 				<span class="text-xs text-muted-foreground">Copy this now — it will not be shown again.</span>
 				<code class="break-all text-sm" data-testid="revealed-token">{revealed}</code>
 				<Button
@@ -96,7 +96,7 @@
 		<ul class="flex flex-col gap-2">
 			{#each tokens as token (token.id)}
 				<li
-					class="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2 text-sm"
+					class="flex items-center justify-between gap-3 rounded-md px-3 py-2 text-sm shadow-border"
 				>
 					<div class="flex flex-col">
 						<span class="font-medium">{token.name}</span>

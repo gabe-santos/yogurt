@@ -1,5 +1,9 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
+	import { MediaQuery } from 'svelte/reactivity';
+	import { prefersReducedMotion } from 'svelte/motion';
+	import { fly } from 'svelte/transition';
+	import { cubicOut } from 'svelte/easing';
 	import {
 		getArticle,
 		getOriginal,
@@ -13,6 +17,7 @@
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import * as Tooltip from '$lib/components/ui/tooltip';
 	import FeedIcon from '$lib/FeedIcon.svelte';
+	import IconSwap from '$lib/IconSwap.svelte';
 	import ArchiveIcon from '@lucide/svelte/icons/archive';
 	import ArrowLeftIcon from '@lucide/svelte/icons/arrow-left';
 	import BookOpenIcon from '@lucide/svelte/icons/book-open';
@@ -51,6 +56,20 @@
 		onToggleStar,
 		onArchive
 	}: Props = $props();
+
+	// The pane is an overlay over the Entry List below `lg` and the third column
+	// at or above it, so only the overlay has somewhere to arrive from and leave
+	// to. The enter is CSS gated by `max-lg:motion-safe:`; the exit needs the
+	// same two answers in JavaScript.
+	const overlay = new MediaQuery('width < 64rem');
+	// Exits are softer and shorter than enters: a small fixed slide back toward
+	// the list at half the enter's duration, and nothing at all where the pane
+	// was furniture rather than a place.
+	const exit = $derived(
+		overlay.current && !prefersReducedMotion.current
+			? { x: 32, duration: 150, easing: cubicOut }
+			: { duration: 0 }
+	);
 
 	// The Article views are fetched per Entry and per view, on demand: an Entry
 	// the reader passes through in the Feed's own text never touches the
@@ -210,7 +229,9 @@
 	onclick: () => void,
 	pressed: boolean,
 	disabled: boolean,
-	testid: string
+	testid: string,
+	swapIcon: typeof RssIcon | undefined,
+	swapActive: boolean
 )}
 	<Tooltip.Root>
 		<Tooltip.Trigger>
@@ -226,8 +247,21 @@
 					{disabled}
 					{onclick}
 				>
-					{@const Icon = icon}
-					<Icon />
+					{#if swapIcon}
+						{@const On = icon}
+						{@const Off = swapIcon}
+						<IconSwap active={swapActive}>
+							{#snippet on()}
+								<On />
+							{/snippet}
+							{#snippet off()}
+								<Off />
+							{/snippet}
+						</IconSwap>
+					{:else}
+						{@const Icon = icon}
+						<Icon class={pressed ? 'fill-current' : undefined} />
+					{/if}
 				</Button>
 			{/snippet}
 		</Tooltip.Trigger>
@@ -246,7 +280,7 @@
 				<button
 					{...props}
 					type="button"
-					class="flex size-7 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-50 aria-pressed:bg-background aria-pressed:text-foreground aria-pressed:shadow-xs max-lg:size-9"
+					class="flex size-7 items-center justify-center rounded-[calc(var(--radius)*1.8_-_2px)] text-muted-foreground transition-[color,background-color,box-shadow,scale] hover:text-foreground active:scale-[0.96] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-50 aria-pressed:bg-background aria-pressed:text-foreground aria-pressed:shadow-xs max-lg:size-9"
 					aria-label={label}
 					aria-pressed={view === id}
 					data-testid={`view-${id}`}
@@ -270,7 +304,8 @@
 <section
 	data-testid="reading-pane"
 	aria-label="Reading Pane"
-	class="absolute inset-0 z-30 flex flex-col bg-background max-lg:motion-safe:animate-in max-lg:motion-safe:fade-in max-lg:motion-safe:slide-in-from-right-8 max-lg:motion-safe:duration-300 max-lg:motion-safe:ease-[cubic-bezier(0.16,1,0.3,1)] lg:static lg:z-auto lg:flex-1 lg:border-l lg:border-border"
+	class="absolute inset-0 z-30 flex flex-col bg-background max-lg:motion-safe:animate-in max-lg:motion-safe:slide-in-from-right-8 max-lg:motion-safe:duration-300 max-lg:motion-safe:ease-[cubic-bezier(0.16,1,0.3,1)] lg:static lg:z-auto lg:flex-1 lg:border-l lg:border-border"
+	out:fly={exit}
 >
 	<Tooltip.Provider delayDuration={400}>
 		<header
@@ -327,18 +362,31 @@
 					onToggleStar,
 					entry.starred,
 					busy,
-					'entry-star'
+					'entry-star',
+					undefined,
+					false
 				)}
 				{#if !entry.archived}
-					{@render control('Archive', ArchiveIcon, onArchive, false, busy, 'entry-archive')}
+					{@render control(
+						'Archive',
+						ArchiveIcon,
+						onArchive,
+						false,
+						busy,
+						'entry-archive',
+						undefined,
+						false
+					)}
 				{/if}
 				{@render control(
 					entry.read ? 'Mark unread' : 'Mark read',
-					entry.read ? MailIcon : MailOpenIcon,
+					MailIcon,
 					onToggleRead,
 					false,
 					busy || entry.archived,
-					'entry-read'
+					'entry-read',
+					MailOpenIcon,
+					entry.read
 				)}
 				<Tooltip.Root>
 					<Tooltip.Trigger>
@@ -387,7 +435,7 @@
 			</div>
 
 			<div
-				class="max-w-none flex-1 text-base leading-relaxed break-words text-foreground [&_a]:underline [&_a]:underline-offset-2 [&_blockquote]:my-3 [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:pl-3 [&_blockquote]:text-muted-foreground [&_h1]:mt-6 [&_h1]:mb-3 [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:mt-5 [&_h2]:mb-2 [&_h2]:text-lg [&_h2]:font-semibold [&_img]:max-w-full [&_img]:rounded-md [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:pl-6 [&_p]:my-3 [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-6"
+				class="max-w-none flex-1 text-base leading-relaxed break-words text-foreground [&_a]:underline [&_a]:underline-offset-2 [&_blockquote]:my-3 [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:pl-3 [&_blockquote]:text-muted-foreground [&_h1]:mt-6 [&_h1]:mb-3 [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:mt-5 [&_h2]:mb-2 [&_h2]:text-lg [&_h2]:font-semibold [&_img]:max-w-full [&_img]:rounded-md [&_img]:outline [&_img]:outline-1 [&_img]:-outline-offset-1 [&_img]:outline-black/10 dark:[&_img]:outline-white/10 [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:pl-6 [&_p]:my-3 [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-6"
 			>
 				{#if loading}
 					<!-- The shape of what is coming, rather than a sentence about it:

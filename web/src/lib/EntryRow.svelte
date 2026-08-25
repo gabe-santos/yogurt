@@ -76,11 +76,11 @@
             <span class="min-w-0 truncate">{entry.feed_title}</span>
             <span class="ml-auto flex shrink-0 items-center gap-1.5">
               {#if entry.starred}
-                <StarIcon class="size-3" aria-hidden="true" />
+                <StarIcon class="size-3 fill-current" strokeWidth={1.5} aria-hidden="true" />
                 <span class="sr-only">Starred</span>
               {/if}
               {#if entry.archived}
-                <ArchiveIcon class="size-3" aria-hidden="true" />
+                <ArchiveIcon class="size-3" strokeWidth={1.5} aria-hidden="true" />
                 <span class="sr-only">Archived</span>
               {/if}
               <span class="tabular-nums" title={published}>{age}</span>
@@ -107,15 +107,15 @@
           onclick={onToggleRead}
         >
           {#if entry.read}
-            <MailIcon />
+            <MailIcon strokeWidth={1.5} />
             Mark unread
           {:else}
-            <MailOpenIcon />
+            <MailOpenIcon strokeWidth={1.5} />
             Mark read
           {/if}
         </ContextMenu.Item>
         <ContextMenu.Item disabled={disabled} onclick={onToggleStar}>
-          <StarIcon />
+          <StarIcon strokeWidth={1.5} class={entry.starred ? 'fill-current' : undefined} />
           {entry.starred ? 'Unstar' : 'Star'}
         </ContextMenu.Item>
       </ContextMenu.Group>
@@ -123,7 +123,7 @@
         <ContextMenu.Separator />
         <ContextMenu.Group>
           <ContextMenu.Item disabled={disabled} onclick={onArchive}>
-            <ArchiveIcon />
+            <ArchiveIcon strokeWidth={1.5} />
             Archive
           </ContextMenu.Item>
         </ContextMenu.Group>

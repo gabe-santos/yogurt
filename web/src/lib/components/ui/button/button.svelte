@@ -4,7 +4,7 @@
 	import type { HTMLAnchorAttributes, HTMLButtonAttributes } from "svelte/elements";
 
 	export const buttonVariants = tv({
-		base: "rounded-2xl border border-transparent bg-clip-padding text-sm font-medium focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 active:not-aria-[haspopup]:translate-y-px aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg:not([class*='size-'])]:size-4 group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+		base: "rounded-2xl border border-transparent bg-clip-padding text-sm font-medium focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg:not([class*='size-'])]:size-4 group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-[color,background-color,border-color,box-shadow,scale] outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0",
 		variants: {
 			variant: {
 				default: "bg-primary text-primary-foreground hover:bg-primary/80",
@@ -24,10 +24,18 @@
 				"icon-sm": "size-7",
 				"icon-lg": "size-9",
 			},
+			// Press feedback. Menu and select triggers opt out via aria-haspopup:
+			// the surface they open is the feedback. `static` opts out per call
+			// site where the movement would distract.
+			press: {
+				true: "active:not-aria-[haspopup]:scale-[0.96]",
+				false: "",
+			},
 		},
 		defaultVariants: {
 			variant: "default",
 			size: "default",
+			press: true,
 		},
 	});
 
@@ -38,6 +46,8 @@
 		WithElementRef<HTMLAnchorAttributes> & {
 			variant?: ButtonVariant;
 			size?: ButtonSize;
+			/** static drops the press feedback where motion would distract. */
+			static?: boolean;
 		};
 </script>
 
@@ -46,6 +56,7 @@
 		class: className,
 		variant = "default",
 		size = "default",
+		static: isStatic = false,
 		ref = $bindable(null),
 		href = undefined,
 		type = "button",
@@ -59,7 +70,7 @@
 	<a
 		bind:this={ref}
 		data-slot="button"
-		class={cn(buttonVariants({ variant, size }), className)}
+		class={cn(buttonVariants({ variant, size, press: !isStatic }), className)}
 		href={disabled ? undefined : href}
 		aria-disabled={disabled}
 		role={disabled ? "link" : undefined}
@@ -72,7 +83,7 @@
 	<button
 		bind:this={ref}
 		data-slot="button"
-		class={cn(buttonVariants({ variant, size }), className)}
+		class={cn(buttonVariants({ variant, size, press: !isStatic }), className)}
 		{type}
 		{disabled}
 		{...restProps}

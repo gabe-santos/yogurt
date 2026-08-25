@@ -57,6 +57,7 @@
         <FeedIcon feedTitle={feed.title} iconUrl={feedIconUrl(feed)} />
         {#if feed.last_error}
           <TriangleAlertIcon
+            strokeWidth={1.5}
             class="size-3 shrink-0 text-destructive"
             aria-label="This Feed is failing"
           />
@@ -74,21 +75,21 @@
   <ContextMenu.Content data-testid="feed-context-menu">
     <ContextMenu.Group>
       <ContextMenu.Item onclick={onRename}>
-        <PencilIcon />
+        <PencilIcon strokeWidth={1.5} />
         Rename
       </ContextMenu.Item>
       <ContextMenu.Item onclick={onToggleSuspend}>
         {#if feed.suspended}
-          <CirclePlayIcon />
+          <CirclePlayIcon strokeWidth={1.5} />
           Resume
         {:else}
-          <CirclePauseIcon />
+          <CirclePauseIcon strokeWidth={1.5} />
           Suspend
         {/if}
       </ContextMenu.Item>
       <ContextMenu.Sub>
         <ContextMenu.SubTrigger class="gap-2">
-          <FolderIcon />
+          <FolderIcon strokeWidth={1.5} />
           Move to Group
         </ContextMenu.SubTrigger>
         <ContextMenu.SubContent>
@@ -115,7 +116,7 @@
       <!-- The one act here that cannot be undone is separated from the
            reversible ones, and says what it deletes when it is confirmed. -->
       <ContextMenu.Item onclick={onDelete}>
-        <Trash2Icon />
+        <Trash2Icon strokeWidth={1.5} />
         Delete Feed
       </ContextMenu.Item>
     </ContextMenu.Group>

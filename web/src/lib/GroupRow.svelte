@@ -40,7 +40,7 @@
   <ContextMenu.Content data-testid="group-context-menu">
     <ContextMenu.Group>
       <ContextMenu.Item onclick={onRename}>
-        <PencilIcon />
+        <PencilIcon strokeWidth={1.5} />
         Rename
       </ContextMenu.Item>
     </ContextMenu.Group>
@@ -50,7 +50,7 @@
       <ContextMenu.Separator />
       <ContextMenu.Group>
         <ContextMenu.Item onclick={onDelete}>
-          <Trash2Icon />
+          <Trash2Icon strokeWidth={1.5} />
           Delete Group
         </ContextMenu.Item>
       </ContextMenu.Group>

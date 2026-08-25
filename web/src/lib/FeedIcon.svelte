@@ -25,7 +25,7 @@
     <img
       src={iconUrl}
       alt=""
-      class="h-full w-full object-contain"
+      class="h-full w-full object-contain outline outline-1 -outline-offset-1 outline-black/10 dark:outline-white/10"
       onerror={() => (imageFailed = true)}
     />
   {:else}
