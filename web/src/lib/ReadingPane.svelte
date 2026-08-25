@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import { MediaQuery } from 'svelte/reactivity';
-	import { Spring, prefersReducedMotion } from 'svelte/motion';
+	import { prefersReducedMotion } from 'svelte/motion';
 	import { fly } from 'svelte/transition';
 	import { expoOut } from 'svelte/easing';
 	import {
@@ -16,6 +16,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import * as Tooltip from '$lib/components/ui/tooltip';
+	import * as Tabs from '$lib/components/ui/tabs';
 	import FeedIcon from '$lib/FeedIcon.svelte';
 	import IconSwap from '$lib/IconSwap.svelte';
 	import ArchiveIcon from '@lucide/svelte/icons/archive';
@@ -115,60 +116,6 @@
 		{ id: 'reader', label: 'Reader View', icon: BookOpenIcon },
 		{ id: 'original', label: 'Original View', icon: GlobeIcon }
 	];
-
-	// The view switcher is the Entry List's filter Tabs' sibling in visual
-	// language, so its single lifted surface travels under the exact same
-	// physics as tabs-list.svelte's indicator: stiffness 0.25, damping 1,
-	// copied verbatim rather than retuned. It takes the corner radius of the
-	// buttons it stands in for, not the track's, because the two controls'
-	// cells differ.
-	let viewSwitcherRef = $state<HTMLElement | null>(null);
-	const viewIndicator = new Spring(
-		{ x: 0, y: 0, width: 0, height: 0 },
-		{ stiffness: 0.25, damping: 1 }
-	);
-	let viewIndicatorReady = $state(false);
-
-	function measureViewIndicator(instant: boolean) {
-		if (!viewSwitcherRef) return;
-		const active = viewSwitcherRef.querySelector<HTMLElement>('[aria-pressed="true"]');
-		if (!active) return;
-		const trackRect = viewSwitcherRef.getBoundingClientRect();
-		const activeRect = active.getBoundingClientRect();
-		viewIndicator.set(
-			{
-				x: activeRect.left - trackRect.left,
-				y: activeRect.top - trackRect.top,
-				width: activeRect.width,
-				height: activeRect.height
-			},
-			{ instant }
-		);
-		viewIndicatorReady = true;
-	}
-
-	$effect(() => {
-		if (!viewSwitcherRef) return;
-
-		measureViewIndicator(true);
-
-		const mutationObserver = new MutationObserver(() =>
-			measureViewIndicator(prefersReducedMotion.current)
-		);
-		mutationObserver.observe(viewSwitcherRef, {
-			attributes: true,
-			attributeFilter: ['aria-pressed'],
-			subtree: true
-		});
-
-		const resizeObserver = new ResizeObserver(() => measureViewIndicator(true));
-		resizeObserver.observe(viewSwitcherRef);
-
-		return () => {
-			mutationObserver.disconnect();
-			resizeObserver.disconnect();
-		};
-	});
 
 	// One effect owns everything that must happen when the Entry or the view
 	// changes, so a fetch can never outlive the selection that asked for it: the
@@ -339,18 +286,17 @@
 	<Tooltip.Root>
 		<Tooltip.Trigger>
 			{#snippet child({ props })}
-				<button
+				<Tabs.Trigger
 					{...props}
-					type="button"
-					class="relative flex size-7 items-center justify-center rounded-[calc(var(--radius)*1.8_-_2px)] text-muted-foreground transition-[color,scale] hover:text-foreground active:scale-[0.96] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-50 aria-pressed:text-foreground max-lg:size-9"
-					aria-label={label}
-					aria-pressed={view === id}
-					data-testid={`view-${id}`}
+					data-slot="tabs-trigger"
+					value={id}
 					disabled={busy}
-					onclick={() => id !== view && onView(id)}
+					aria-label={label}
+					data-testid={`view-${id}`}
+					class="relative flex size-7 items-center justify-center rounded-[calc(var(--radius)*1.8_-_2px)] text-muted-foreground transition-[color,scale] hover:text-foreground active:scale-[0.96] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-50 data-active:text-foreground max-lg:size-9"
 				>
 					<Icon class="size-4" />
-				</button>
+				</Tabs.Trigger>
 			{/snippet}
 		</Tooltip.Trigger>
 		<Tooltip.Content>{label}</Tooltip.Content>
@@ -405,24 +351,13 @@
 			     width sits between the two groups rather than beside them. -->
 			<div class="flex-1 lg:hidden"></div>
 
-			<div
-				class="relative flex shrink-0 items-center gap-0.5 rounded-2xl bg-muted p-0.5"
-				role="group"
-				aria-label="View"
-				bind:this={viewSwitcherRef}
-			>
-				{#if viewIndicatorReady}
-					<div
-						class="pointer-events-none absolute rounded-[calc(var(--radius)*1.8_-_2px)] bg-background shadow-xs"
-						style:transform="translate({viewIndicator.current.x}px, {viewIndicator.current.y}px)"
-						style:width="{viewIndicator.current.width}px"
-						style:height="{viewIndicator.current.height}px"
-					></div>
-				{/if}
-				{#each views as choice (choice.id)}
-					{@render viewControl(choice.id, choice.label, choice.icon)}
-				{/each}
-			</div>
+			<Tabs.Root value={view} onValueChange={(value) => onView(value as EntryView)} class="shrink-0">
+				<Tabs.List aria-label="View" class="gap-0.5 p-0.5">
+					{#each views as choice (choice.id)}
+						{@render viewControl(choice.id, choice.label, choice.icon)}
+					{/each}
+				</Tabs.List>
+			</Tabs.Root>
 
 			<div class="mx-1.5 h-5 w-px shrink-0 bg-border max-lg:mx-1" aria-hidden="true"></div>
 
