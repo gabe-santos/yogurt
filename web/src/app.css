@@ -133,6 +133,12 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
+  /* The project's first shared easing token: a decelerate curve for changes
+     that grow or settle in place — the notice bar's height and text below —
+     distinct from the pane and notice's own travel curves. Safe to define:
+     before this, nothing used a bare `ease-out` utility, so this is not
+     overriding a value any other element was already relying on. */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
 }
 
 @layer base {

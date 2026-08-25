@@ -9,6 +9,7 @@
   import * as Tooltip from "$lib/components/ui/tooltip";
   import { Skeleton } from "$lib/components/ui/skeleton";
   import IconSwap from "$lib/IconSwap.svelte";
+  import { cn } from "$lib/utils.js";
   import CircleHelpIcon from "@lucide/svelte/icons/circle-help";
   import InboxIcon from "@lucide/svelte/icons/inbox";
   import KeyRoundIcon from "@lucide/svelte/icons/key-round";
@@ -18,9 +19,6 @@
   import Settings2Icon from "@lucide/svelte/icons/settings-2";
   import XIcon from "@lucide/svelte/icons/x";
   import { onMount } from "svelte";
-  import { prefersReducedMotion } from "svelte/motion";
-  import { fly } from "svelte/transition";
-  import { cubicOut } from "svelte/easing";
   import { goto, invalidateAll, replaceState } from "$app/navigation";
   import {
     ApiError,
@@ -957,18 +955,17 @@
     }
   }
 
-  // A notice reports and leaves: the enter is soft, the exit softer and
-  // shorter, and neither runs for a reader who asked for less motion.
-  const noticeIn = $derived(
-    prefersReducedMotion.current
-      ? { duration: 0 }
-      : { y: -8, duration: 200, easing: cubicOut },
-  );
-  const noticeOut = $derived(
-    prefersReducedMotion.current
-      ? { duration: 0 }
-      : { y: -12, duration: 150, easing: cubicOut },
-  );
+  // A notice reports and leaves without moving the row the reader was
+  // aiming at: the row stays in the layout at zero height and grows or
+  // collapses around it instead of the whole list jumping. noticeVisible
+  // drives the collapse; displayedNotice keeps the outgoing message on
+  // screen through the collapse rather than blanking the instant `notice`
+  // is cleared.
+  const noticeVisible = $derived(notice !== "");
+  let displayedNotice = $state("");
+  $effect(() => {
+    if (notice) displayedNotice = notice;
+  });
 </script>
 
 <svelte:window onkeydown={onKeydown} />
@@ -1380,26 +1377,44 @@
       </Tooltip.Provider>
 
       <!-- A notice belongs to the chrome, not to the reading list: it reports
-           and leaves, without moving the row the reader was aiming at. -->
-      {#if notice}
-        <div
-          data-testid="notice"
-          role="status"
-          class="flex shrink-0 items-start gap-2 border-b border-border bg-muted/50 py-2 pr-1.5 pl-3 text-xs text-muted-foreground"
-          in:fly={noticeIn}
-          out:fly={noticeOut}
-        >
-          <span class="min-w-0 flex-1 pt-0.5">{notice}</span>
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            aria-label="Dismiss"
-            onclick={() => (notice = "")}
+           and leaves, without moving the row the reader was aiming at. The
+           row stays mounted at zero height so both directions can animate;
+           only its test id and the dismiss button's tab stop come and go
+           with the notice, which is what keeps it out of the tab order and
+           out of the DOM-query specs while collapsed. -->
+      <div
+        class={cn(
+          "grid shrink-0 transition-[grid-template-rows] duration-200 ease-out motion-reduce:duration-0",
+          noticeVisible ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
+        )}
+      >
+        <div class="overflow-hidden">
+          <div
+            data-testid={noticeVisible ? "notice" : undefined}
+            role="status"
+            class="flex items-start gap-2 border-b border-border bg-muted/50 py-2 pr-1.5 pl-3 text-xs text-muted-foreground"
           >
-            <XIcon />
-          </Button>
+            <span
+              class={cn(
+                "min-w-0 flex-1 pt-0.5 transition-opacity duration-150 ease-out",
+                !noticeVisible && "opacity-0",
+              )}
+            >
+              {displayedNotice}
+            </span>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              aria-label="Dismiss"
+              tabindex={noticeVisible ? 0 : -1}
+              aria-hidden={!noticeVisible}
+              onclick={() => (notice = "")}
+            >
+              <XIcon />
+            </Button>
+          </div>
         </div>
-      {/if}
+      </div>
 
       <div class="flex-1 overflow-y-auto scrollbar-hover">
         {#if loading}
