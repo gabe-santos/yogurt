@@ -40,6 +40,7 @@
   } from "$lib/api";
   import EntryDrawer from "$lib/EntryDrawer.svelte";
   import EntryRow from "$lib/EntryRow.svelte";
+  import FeedIcon from "$lib/FeedIcon.svelte";
   import { formatPublished } from "$lib/format";
   import DeviceTokensDialog from "$lib/DeviceTokensDialog.svelte";
   import HelpDialog from "$lib/HelpDialog.svelte";
@@ -954,6 +955,7 @@
                           scope.id === feed.id}
                         onclick={() => scopeTo({ type: "feed", id: feed.id })}
                       >
+                        <FeedIcon feedTitle={feed.title} iconUrl={feedIconUrl(feed)} />
                         <span
                           class="truncate {feed.suspended
                             ? 'text-muted-foreground italic'

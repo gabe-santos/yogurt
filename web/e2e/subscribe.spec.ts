@@ -15,6 +15,11 @@ test('the reader subscribes to a site and reads what it published', async ({
   await page.getByRole('button', { name: 'Subscribe' }).click();
 
   await expect(page.getByTestId('feed')).toHaveText('The Daily Cave');
+  // The sidebar's Feed Icon was discovered at subscribe time, not just
+  // rendered as the fallback monogram.
+  await expect(
+    page.getByTestId('feed').getByTestId('feed-icon').locator('img'),
+  ).toBeVisible();
   await expect(page.getByTestId('entry')).toHaveCount(2);
   // Newest first.
   await expect(page.getByTestId('entry').first()).toContainText(
