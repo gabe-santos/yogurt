@@ -1,13 +1,21 @@
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
-  import * as Field from "$lib/components/ui/field";
+  import { Label } from "$lib/components/ui/label";
   import * as Alert from "$lib/components/ui/alert";
   import * as Sidebar from "$lib/components/ui/sidebar";
   import * as Tabs from "$lib/components/ui/tabs";
+  import * as Tooltip from "$lib/components/ui/tooltip";
+  import { Skeleton } from "$lib/components/ui/skeleton";
   import CircleHelpIcon from "@lucide/svelte/icons/circle-help";
+  import InboxIcon from "@lucide/svelte/icons/inbox";
   import KeyRoundIcon from "@lucide/svelte/icons/key-round";
+  import LoaderCircleIcon from "@lucide/svelte/icons/loader-circle";
+  import PlusIcon from "@lucide/svelte/icons/plus";
   import SearchIcon from "@lucide/svelte/icons/search";
+  import Settings2Icon from "@lucide/svelte/icons/settings-2";
+  import TriangleAlertIcon from "@lucide/svelte/icons/triangle-alert";
+  import XIcon from "@lucide/svelte/icons/x";
   import { onMount } from "svelte";
   import { goto, invalidateAll, replaceState } from "$app/navigation";
   import {
@@ -40,8 +48,10 @@
   } from "$lib/api";
   import ReadingPane from "$lib/ReadingPane.svelte";
   import { IsMobile } from "$lib/hooks/is-mobile.svelte.js";
+  import BookOpenIcon from "@lucide/svelte/icons/book-open";
   import CheckCheckIcon from "@lucide/svelte/icons/check-check";
   import RefreshCwIcon from "@lucide/svelte/icons/refresh-cw";
+  import ConfirmDialog from "$lib/ConfirmDialog.svelte";
   import EntryRow from "$lib/EntryRow.svelte";
   import FeedIcon from "$lib/FeedIcon.svelte";
   import { formatPublished } from "$lib/format";
@@ -59,6 +69,9 @@
     query: EntrySelectionOptions;
     includes: (entry: Entry) => boolean;
     empty: string;
+    /** emptyDetail says why the view is empty and what fills it, so an empty
+     * Entry List is never just an absence the reader has to interpret. */
+    emptyDetail: string;
     canMarkAllRead: boolean;
   };
   const filterDefinitions: Record<Filter, FilterDefinition> = {
@@ -66,24 +79,30 @@
       query: {},
       includes: (entry) => !entry.archived,
       empty: "Nothing to read here yet.",
+      emptyDetail: "New Entries appear here as your Feeds are checked.",
       canMarkAllRead: true,
     },
     unread: {
       query: { unread: true },
       includes: (entry) => !entry.archived && !entry.read,
       empty: "Nothing unread here.",
+      emptyDetail: "Everything in this view has been read.",
       canMarkAllRead: true,
     },
     starred: {
       query: { starred: true },
       includes: (entry) => !entry.archived && entry.starred,
       empty: "Nothing Starred here.",
+      emptyDetail:
+        "Star an Entry to keep it. Starred Entries are never cleaned up.",
       canMarkAllRead: true,
     },
     archive: {
       query: { archived: true },
       includes: (entry) => entry.archived,
       empty: "The Archive is empty.",
+      emptyDetail:
+        "Archiving an Entry marks it Read and removes it from every other view.",
       canMarkAllRead: false,
     },
   };
@@ -140,6 +159,9 @@
   let subscribeError = $state("");
   let notice = $state("");
   let busy = $state(false);
+  // busy blocks every list-changing action; refreshing is narrower, so only
+  // the control the reader actually pressed reports that it is working.
+  let refreshing = $state(false);
 
   let newGroupName = $state("");
   let creatingGroup = $state(false);
@@ -147,6 +169,20 @@
   let groupNameDraft = $state("");
   let editingFeed = $state<number | undefined>(undefined);
   let feedTitleDraft = $state("");
+  // Managing the collection — renaming, moving, suspending, deleting — is rare
+  // next to reading it, so the Feed List is navigation at rest and reveals its
+  // controls only when the reader asks for them. Without this, every Feed cost
+  // four rows of chrome and the list stopped being scannable.
+  let managing = $state(false);
+  /** Removal is the one act this app cannot undo, so it is asked in the app's
+   * own dialog rather than the browser's, and the consequence is named. */
+  type Removal = {
+    title: string;
+    description: string;
+    confirmLabel: string;
+    run: () => Promise<void>;
+  };
+  let removal = $state<Removal | undefined>(undefined);
 
   const scopedFeed = $derived.by(() => {
     const current = scope;
@@ -223,6 +259,16 @@
     replaceState(url, {});
   });
 
+  // A notice reports what just happened. It is not state the reader has to
+  // clear, and it must not sit above the reading list until some later action
+  // happens to overwrite it.
+  const noticeLifetime = 8000;
+  $effect(() => {
+    if (!notice) return;
+    const timer = setTimeout(() => (notice = ""), noticeLifetime);
+    return () => clearTimeout(timer);
+  });
+
   /** selectionQuery is the single client mapping for both list reads and
    * mark-all-read, so bulk state cannot drift beyond the visible selection. */
   function selectionQuery(
@@ -289,6 +335,7 @@
   async function refresh() {
     notice = "";
     busy = true;
+    refreshing = true;
     try {
       const failures = await refreshFeeds();
       await reload();
@@ -300,6 +347,7 @@
     } catch (cause) {
       reportError(cause);
     } finally {
+      refreshing = false;
       busy = false;
     }
   }
@@ -720,24 +768,21 @@
     }
   }
 
-  async function removeGroup(group: Group) {
-    if (
-      !confirm(
-        `Delete the Group "${group.name}"? Its Feeds move to the default Group.`,
-      )
-    ) {
-      return;
-    }
-    try {
-      await deleteGroup(group.id);
-      if (scope?.type === "group" && scope.id === group.id) {
-        scope = undefined;
-      }
-      await refreshCounts();
-      await reload();
-    } catch (cause) {
-      reportError(cause);
-    }
+  function removeGroup(group: Group) {
+    removal = {
+      title: `Delete the Group "${group.name}"?`,
+      description:
+        "Its Feeds move to the default Group and keep their Entries. The Group itself is gone for good.",
+      confirmLabel: "Delete Group",
+      run: async () => {
+        await deleteGroup(group.id);
+        if (scope?.type === "group" && scope.id === group.id) {
+          scope = undefined;
+        }
+        await refreshCounts();
+        await reload();
+      },
+    };
   }
 
   function startEditFeed(feed: Feed) {
@@ -779,17 +824,32 @@
     }
   }
 
-  async function removeFeed(feed: Feed) {
-    if (!confirm(`Delete "${feed.title}" and every Entry it carried?`)) {
-      return;
-    }
+  function removeFeed(feed: Feed) {
+    removal = {
+      title: `Delete "${feed.title}"?`,
+      description:
+        "Every Entry it carried is deleted with it, Starred ones included. Suspend the Feed instead to stop checking it and keep what you have.",
+      confirmLabel: "Delete Feed",
+      run: async () => {
+        await deleteFeed(feed.id);
+        if (scope?.type === "feed" && scope.id === feed.id) {
+          scope = undefined;
+        }
+        await refreshCounts();
+        await reload();
+      },
+    };
+  }
+
+  /** confirmRemoval runs the staged removal and closes the dialog whether it
+   * succeeded or not: a failure belongs in the status line, not behind a
+   * dialog the reader now has to dismiss twice. */
+  async function confirmRemoval() {
+    const staged = removal;
+    removal = undefined;
+    if (!staged) return;
     try {
-      await deleteFeed(feed.id);
-      if (scope?.type === "feed" && scope.id === feed.id) {
-        scope = undefined;
-      }
-      await refreshCounts();
-      await reload();
+      await staged.run();
     } catch (cause) {
       reportError(cause);
     }
@@ -802,6 +862,8 @@
       helpOpen = false;
     } else if (deviceTokensOpen) {
       deviceTokensOpen = false;
+    } else if (removal) {
+      removal = undefined;
     } else {
       clearSelection();
     }
@@ -838,7 +900,10 @@
       if (!matches(binding, event)) {
         continue;
       }
-      if ((helpOpen || searchOpen || deviceTokensOpen) && binding.action !== "close") {
+      if (
+        (helpOpen || searchOpen || deviceTokensOpen || removal) &&
+        binding.action !== "close"
+      ) {
         return;
       }
       actions[binding.action]();
@@ -853,11 +918,11 @@
 <Sidebar.Provider>
   <Sidebar.Root>
     <Sidebar.Header>
-      <div class="flex items-center justify-between gap-2 px-2">
-        <h1 class="text-lg font-semibold">Reader</h1>
-        <div class="flex items-center gap-1">
+      <div class="flex items-center justify-between gap-2 pl-2">
+        <h1 class="text-base font-semibold">Reader</h1>
+        <div class="flex items-center gap-0.5">
           <Button
-            variant="outline"
+            variant="ghost"
             size="icon-sm"
             aria-label="Search"
             data-testid="open-search"
@@ -866,7 +931,7 @@
             <SearchIcon />
           </Button>
           <Button
-            variant="outline"
+            variant="ghost"
             size="icon-sm"
             aria-label="Device tokens"
             onclick={() => (deviceTokensOpen = true)}
@@ -874,50 +939,67 @@
             <KeyRoundIcon />
           </Button>
           <Button
-            variant="outline"
+            variant="ghost"
             size="icon-sm"
             aria-label="Keyboard shortcuts"
             onclick={() => (helpOpen = true)}
           >
             <CircleHelpIcon />
           </Button>
-          <Button variant="outline" size="sm" onclick={signOut}>Sign out</Button
-          >
+          <Button variant="ghost" size="sm" onclick={signOut}>Sign out</Button>
         </div>
       </div>
+
+      <!-- Adding a Feed is one line: a field and the act, at the size of every
+           other control. It used to be the loudest element in the app. -->
+      <form class="flex flex-col gap-1.5 px-2" onsubmit={subscribe}>
+        <Label for="address" class="text-xs font-normal text-muted-foreground">
+          Feed or site address
+        </Label>
+        <div class="flex items-center gap-1.5">
+          <Input
+            id="address"
+            name="address"
+            type="url"
+            required
+            class="min-w-0 flex-1"
+            placeholder="https://example.com"
+            bind:value={address}
+          />
+          <Button
+            type="submit"
+            variant="outline"
+            size="icon"
+            aria-label="Subscribe"
+            disabled={subscribing}
+          >
+            {#if subscribing}
+              <LoaderCircleIcon class="animate-spin" />
+            {:else}
+              <PlusIcon />
+            {/if}
+          </Button>
+        </div>
+        {#if subscribeError}
+          <Alert.Root variant="destructive" class="px-0 py-1">
+            <Alert.Description>{subscribeError}</Alert.Description>
+          </Alert.Root>
+        {/if}
+      </form>
     </Sidebar.Header>
 
     <Sidebar.Content>
       <Sidebar.Group>
-        <Sidebar.GroupContent>
-          <form class="flex flex-col gap-2" onsubmit={subscribe}>
-            <Field.FieldGroup>
-              <Field.Field>
-                <Field.FieldLabel for="address"
-                  >Feed or site address</Field.FieldLabel
-                >
-                <Input
-                  id="address"
-                  name="address"
-                  type="url"
-                  required
-                  placeholder="https://example.com"
-                  bind:value={address}
-                />
-              </Field.Field>
-            </Field.FieldGroup>
-            <Button type="submit" disabled={subscribing}>Subscribe</Button>
-            {#if subscribeError}
-              <Alert.Root variant="destructive">
-                <Alert.Description>{subscribeError}</Alert.Description>
-              </Alert.Root>
-            {/if}
-          </form>
-        </Sidebar.GroupContent>
-      </Sidebar.Group>
-
-      <Sidebar.Group>
         <Sidebar.GroupLabel>Feeds</Sidebar.GroupLabel>
+        <Sidebar.GroupAction
+          aria-label={managing ? "Done managing Feeds" : "Manage Feeds"}
+          aria-pressed={managing}
+          data-testid="manage-feeds"
+          class="aria-pressed:bg-sidebar-accent aria-pressed:text-sidebar-accent-foreground"
+          onclick={() => (managing = !managing)}
+        >
+          <Settings2Icon />
+        </Sidebar.GroupAction>
         <Sidebar.GroupContent>
           <Sidebar.Menu>
             <Sidebar.MenuItem>
@@ -934,7 +1016,8 @@
               <Sidebar.MenuItem>
                 {#if editingGroup === group.id}
                   <Input
-                    class="h-7 text-sm"
+                    class="h-8 text-sm"
+                    aria-label={`Rename the Group ${group.name}`}
                     bind:value={groupNameDraft}
                     onblur={() => saveGroupName(group.id)}
                     onkeydown={(event) => {
@@ -943,8 +1026,11 @@
                     }}
                   />
                 {:else}
+                  <!-- The unread count is absolutely positioned chrome, so the
+                       name has to be told to stop before it. -->
                   <Sidebar.MenuButton
                     data-testid="group"
+                    class={group.unread_count > 0 ? "pr-11" : undefined}
                     isActive={scope?.type === "group" && scope.id === group.id}
                     aria-current={scope?.type === "group" &&
                       scope.id === group.id}
@@ -952,28 +1038,31 @@
                   >
                     <span class="truncate font-medium">{group.name}</span>
                   </Sidebar.MenuButton>
-                  <Sidebar.MenuBadge>{group.unread_count}</Sidebar.MenuBadge>
+                  {#if group.unread_count > 0}
+                    <Sidebar.MenuBadge class="top-1.5 tabular-nums">
+                      {group.unread_count}
+                    </Sidebar.MenuBadge>
+                  {/if}
                 {/if}
               </Sidebar.MenuItem>
-              {#if editingGroup !== group.id}
-                <div
-                  class="flex items-center gap-2 px-2 pb-1 text-xs text-muted-foreground"
-                >
-                  <button
-                    type="button"
-                    class="hover:underline"
+
+              {#if managing && editingGroup !== group.id}
+                <div class="flex items-center gap-1.5 px-2 py-1.5">
+                  <Button
+                    variant="outline"
+                    size="xs"
                     onclick={() => startEditGroup(group)}
                   >
                     Rename
-                  </button>
+                  </Button>
                   {#if !group.is_default}
-                    <button
-                      type="button"
-                      class="hover:underline"
+                    <Button
+                      variant="destructive"
+                      size="xs"
                       onclick={() => removeGroup(group)}
                     >
                       Delete
-                    </button>
+                    </Button>
                   {/if}
                 </div>
               {/if}
@@ -983,7 +1072,8 @@
                   <Sidebar.MenuSubItem>
                     {#if editingFeed === feed.id}
                       <Input
-                        class="h-7 text-sm"
+                        class="h-8 text-sm"
+                        aria-label={`Rename the Feed ${feed.title}`}
                         bind:value={feedTitleDraft}
                         onblur={() => saveFeedTitle(feed.id)}
                         onkeydown={(event) => {
@@ -994,13 +1084,23 @@
                     {:else}
                       <Sidebar.MenuSubButton
                         data-testid="feed"
+                        class={feed.unread_count > 0 ? "pr-10" : undefined}
                         isActive={scope?.type === "feed" &&
                           scope.id === feed.id}
                         aria-current={scope?.type === "feed" &&
                           scope.id === feed.id}
                         onclick={() => scopeTo({ type: "feed", id: feed.id })}
                       >
-                        <FeedIcon feedTitle={feed.title} iconUrl={feedIconUrl(feed)} />
+                        <FeedIcon
+                          feedTitle={feed.title}
+                          iconUrl={feedIconUrl(feed)}
+                        />
+                        {#if feed.last_error}
+                          <TriangleAlertIcon
+                            class="size-3 shrink-0 text-destructive"
+                            aria-label="This Feed is failing"
+                          />
+                        {/if}
                         <span
                           class="truncate {feed.suspended
                             ? 'text-muted-foreground italic'
@@ -1008,72 +1108,83 @@
                         >
                           {feed.title}
                         </span>
-                        {#if feed.last_error}
-                          <span
-                            class="text-destructive"
-                            title={`Failing since ${feed.last_checked_at ? formatPublished(feed.last_checked_at) : "unknown"}: ${feed.last_error}`}
-                          >
-                            ⚠
-                          </span>
-                        {/if}
                       </Sidebar.MenuSubButton>
-                      <Sidebar.MenuBadge>{feed.unread_count}</Sidebar.MenuBadge>
-                      <div
-                        class="flex flex-wrap items-center gap-2 px-2 pb-1 text-xs text-muted-foreground"
-                      >
-                        <button
-                          type="button"
-                          class="hover:underline"
-                          onclick={() => startEditFeed(feed)}
+                      {#if feed.unread_count > 0}
+                        <Sidebar.MenuBadge class="top-1 tabular-nums">
+                          {feed.unread_count}
+                        </Sidebar.MenuBadge>
+                      {/if}
+
+                      {#if managing}
+                        <div
+                          class="mt-1 mb-1.5 flex flex-col gap-2 rounded-xl bg-sidebar-accent/60 px-2 py-2 text-xs text-muted-foreground"
                         >
-                          Rename
-                        </button>
-                        <label class="sr-only" for={`move-feed-${feed.id}`}
-                          >Move {feed.title} to a Group</label
-                        >
-                        <select
-                          id={`move-feed-${feed.id}`}
-                          class="h-6 rounded border border-input bg-transparent text-xs"
-                          value={feed.group_id}
-                          onchange={(event) =>
-                            moveFeed(
-                              feed,
-                              Number((event.target as HTMLSelectElement).value),
-                            )}
-                        >
-                          {#each groups as option (option.id)}
-                            <option value={option.id}>{option.name}</option>
-                          {/each}
-                        </select>
-                        <button
-                          type="button"
-                          class="hover:underline"
-                          onclick={() => toggleSuspend(feed)}
-                        >
-                          {feed.suspended ? "Resume" : "Suspend"}
-                        </button>
-                        <button
-                          type="button"
-                          class="hover:underline"
-                          onclick={() => removeFeed(feed)}
-                        >
-                          Delete
-                        </button>
-                        <span
-                          class={feed.last_error ? "text-destructive" : ""}
-                          title={feed.last_checked_at
-                            ? `Last checked ${formatPublished(feed.last_checked_at)}`
-                            : "Not checked yet"}
-                        >
-                          {#if feed.last_error}
-                            Failing: {feed.last_error}
-                          {:else if feed.last_success_at}
-                            Checked {formatPublished(feed.last_success_at)}
-                          {:else}
-                            Not checked yet
-                          {/if}
-                        </span>
-                      </div>
+                          <!-- Two reversible acts side by side; the one that
+                               cannot be undone sits alone at the bottom, where
+                               nothing is next to it to be hit by mistake. -->
+                          <div class="grid grid-cols-2 gap-1.5">
+                            <Button
+                              variant="outline"
+                              size="xs"
+                              onclick={() => startEditFeed(feed)}
+                            >
+                              Rename
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="xs"
+                              onclick={() => toggleSuspend(feed)}
+                            >
+                              {feed.suspended ? "Resume" : "Suspend"}
+                            </Button>
+                          </div>
+                          <label class="sr-only" for={`move-feed-${feed.id}`}>
+                            Move {feed.title} to a Group
+                          </label>
+                          <select
+                            id={`move-feed-${feed.id}`}
+                            class="h-7 w-full min-w-0 rounded-xl border border-transparent bg-input/50 px-2 text-xs text-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
+                            value={feed.group_id}
+                            onchange={(event) =>
+                              moveFeed(
+                                feed,
+                                Number(
+                                  (event.target as HTMLSelectElement).value,
+                                ),
+                              )}
+                          >
+                            {#each groups as option (option.id)}
+                              <option value={option.id}>{option.name}</option>
+                            {/each}
+                          </select>
+                          <!-- Silence and breakage read alike in a Feed List, so
+                               the last check is stated rather than inferred. -->
+                          <p
+                            class={feed.last_error
+                              ? "text-destructive"
+                              : ""}
+                            title={feed.last_checked_at
+                              ? `Last checked ${formatPublished(feed.last_checked_at)}`
+                              : "Not checked yet"}
+                          >
+                            {#if feed.last_error}
+                              Failing: {feed.last_error}
+                            {:else if feed.last_success_at}
+                              Checked {formatPublished(feed.last_success_at)}
+                            {:else}
+                              Not checked yet
+                            {/if}
+                          </p>
+                          <Button
+                            variant="destructive"
+                            size="xs"
+                            class="w-full"
+                            onclick={() => removeFeed(feed)}
+                          >
+                            Delete
+                          </Button>
+                        </div>
+                      {/if}
                     {/if}
                   </Sidebar.MenuSubItem>
                 {/each}
@@ -1081,34 +1192,39 @@
             {/each}
           </Sidebar.Menu>
 
-          <form
-            class="mt-2 flex items-center gap-2 px-2"
-            onsubmit={submitNewGroup}
-          >
-            <Field.FieldLabel for="new-group" class="sr-only"
-              >New Group</Field.FieldLabel
+          {#if managing}
+            <form
+              class="mt-2 flex items-center gap-1.5 px-2"
+              onsubmit={submitNewGroup}
             >
-            <Input
-              id="new-group"
-              class="h-7 text-sm"
-              placeholder="New Group"
-              bind:value={newGroupName}
-            />
-            <Button
-              type="submit"
-              size="sm"
-              variant="outline"
-              disabled={creatingGroup}>Add</Button
-            >
-          </form>
+              <Label for="new-group" class="sr-only">New Group</Label>
+              <Input
+                id="new-group"
+                class="h-7 min-w-0 flex-1 text-xs"
+                placeholder="New Group"
+                bind:value={newGroupName}
+              />
+              <Button
+                type="submit"
+                size="xs"
+                variant="outline"
+                disabled={creatingGroup}
+              >
+                Add
+              </Button>
+            </form>
+          {/if}
         </Sidebar.GroupContent>
       </Sidebar.Group>
     </Sidebar.Content>
 
     <Sidebar.Footer>
-      <label class="flex items-center gap-2 px-2 text-sm text-muted-foreground">
+      <label
+        class="flex cursor-pointer items-start gap-2.5 rounded-xl px-2 py-2 text-xs leading-snug text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+      >
         <input
           type="checkbox"
+          class="mt-px size-3.5 shrink-0 accent-primary"
           checked={markOnOpen}
           onchange={toggleMarkOnOpen}
         />
@@ -1123,76 +1239,131 @@
       class="flex h-full w-full flex-col overflow-hidden lg:w-88 lg:shrink-0"
       inert={overlayUp}
     >
-      <div class="flex shrink-0 flex-col gap-2 border-b border-border p-3">
-        <div class="flex items-center gap-2">
-          <Sidebar.Trigger class="-ml-1" />
-          <h2
-            data-testid="scope"
-            class="min-w-0 flex-1 truncate text-base font-medium"
-          >
-            {scopeTitle}
-          </h2>
-          {#if filterDefinitions[filter].canMarkAllRead}
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label="Mark all read"
-              title="Mark all read"
-              onclick={markAllRead}
-              disabled={busy || entries.length === 0}
+      <Tooltip.Provider delayDuration={400}>
+        <div class="flex shrink-0 flex-col gap-2 border-b border-border p-3">
+          <div class="flex items-center gap-1">
+            <Sidebar.Trigger class="-ml-1 shrink-0 max-lg:size-9" />
+            <h2
+              data-testid="scope"
+              class="min-w-0 flex-1 truncate px-1 text-base font-medium"
             >
-              <CheckCheckIcon />
-            </Button>
-          {/if}
+              {scopeTitle}
+            </h2>
+            {#if filterDefinitions[filter].canMarkAllRead}
+              <Tooltip.Root>
+                <Tooltip.Trigger>
+                  {#snippet child({ props })}
+                    <Button
+                      {...props}
+                      variant="ghost"
+                      size="icon-sm"
+                      class="max-lg:size-9"
+                      aria-label="Mark all read"
+                      onclick={markAllRead}
+                      disabled={busy || entries.length === 0}
+                    >
+                      <CheckCheckIcon />
+                    </Button>
+                  {/snippet}
+                </Tooltip.Trigger>
+                <Tooltip.Content>Mark all read</Tooltip.Content>
+              </Tooltip.Root>
+            {/if}
+            <Tooltip.Root>
+              <Tooltip.Trigger>
+                {#snippet child({ props })}
+                  <Button
+                    {...props}
+                    variant="ghost"
+                    size="icon-sm"
+                    class="max-lg:size-9"
+                    aria-label="Refresh all"
+                    onclick={refresh}
+                    disabled={busy}
+                  >
+                    {#if refreshing}
+                      <LoaderCircleIcon class="animate-spin" />
+                    {:else}
+                      <RefreshCwIcon />
+                    {/if}
+                  </Button>
+                {/snippet}
+              </Tooltip.Trigger>
+              <Tooltip.Content>Refresh all</Tooltip.Content>
+            </Tooltip.Root>
+          </div>
+
+          <Tabs.Root
+            value={filter}
+            onValueChange={(value) => setFilter(value as Filter)}
+          >
+            <Tabs.List aria-label="Filter" class="w-full">
+              <Tabs.Trigger value="all" data-testid="filter-all">All</Tabs.Trigger>
+              <Tabs.Trigger value="unread" data-testid="filter-unread">
+                Unread
+              </Tabs.Trigger>
+              <Tabs.Trigger value="starred" data-testid="filter-starred">
+                Starred
+              </Tabs.Trigger>
+              <Tabs.Trigger value="archive" data-testid="filter-archive">
+                Archive
+              </Tabs.Trigger>
+            </Tabs.List>
+          </Tabs.Root>
+        </div>
+      </Tooltip.Provider>
+
+      <!-- A notice belongs to the chrome, not to the reading list: it reports
+           and leaves, without moving the row the reader was aiming at. -->
+      {#if notice}
+        <div
+          data-testid="notice"
+          role="status"
+          class="flex shrink-0 items-start gap-2 border-b border-border bg-muted/50 py-2 pr-1.5 pl-3 text-xs text-muted-foreground"
+        >
+          <span class="min-w-0 flex-1 pt-0.5">{notice}</span>
           <Button
             variant="ghost"
-            size="icon-sm"
-            aria-label="Refresh all"
-            title="Refresh all"
-            onclick={refresh}
-            disabled={busy}
+            size="icon-xs"
+            aria-label="Dismiss"
+            onclick={() => (notice = "")}
           >
-            <RefreshCwIcon />
+            <XIcon />
           </Button>
         </div>
-
-        <Tabs.Root
-          value={filter}
-          onValueChange={(value) => setFilter(value as Filter)}
-        >
-          <Tabs.List aria-label="Filter" class="w-full">
-            <Tabs.Trigger value="all" data-testid="filter-all">All</Tabs.Trigger>
-            <Tabs.Trigger value="unread" data-testid="filter-unread">
-              Unread
-            </Tabs.Trigger>
-            <Tabs.Trigger value="starred" data-testid="filter-starred">
-              Starred
-            </Tabs.Trigger>
-            <Tabs.Trigger value="archive" data-testid="filter-archive">
-              Archive
-            </Tabs.Trigger>
-          </Tabs.List>
-        </Tabs.Root>
-      </div>
+      {/if}
 
       <div class="flex-1 overflow-y-auto">
-        {#if notice}
-          <p
-            data-testid="notice"
-            class="px-3 py-2 text-sm text-muted-foreground"
-          >
-            {notice}
-          </p>
-        {/if}
-
         {#if loading}
-          <p class="p-3 text-muted-foreground">Loading your Entries…</p>
+          <!-- The shape of the list that is coming, so the first rows land in
+               place instead of replacing a sentence. -->
+          <ul class="flex flex-col divide-y divide-border" aria-hidden="true">
+            {#each [0, 1, 2, 3, 4, 5] as placeholder (placeholder)}
+              <li class="flex flex-col gap-2 px-3 py-3">
+                <Skeleton class="h-3 w-32 rounded-md" />
+                <Skeleton class="h-4 w-full rounded-md" />
+                <Skeleton class="h-3 w-3/4 rounded-md" />
+              </li>
+            {/each}
+          </ul>
+          <p class="sr-only">Loading your Entries…</p>
         {:else if entries.length === 0}
-          <p class="p-3 text-muted-foreground">
-            {feeds.length === 0
-              ? "No Feeds yet. Add one to start reading."
-              : filterDefinitions[filter].empty}
-          </p>
+          <div class="flex flex-col items-center gap-2 px-6 py-16 text-center">
+            <InboxIcon
+              class="size-6 text-muted-foreground/60"
+              aria-hidden="true"
+            />
+            <p class="text-sm font-medium">
+              {feeds.length === 0
+                ? "No Feeds yet."
+                : filterDefinitions[filter].empty}
+            </p>
+            <p class="max-w-56 text-xs leading-snug text-muted-foreground">
+              {feeds.length === 0
+                ? "Add one with the address field at the top of the Feed List."
+                : filterDefinitions[filter].emptyDetail}
+            </p>
+          </div>
         {:else}
           <ul class="flex flex-col divide-y divide-border">
             {#each entries as entry, index (entry.id)}
@@ -1200,6 +1371,7 @@
                 {entry}
                 isCurrent={index === selectedIndex}
                 iconUrl={iconForEntry(entry)}
+                tabbable={index === (selectedIndex ?? 0)}
                 onClick={() => selectEntryAt(index)}
               />
             {/each}
@@ -1213,6 +1385,12 @@
                 onclick={loadMore}
                 disabled={busy}
               >
+                {#if busy}
+                  <LoaderCircleIcon
+                    class="animate-spin"
+                    data-icon="inline-start"
+                  />
+                {/if}
                 Load more
               </Button>
             </div>
@@ -1226,6 +1404,7 @@
         entry={selectedEntry}
         busy={busy || pendingEntryIDs.has(selectedEntry.id)}
         view={entryView}
+        iconUrl={iconForEntry(selectedEntry)}
         onClose={clearSelection}
         onView={chooseEntryView}
         onToggleRead={toggleReadCurrent}
@@ -1235,9 +1414,29 @@
     {:else}
       <div
         data-testid="reading-pane-empty"
-        class="hidden flex-1 items-center justify-center border-l border-border text-muted-foreground lg:flex"
+        class="hidden flex-1 flex-col items-center justify-center gap-3 border-l border-border px-6 text-center lg:flex"
       >
-        Pick an Entry to read it here.
+        <BookOpenIcon
+          class="size-6 text-muted-foreground/60"
+          aria-hidden="true"
+        />
+        <p class="text-sm font-medium">Pick an Entry to read it here.</p>
+        <p class="text-xs text-muted-foreground">
+          <kbd
+            class="rounded-md border border-border bg-muted px-1.5 py-0.5 font-mono"
+            >j</kbd
+          >
+          and
+          <kbd
+            class="rounded-md border border-border bg-muted px-1.5 py-0.5 font-mono"
+            >k</kbd
+          >
+          move through the list.
+          <kbd
+            class="rounded-md border border-border bg-muted px-1.5 py-0.5 font-mono"
+            >?</kbd
+          > lists every shortcut.
+        </p>
       </div>
     {/if}
   </Sidebar.Inset>
@@ -1256,5 +1455,15 @@
     onClose={() => (searchOpen = false)}
     onSelectEntry={openSearchEntry}
     onSelectFeed={openSearchFeed}
+  />
+{/if}
+
+{#if removal}
+  <ConfirmDialog
+    title={removal.title}
+    description={removal.description}
+    confirmLabel={removal.confirmLabel}
+    onConfirm={confirmRemoval}
+    onCancel={() => (removal = undefined)}
   />
 {/if}

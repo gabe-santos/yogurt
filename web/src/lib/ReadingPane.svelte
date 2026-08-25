@@ -10,7 +10,9 @@
 	} from '$lib/api';
 	import { formatPublished } from '$lib/format';
 	import { Button } from '$lib/components/ui/button';
+	import { Skeleton } from '$lib/components/ui/skeleton';
 	import * as Tooltip from '$lib/components/ui/tooltip';
+	import FeedIcon from '$lib/FeedIcon.svelte';
 	import ArchiveIcon from '@lucide/svelte/icons/archive';
 	import ArrowLeftIcon from '@lucide/svelte/icons/arrow-left';
 	import BookOpenIcon from '@lucide/svelte/icons/book-open';
@@ -26,6 +28,9 @@
 		busy: boolean;
 		/** view is the reader's remembered choice, owned by the page. */
 		view: EntryView;
+		/** iconUrl is the Entry's Feed Icon, so the pane's own metadata line
+		 * names its Feed the same way the Entry List row did. */
+		iconUrl?: string;
 		/** onClose backs out of the overlay the pane becomes on a narrow
 		 * screen. On a wide one the pane is furniture and nothing calls it. */
 		onClose: () => void;
@@ -35,8 +40,17 @@
 		onArchive: () => void;
 	}
 
-	const { entry, busy, view, onClose, onView, onToggleRead, onToggleStar, onArchive }: Props =
-		$props();
+	const {
+		entry,
+		busy,
+		view,
+		iconUrl,
+		onClose,
+		onView,
+		onToggleRead,
+		onToggleStar,
+		onArchive
+	}: Props = $props();
 
 	// The Article views are fetched per Entry and per view, on demand: an Entry
 	// the reader passes through in the Feed's own text never touches the
@@ -162,6 +176,34 @@
 	</Button>
 {/snippet}
 
+<!-- Every dead end offers the same two ways on: the publisher's own page in a
+     tab, and — when extraction is what failed — the view that does not depend
+     on it. Neither an error nor a refusal is ever the last word in the pane. -->
+{#snippet waysOn(offerReaderView: boolean)}
+	<div class="flex flex-wrap items-center gap-2">
+		{#if offerReaderView && view !== 'reader'}
+			<Button variant="outline" size="sm" onclick={() => onView('reader')} data-testid="try-reader">
+				<BookOpenIcon data-icon="inline-start" />
+				Reader View
+			</Button>
+		{/if}
+		{#if offerReaderView && view === 'reader'}
+			<Button
+				variant="outline"
+				size="sm"
+				onclick={() => onView('original')}
+				data-testid="try-original"
+			>
+				<GlobeIcon data-icon="inline-start" />
+				Original View
+			</Button>
+		{/if}
+		{@render openInNewTab()}
+	</div>
+{/snippet}
+
+<!-- Header controls are 28px where a cursor points at them and 36px where a
+     thumb does, which is the width the phone triage session needs. -->
 {#snippet control(
 	label: string,
 	icon: typeof RssIcon,
@@ -177,6 +219,7 @@
 					{...props}
 					variant={pressed ? 'secondary' : 'ghost'}
 					size="icon-sm"
+					class="max-lg:size-9"
 					aria-label={label}
 					aria-pressed={pressed}
 					data-testid={testid}
@@ -192,18 +235,46 @@
 	</Tooltip.Root>
 {/snippet}
 
+<!-- The three views are one choice, so they read as one control on a track
+     rather than as three of the seven identical glyphs the header used to be.
+     The chosen view is the only lifted surface in the group. -->
+{#snippet viewControl(id: EntryView, label: string, icon: typeof RssIcon)}
+	{@const Icon = icon}
+	<Tooltip.Root>
+		<Tooltip.Trigger>
+			{#snippet child({ props })}
+				<button
+					{...props}
+					type="button"
+					class="flex size-7 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-50 aria-pressed:bg-background aria-pressed:text-foreground aria-pressed:shadow-xs max-lg:size-9"
+					aria-label={label}
+					aria-pressed={view === id}
+					data-testid={`view-${id}`}
+					disabled={busy}
+					onclick={() => id !== view && onView(id)}
+				>
+					<Icon class="size-4" />
+				</button>
+			{/snippet}
+		</Tooltip.Trigger>
+		<Tooltip.Content>{label}</Tooltip.Content>
+	</Tooltip.Root>
+{/snippet}
+
 <!-- One component, two containers: a column of the layout once there is room
      for three, and a full-bleed overlay over the Entry List before that. The
      page marks what is behind it inert, which is what keeps the tab order
-     inside the overlay without a Sheet to do it for us. -->
+     inside the overlay without a Sheet to do it for us. Only the overlay
+     animates: arriving over the list is a change of place, whereas the third
+     column was already there. -->
 <section
 	data-testid="reading-pane"
 	aria-label="Reading Pane"
-	class="absolute inset-0 z-30 flex flex-col bg-background lg:static lg:z-auto lg:flex-1 lg:border-l lg:border-border"
+	class="absolute inset-0 z-30 flex flex-col bg-background max-lg:motion-safe:animate-in max-lg:motion-safe:fade-in max-lg:motion-safe:slide-in-from-right-8 max-lg:motion-safe:duration-300 max-lg:motion-safe:ease-[cubic-bezier(0.16,1,0.3,1)] lg:static lg:z-auto lg:flex-1 lg:border-l lg:border-border"
 >
 	<Tooltip.Provider delayDuration={400}>
 		<header
-			class="flex h-12 shrink-0 items-center gap-2 border-b border-border bg-background/95 px-2 backdrop-blur"
+			class="flex h-12 shrink-0 items-center gap-1 border-b border-border bg-background/95 px-2 backdrop-blur max-lg:h-14 max-lg:gap-0"
 		>
 			<Tooltip.Root>
 				<Tooltip.Trigger>
@@ -212,7 +283,7 @@
 							{...props}
 							variant="ghost"
 							size="icon-sm"
-							class="lg:hidden"
+							class="lg:hidden max-lg:size-9"
 							aria-label="Back to the Entry List"
 							data-testid="reading-pane-back"
 							onclick={onClose}
@@ -226,27 +297,28 @@
 
 			<p
 				data-testid="reading-pane-title"
-				class="min-w-0 flex-1 truncate text-sm font-medium transition-opacity duration-150"
+				class="min-w-0 flex-1 truncate px-1 text-sm font-medium transition-opacity duration-150 max-lg:hidden"
 				class:opacity-0={!titleScrolledAway}
 				aria-hidden={!titleScrolledAway}
 			>
 				{entry.title || entry.url}
 			</p>
 
-			<div class="flex shrink-0 items-center gap-0.5" role="group" aria-label="View">
+			<!-- On a phone the eight controls are the whole bar, so the spare
+			     width sits between the two groups rather than beside them. -->
+			<div class="flex-1 lg:hidden"></div>
+
+			<div
+				class="flex shrink-0 items-center gap-0.5 rounded-2xl bg-muted p-0.5"
+				role="group"
+				aria-label="View"
+			>
 				{#each views as choice (choice.id)}
-					{@render control(
-						choice.label,
-						choice.icon,
-						() => choice.id !== view && onView(choice.id),
-						view === choice.id,
-						busy,
-						`view-${choice.id}`
-					)}
+					{@render viewControl(choice.id, choice.label, choice.icon)}
 				{/each}
 			</div>
 
-			<div class="mx-1 h-5 w-px shrink-0 bg-border" aria-hidden="true"></div>
+			<div class="mx-1.5 h-5 w-px shrink-0 bg-border max-lg:mx-1" aria-hidden="true"></div>
 
 			<div class="flex shrink-0 items-center gap-0.5">
 				{@render control(
@@ -275,6 +347,7 @@
 								{...props}
 								variant="ghost"
 								size="icon-sm"
+								class="max-lg:size-9"
 								href={entry.url}
 								target="_blank"
 								rel="noreferrer"
@@ -298,29 +371,42 @@
 		     desktop-sized column. -->
 		<div
 			class={view === 'original'
-				? 'flex h-full flex-col gap-4 p-4'
-				: 'mx-auto flex max-w-2xl flex-col gap-4 px-6 py-6'}
+				? 'flex h-full flex-col gap-5 p-4'
+				: 'mx-auto flex max-w-2xl flex-col gap-5 px-6 py-8'}
 		>
-			<div bind:this={titleAnchor} class="flex flex-col gap-1">
-				<h1 class="text-2xl font-semibold break-words">{entry.title || entry.url}</h1>
-				<p class="text-sm text-muted-foreground">
-					{entry.feed_title} · {formatPublished(entry.published_at)}
+			<div bind:this={titleAnchor} class="flex flex-col gap-2">
+				<h1 class="text-2xl leading-tight font-semibold break-words text-balance">
+					{entry.title || entry.url}
+				</h1>
+				<p class="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+					<FeedIcon feedTitle={entry.feed_title} {iconUrl} />
+					<span class="min-w-0 truncate">{entry.feed_title}</span>
+					<span aria-hidden="true">·</span>
+					<span class="shrink-0">{formatPublished(entry.published_at)}</span>
 				</p>
 			</div>
 
 			<div
-				class="max-w-none flex-1 text-base leading-relaxed break-words text-foreground [&_a]:underline [&_a]:underline-offset-2 [&_blockquote]:my-3 [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:pl-3 [&_blockquote]:text-muted-foreground [&_h1]:mt-6 [&_h1]:mb-3 [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:mt-5 [&_h2]:mb-2 [&_h2]:text-lg [&_h2]:font-semibold [&_img]:max-w-full [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:pl-6 [&_p]:my-3 [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-6"
+				class="max-w-none flex-1 text-base leading-relaxed break-words text-foreground [&_a]:underline [&_a]:underline-offset-2 [&_blockquote]:my-3 [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:pl-3 [&_blockquote]:text-muted-foreground [&_h1]:mt-6 [&_h1]:mb-3 [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:mt-5 [&_h2]:mb-2 [&_h2]:text-lg [&_h2]:font-semibold [&_img]:max-w-full [&_img]:rounded-md [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:pl-6 [&_p]:my-3 [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-6"
 			>
 				{#if loading}
-					<p class="text-muted-foreground" data-testid="view-loading">
-						{view === 'reader' ? 'Extracting the Article…' : 'Asking the publisher…'}
-					</p>
+					<!-- The shape of what is coming, rather than a sentence about it:
+					     the wait is short and the pane should not jump when it ends. -->
+					<div class="flex flex-col gap-3" data-testid="view-loading">
+						<span class="sr-only">
+							{view === 'reader' ? 'Extracting the Article…' : 'Asking the publisher…'}
+						</span>
+						<Skeleton class="h-4 w-full rounded-md" />
+						<Skeleton class="h-4 w-11/12 rounded-md" />
+						<Skeleton class="h-4 w-4/5 rounded-md" />
+						<Skeleton class="mt-3 h-4 w-full rounded-md" />
+						<Skeleton class="h-4 w-10/12 rounded-md" />
+						<Skeleton class="h-4 w-2/3 rounded-md" />
+					</div>
 				{:else if loadError}
-					<div class="flex flex-col items-start gap-3">
+					<div class="flex max-w-2xl flex-col items-start gap-3">
 						<p class="text-destructive" data-testid="view-error">{loadError}</p>
-						{#if view === 'original'}
-							{@render openInNewTab()}
-						{/if}
+						{@render waysOn(true)}
 					</div>
 				{:else if view === 'reader'}
 					{#if article}
@@ -341,20 +427,26 @@
 							class="h-full min-h-96 w-full rounded-md border border-border bg-background"
 						></iframe>
 					{:else if original && originalSharesAppHost}
-						<div class="flex flex-col items-start gap-3" data-testid="original-view-unsafe">
+						<div
+							class="flex max-w-2xl flex-col items-start gap-3"
+							data-testid="original-view-unsafe"
+						>
 							<p class="text-muted-foreground">
 								This address shares Reader's host, so embedding it could expose your session. Open it
 								in a new tab instead.
 							</p>
-							{@render openInNewTab()}
+							{@render waysOn(true)}
 						</div>
 					{:else if original}
-						<div class="flex flex-col items-start gap-3" data-testid="original-view-forbidden">
+						<div
+							class="flex max-w-2xl flex-col items-start gap-3"
+							data-testid="original-view-forbidden"
+						>
 							<p class="text-muted-foreground">
 								This publisher does not allow their page to be shown inside another site. Reader View
 								still works, or the page can be opened in a new tab.
 							</p>
-							{@render openInNewTab()}
+							{@render waysOn(true)}
 						</div>
 					{/if}
 				{:else}

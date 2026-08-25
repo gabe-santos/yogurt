@@ -6,9 +6,56 @@ const published = new Intl.DateTimeFormat(undefined, {
   timeStyle: 'short',
 });
 
-/** formatPublished renders an Entry's published_at for display. */
+const dayAndMonth = new Intl.DateTimeFormat(undefined, {
+  month: 'short',
+  day: 'numeric',
+});
+
+const dayMonthAndYear = new Intl.DateTimeFormat(undefined, {
+  month: 'short',
+  day: 'numeric',
+  year: 'numeric',
+});
+
+/** formatPublished renders an Entry's published_at in full, for the one place
+ * that has room for it: the Reading Pane's own header. */
 export function formatPublished(publishedAt: string): string {
   return published.format(new Date(publishedAt));
+}
+
+const minute = 60_000;
+const hour = 60 * minute;
+const day = 24 * hour;
+
+/** formatEntryAge renders an Entry's age for an Entry List row, where the
+ * timestamp shares one 12px line with the Feed name and has to survive a
+ * phone's width. A newest-first list is read by distance from now, so recent
+ * Entries are relative and older ones fall back to a date; the full form
+ * stays available as the row's tooltip. `now` is a parameter so the result is
+ * a function of its inputs rather than of the clock. */
+export function formatEntryAge(
+  publishedAt: string,
+  now: number = Date.now(),
+): string {
+  const at = new Date(publishedAt);
+  const elapsed = now - at.getTime();
+  // A publisher dating an Entry in the future is not worth a second vocabulary:
+  // it reads as having just arrived, which is what it did.
+  if (elapsed < minute) {
+    return 'now';
+  }
+  if (elapsed < hour) {
+    return `${Math.floor(elapsed / minute)}m`;
+  }
+  if (elapsed < day) {
+    return `${Math.floor(elapsed / hour)}h`;
+  }
+  if (elapsed < 7 * day) {
+    return `${Math.floor(elapsed / day)}d`;
+  }
+  return at.getFullYear() === new Date(now).getFullYear()
+    ? dayAndMonth.format(at)
+    : dayMonthAndYear.format(at);
 }
 
 /** feedMonogram is the fallback Feed Icon: the first letter of a Feed's
