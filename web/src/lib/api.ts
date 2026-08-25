@@ -70,10 +70,26 @@ export interface Article {
   embeddable: boolean;
 }
 
+/** Original is the publisher's own page for an Entry: what Original View
+ * embeds, and whether the publisher allows it to be embedded at all. */
+export interface Original {
+  url: string;
+  /** embeddable is false when the publisher's framing headers refuse it, and
+   * the reader is offered a new tab instead of a blank frame. */
+  embeddable: boolean;
+}
+
+/** EntryView is which view an Entry opens in: the text the Feed itself
+ * carried, the Article reduced to its main text, or the publisher's own page
+ * embedded. */
+export type EntryView = 'feed' | 'reader' | 'original';
+
 /** Settings are the reader's own preferences. */
 export interface Settings {
   /** mark_on_open is on by default: opening an Entry marks it Read. */
   mark_on_open: boolean;
+  /** entry_view is the view an Entry opens in, remembered across Entries. */
+  entry_view: EntryView;
 }
 
 async function request(
@@ -307,6 +323,22 @@ export async function getArticle(entryId: number): Promise<Article> {
   );
   const body = (await response.json()) as { article: Article };
   return body.article;
+}
+
+/**
+ * getOriginal fetches what Original View needs for an Entry: the publisher's
+ * own address, and whether the publisher permits it to be embedded. The flag
+ * is the one the server recorded when it fetched the page, so the frame is
+ * only ever pointed at a page that will actually load in one.
+ */
+export async function getOriginal(entryId: number): Promise<Original> {
+  const response = await send(
+    'GET',
+    `/entries/${entryId}/original`,
+    'Could not reach that publisher',
+  );
+  const body = (await response.json()) as { original: Original };
+  return body.original;
 }
 
 /** markEntriesRead declares Read for exactly one filter and scope. */

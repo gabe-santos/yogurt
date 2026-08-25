@@ -26,7 +26,14 @@
     setSettings,
     updateFeed,
   } from "$lib/api";
-  import type { Entry, EntrySelectionOptions, Feed, Group } from "$lib/api";
+  import type {
+    Entry,
+    EntrySelectionOptions,
+    EntryView,
+    Feed,
+    Group,
+    Settings,
+  } from "$lib/api";
   import EntryDrawer from "$lib/EntryDrawer.svelte";
   import { formatPublished } from "$lib/format";
   import HelpDialog from "$lib/HelpDialog.svelte";
@@ -87,6 +94,10 @@
   let openIndex = $state<number | undefined>(undefined);
   let helpOpen = $state(false);
   let markOnOpen = $state(true);
+  // The view an Entry opens in belongs to the reader, not to an Entry: it is
+  // stored on the server, so it survives both moving to the next Entry and
+  // coming back tomorrow in another browser.
+  let entryView = $state<EntryView>("feed");
   // Entries the reader has declared unread by hand this session: mark-on-open
   // must never re-mark them Read just because j/k passed back through them.
   let manuallyUnread = $state<Set<number>>(new Set());
@@ -145,6 +156,7 @@
       entries = page.entries;
       cursor = page.next_cursor;
       markOnOpen = settings.mark_on_open;
+      entryView = settings.entry_view;
       groups = subscribedGroups;
     } finally {
       loading = false;
@@ -509,16 +521,34 @@
     }
   }
 
-  async function toggleMarkOnOpen() {
-    const next = !markOnOpen;
-    markOnOpen = next;
+  // Preferences are declared whole, so every change sends both fields rather
+  // than letting an omitted one fall back to a default the reader never chose.
+  async function savePreferences(next: Settings, previous: Settings) {
+    markOnOpen = next.mark_on_open;
+    entryView = next.entry_view;
     try {
-      const settings = await setSettings({ mark_on_open: next });
-      markOnOpen = settings.mark_on_open;
+      const stored = await setSettings(next);
+      markOnOpen = stored.mark_on_open;
+      entryView = stored.entry_view;
     } catch {
-      markOnOpen = !next;
+      markOnOpen = previous.mark_on_open;
+      entryView = previous.entry_view;
       notice = "Could not update your settings.";
     }
+  }
+
+  function preferences(): Settings {
+    return { mark_on_open: markOnOpen, entry_view: entryView };
+  }
+
+  function toggleMarkOnOpen() {
+    const previous = preferences();
+    void savePreferences({ ...previous, mark_on_open: !markOnOpen }, previous);
+  }
+
+  function chooseEntryView(view: EntryView) {
+    const previous = preferences();
+    void savePreferences({ ...previous, entry_view: view }, previous);
   }
 
   /** sortGroups matches the server's own order (default first, then by
@@ -1055,6 +1085,8 @@
     onClose={closeDrawer}
     onPrev={() => moveCurrent(-1)}
     onNext={() => moveCurrent(1)}
+    view={entryView}
+    onView={chooseEntryView}
     busy={busy || pendingEntryIDs.has(openEntry.id)}
     onToggleRead={toggleReadCurrent}
     onToggleStar={toggleStarCurrent}

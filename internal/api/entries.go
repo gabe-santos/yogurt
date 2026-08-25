@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gabe-santos/rss-reader/internal/extraction"
 	"github.com/gabe-santos/rss-reader/internal/sanitize"
 	"github.com/gabe-santos/rss-reader/internal/store"
 )
@@ -295,4 +296,72 @@ func (h *Handler) getArticle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.writeJSON(w, r, http.StatusOK, map[string]any{"article": viewArticle(stored)})
+}
+
+// originalView is what Original View needs to know about an Entry: the address
+// to embed, and whether the publisher permits embedding it at all.
+type originalView struct {
+	URL        string `json:"url"`
+	Embeddable bool   `json:"embeddable"`
+}
+
+// getOriginal serves Original View for an Entry: the publisher's own page,
+// shown as they laid it out. The embedding flag is the one extraction records,
+// so a page already read in Reader View costs no second fetch.
+//
+// A page carrying no extractable text still answers here — that is much of
+// what Original View is for, per ADR-0003 — and is not stored as an Article,
+// so Reader View keeps reporting the failure rather than serving an empty one.
+func (h *Handler) getOriginal(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		h.writeError(w, r, http.StatusNotFound, "no such Entry")
+		return
+	}
+
+	entry, err := h.deps.Store.Entry(r.Context(), id)
+	switch {
+	case errors.Is(err, store.ErrNoEntry):
+		h.writeError(w, r, http.StatusNotFound, "no such Entry")
+		return
+	case err != nil:
+		h.serverError(w, r, err)
+		return
+	}
+
+	article, err := h.deps.Store.Article(r.Context(), entry.URL)
+	switch {
+	case err == nil:
+		h.writeOriginal(w, r, entry.URL, article.Embeddable)
+		return
+	case !errors.Is(err, store.ErrNoArticle):
+		h.serverError(w, r, err)
+		return
+	}
+
+	extracted, err := h.deps.Extraction.Extract(r.Context(), entry.URL)
+	switch {
+	case err == nil:
+		stored := store.Article{
+			URL: entry.URL, Title: extracted.Title, HTML: extracted.HTML, Embeddable: extracted.Embeddable,
+		}
+		if err := h.deps.Store.SaveArticle(r.Context(), stored, h.deps.Clock.Now()); err != nil {
+			h.serverError(w, r, err)
+			return
+		}
+	case errors.Is(err, extraction.ErrNoContent):
+		// Nothing to store, but the fetch still answered the only question
+		// Original View asked.
+	default:
+		h.deps.Logger.WarnContext(r.Context(), "check original view", "url", entry.URL, "error", err)
+		h.writeError(w, r, http.StatusBadGateway, "could not reach the publisher's page")
+		return
+	}
+	h.writeOriginal(w, r, entry.URL, extracted.Embeddable)
+}
+
+func (h *Handler) writeOriginal(w http.ResponseWriter, r *http.Request, url string, embeddable bool) {
+	h.writeJSON(w, r, http.StatusOK, map[string]any{
+		"original": originalView{URL: url, Embeddable: embeddable},
+	})
 }

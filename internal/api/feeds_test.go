@@ -367,6 +367,8 @@ func TestFeedAndEntryEndpointsRequireASession(t *testing.T) {
 	h.Do(http.MethodGet, "/api/entries", nil).ExpectStatus(http.StatusUnauthorized)
 	h.Do(http.MethodPut, "/api/entries/1/state", map[string]any{"read": true}).
 		ExpectStatus(http.StatusUnauthorized)
+	h.Do(http.MethodGet, "/api/entries/1/article", nil).ExpectStatus(http.StatusUnauthorized)
+	h.Do(http.MethodGet, "/api/entries/1/original", nil).ExpectStatus(http.StatusUnauthorized)
 	h.Do(http.MethodGet, "/api/settings", nil).ExpectStatus(http.StatusUnauthorized)
 	h.Do(http.MethodPut, "/api/settings", map[string]any{"mark_on_open": true}).
 		ExpectStatus(http.StatusUnauthorized)

@@ -40,9 +40,46 @@ const page = `<!doctype html>
 </html>
 `;
 
+// The Articles the Feed's items link to. Both carry enough prose for
+// extraction to recognise an Article, so Reader View and Original View can be
+// told apart by what they render rather than by whether anything loaded.
+const article = (title) => `<!doctype html>
+<html>
+  <head><title>${title}</title></head>
+  <body>
+    <nav>Site navigation the reader does not want</nav>
+    <article>
+      <h1>${title}</h1>
+      <p>The publisher's own paragraph about ${title.toLowerCase()}, written at
+      enough length that extraction recognises it as the body of an Article
+      rather than the navigation chrome wrapped around it, and padded with
+      further clauses to satisfy the same density heuristics a real page would
+      have to satisfy.</p>
+      <p>A second paragraph continues in the same vein, adding detail nobody
+      asked for, so that the extracted text is unmistakably this page and not
+      the summary the Feed carried, and so the parser has the length it wants
+      before it will keep the block at all.</p>
+    </article>
+    <footer>Footer junk the reader does not want either</footer>
+  </body>
+</html>
+`;
+
 const documents = {
   '/feed.xml': { type: 'application/rss+xml; charset=utf-8', body: feed },
   '/': { type: 'text/html; charset=utf-8', body: page },
+  // Fire allows being framed: Original View embeds it.
+  '/fire': {
+    type: 'text/html; charset=utf-8',
+    body: article('Fire, and how to keep it'),
+  },
+  // Wheels refuses, the way a quarter of popular domains do: Original View has
+  // to say so and offer a tab instead.
+  '/wheels': {
+    type: 'text/html; charset=utf-8',
+    headers: { 'X-Frame-Options': 'DENY' },
+    body: article('Wheels: a review'),
+  },
 };
 
 createServer((request, response) => {
@@ -52,5 +89,7 @@ createServer((request, response) => {
     response.writeHead(404, { 'Content-Type': 'text/plain' }).end('not here\n');
     return;
   }
-  response.writeHead(200, { 'Content-Type': document.type }).end(document.body);
+  response
+    .writeHead(200, { 'Content-Type': document.type, ...document.headers })
+    .end(document.body);
 }).listen(publisherPort, '127.0.0.1');

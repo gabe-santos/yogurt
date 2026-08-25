@@ -52,9 +52,13 @@ func New(client *fetch.Client) *Service {
 	return &Service{client: client}
 }
 
-// Extract fetches rawURL and reduces the response to an Article. It returns
-// ErrNoContent when the page carries nothing extraction can recognise as an
-// Article's main text.
+// Extract fetches rawURL and reduces the response to an Article.
+//
+// Every error raised after the fetch itself succeeded — ErrNoContent among
+// them — is returned together with an Article whose Embeddable flag is already
+// meaningful, because Original View needs that flag for exactly the pages
+// Reader View cannot read: the ones built by JavaScript, or carrying nothing
+// but images and charts.
 func (s *Service) Extract(ctx context.Context, rawURL string) (Article, error) {
 	resp, err := s.client.Get(ctx, rawURL, fetch.Conditional{})
 	if err != nil {
@@ -63,25 +67,24 @@ func (s *Service) Extract(ctx context.Context, rawURL string) (Article, error) {
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return Article{}, fmt.Errorf("fetch %s: publisher returned status %d", rawURL, resp.StatusCode)
 	}
+	article := Article{Embeddable: canEmbed(resp.Header)}
 
 	parsed, err := readability.FromReader(bytes.NewReader(resp.Body), resp.URL)
 	if err != nil {
-		return Article{}, fmt.Errorf("extract %s: %w", rawURL, err)
+		return article, fmt.Errorf("extract %s: %w", rawURL, err)
 	}
 	if parsed.Node == nil {
-		return Article{}, fmt.Errorf("extract %s: %w", rawURL, ErrNoContent)
+		return article, fmt.Errorf("extract %s: %w", rawURL, ErrNoContent)
 	}
 
 	var buf bytes.Buffer
 	if err := parsed.RenderHTML(&buf); err != nil {
-		return Article{}, fmt.Errorf("render %s: %w", rawURL, err)
+		return article, fmt.Errorf("render %s: %w", rawURL, err)
 	}
 
-	return Article{
-		Title:      parsed.Title(),
-		HTML:       sanitize.Article(buf.String()),
-		Embeddable: canEmbed(resp.Header),
-	}, nil
+	article.Title = parsed.Title()
+	article.HTML = sanitize.Article(buf.String())
+	return article, nil
 }
 
 // canEmbed reports whether a response's framing headers permit this page to
