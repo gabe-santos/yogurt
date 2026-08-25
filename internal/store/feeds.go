@@ -109,9 +109,10 @@ type EntrySelection struct {
 	ArchivedOnly bool
 }
 
-// EntryQuery selects a page of the reading list.
 type EntryQuery struct {
 	EntrySelection
+	// OldestFirst reverses the default newest-first publish-date order.
+	OldestFirst bool
 	// After is the position the last page ended at.
 	After Cursor
 	// Around is an Entry id to start the page at, inclusive, rather than at
@@ -592,9 +593,10 @@ func scanEntry(row rowScanner) (Entry, error) {
 	return entry, nil
 }
 
-// Entries reads one page of the reading list, newest first. Archived Entries
-// are excluded unless ArchivedOnly selects the Archive view. It returns
-// ErrNoEntry when Around names an Entry that is not there.
+// Entries reads one page of the reading list in publish-date order, newest
+// first unless OldestFirst is set. Archived Entries are excluded unless
+// ArchivedOnly selects the Archive view. It returns ErrNoEntry when Around
+// names an Entry that is not there.
 func (s *Store) Entries(ctx context.Context, q EntryQuery) ([]Entry, error) {
 	where, args := entryWhere(q.EntrySelection)
 	switch {
@@ -605,19 +607,31 @@ func (s *Store) Entries(ctx context.Context, q EntryQuery) ([]Entry, error) {
 		if err != nil {
 			return nil, err
 		}
-		where = append(where, "(e.published_at < ? OR (e.published_at = ? AND e.id <= ?))")
+		if q.OldestFirst {
+			where = append(where, "(e.published_at > ? OR (e.published_at = ? AND e.id >= ?))")
+		} else {
+			where = append(where, "(e.published_at < ? OR (e.published_at = ? AND e.id <= ?))")
+		}
 		args = append(args, anchor.PublishedAt.Unix(), anchor.PublishedAt.Unix(), anchor.ID)
 	case !q.After.IsZero():
-		// Keyset paging: strictly older than the last Entry of the page before,
-		// with the id settling identical timestamps.
-		where = append(where, "(e.published_at < ? OR (e.published_at = ? AND e.id < ?))")
+		// Keyset paging: strictly beyond the last Entry of the page before in
+		// the requested direction, with the id settling identical timestamps.
+		if q.OldestFirst {
+			where = append(where, "(e.published_at > ? OR (e.published_at = ? AND e.id > ?))")
+		} else {
+			where = append(where, "(e.published_at < ? OR (e.published_at = ? AND e.id < ?))")
+		}
 		args = append(args, q.After.PublishedAt.Unix(), q.After.PublishedAt.Unix(), q.After.ID)
+	}
+	order := "DESC"
+	if q.OldestFirst {
+		order = "ASC"
 	}
 
 	query := `SELECT ` + entryColumns + `
 		 FROM entries e JOIN feeds f ON f.id = e.feed_id
 		 WHERE ` + strings.Join(where, " AND ") +
-		" ORDER BY e.published_at DESC, e.id DESC LIMIT ?"
+		" ORDER BY e.published_at " + order + ", e.id " + order + " LIMIT ?"
 	args = append(args, q.Limit)
 
 	rows, err := s.db.QueryContext(ctx, query, args...)

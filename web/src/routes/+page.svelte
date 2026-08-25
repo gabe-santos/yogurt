@@ -4,6 +4,7 @@
   import { Label } from "$lib/components/ui/label";
   import * as Alert from "$lib/components/ui/alert";
   import * as Sidebar from "$lib/components/ui/sidebar";
+  import * as Select from "$lib/components/ui/select";
   import * as Tabs from "$lib/components/ui/tabs";
   import * as Tooltip from "$lib/components/ui/tooltip";
   import { Skeleton } from "$lib/components/ui/skeleton";
@@ -39,6 +40,7 @@
   } from "$lib/api";
   import type {
     Entry,
+    EntryOrder,
     EntrySelectionOptions,
     EntryView,
     Feed,
@@ -115,6 +117,7 @@
   let cursor = $state("");
   let scope = $state<Scope | undefined>(undefined);
   let filter = $state<Filter>("all");
+  let entryOrder = $state<EntryOrder>("newest");
   let loading = $state(true);
 
   // feedsByID resolves an Entry's Feed Icon from data this page already
@@ -128,6 +131,12 @@
   function iconForEntry(entry: Entry): string | undefined {
     const feed = feedsByID.get(entry.feed_id);
     return feed ? feedIconUrl(feed) : undefined;
+  }
+
+  function compareEntries(a: Entry, b: Entry): number {
+    const ascending =
+      a.published_at.localeCompare(b.published_at) || a.id - b.id;
+    return entryOrder === "oldest" ? ascending : -ascending;
   }
 
   // Selecting an Entry and opening it are one act: the Reading Pane always
@@ -223,7 +232,10 @@
     try {
       const [subscribed, page, settings, subscribedGroups] = await Promise.all([
         listFeeds(),
-        listEntries(deepLink > 0 ? { around: deepLink } : {}),
+        listEntries({
+          ...(deepLink > 0 ? { around: deepLink } : {}),
+          order: entryOrder,
+        }),
         getSettings(),
         listGroups(),
       ]);
@@ -292,7 +304,7 @@
   /** reload replaces the list with the first page of the current scope and
    * filter, clearing keyboard position: the underlying list changed under it. */
   async function reload() {
-    const page = await listEntries(selectionQuery());
+    const page = await listEntries({ ...selectionQuery(), order: entryOrder });
     entries = page.entries;
     cursor = page.next_cursor;
     selectedIndex = undefined;
@@ -378,6 +390,7 @@
       const page = await listEntries({
         ...selectionQuery(nextScope, nextFilter),
         around: entry.id,
+        order: entryOrder,
       });
       entries = page.entries;
       cursor = page.next_cursor;
@@ -411,11 +424,26 @@
     }
   }
 
+  async function setEntryOrder(next: EntryOrder) {
+    if (busy || entryOrder === next) return;
+    entryOrder = next;
+    busy = true;
+    try {
+      await reload();
+    } finally {
+      busy = false;
+    }
+  }
+
   async function loadMore() {
     if (!cursor) return;
     busy = true;
     try {
-      const page = await listEntries({ ...selectionQuery(), cursor });
+      const page = await listEntries({
+        ...selectionQuery(),
+        cursor,
+        order: entryOrder,
+      });
       entries = [...entries, ...page.entries];
       cursor = page.next_cursor;
     } catch (cause) {
@@ -502,9 +530,7 @@
           if (existingIndex >= 0) {
             entries[existingIndex] = previous;
           } else {
-            entries = [...entries, previous].sort(
-              (a, b) => b.published_at.localeCompare(a.published_at) || b.id - a.id,
-            );
+            entries = [...entries, previous].sort(compareEntries);
           }
         } else if (existingIndex >= 0) {
           entries = entries.filter((entry) => entry.id !== previous.id);
@@ -1249,6 +1275,37 @@
             >
               {scopeTitle}
             </h2>
+            <Label for="entry-order" class="sr-only">
+              Sort Entries by publish date
+            </Label>
+            <Select.Root
+              type="single"
+              value={entryOrder}
+              onValueChange={(value) =>
+                void setEntryOrder(value as EntryOrder)}
+              disabled={busy}
+            >
+              <Select.Trigger
+                id="entry-order"
+                data-testid="entry-order"
+                aria-label="Sort Entries by publish date"
+                class="shrink-0 max-lg:h-9"
+              >
+                {entryOrder === "newest" ? "Newest first" : "Oldest first"}
+              </Select.Trigger>
+              <Select.Content>
+                <Select.Group>
+                  <Select.Item value="newest" label="Newest first">
+                    Newest first
+                  </Select.Item>
+                  <Select.Item value="oldest" label="Oldest first">
+                    Oldest first
+                  </Select.Item>
+                </Select.Group>
+              </Select.Content>
+            </Select.Root>
+
+
             {#if filterDefinitions[filter].canMarkAllRead}
               <Tooltip.Root>
                 <Tooltip.Trigger>

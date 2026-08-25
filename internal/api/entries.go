@@ -103,10 +103,11 @@ func (h *Handler) parseEntrySelection(w http.ResponseWriter, r *http.Request) (s
 	return selection, true
 }
 
-// listEntries is the reading list: newest first, one page at a time. With a
-// since query parameter present, it is instead the changed-since feed, per
-// ADR-0004: Entries changed and Entries removed after that position, oldest
-// first. No since parameter at all behaves exactly like the plain list.
+// listEntries is the reading list in the requested publish-date order,
+// newest first by default, one page at a time. With a since query parameter
+// present, it is instead the changed-since feed, per ADR-0004: Entries changed
+// and Entries removed after that position, oldest first. No since parameter
+// at all behaves exactly like the plain list.
 func (h *Handler) listEntries(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Query().Has("since") {
 		h.listEntriesSince(w, r)
@@ -123,6 +124,14 @@ func (h *Handler) listEntries(w http.ResponseWriter, r *http.Request) {
 	}
 	query := r.URL.Query()
 	q := store.EntryQuery{EntrySelection: selection, Limit: limit}
+	switch query.Get("order") {
+	case "", "newest":
+	case "oldest":
+		q.OldestFirst = true
+	default:
+		h.writeError(w, r, http.StatusBadRequest, "order must be newest or oldest")
+		return
+	}
 	if raw := query.Get("cursor"); raw != "" {
 		cursor, err := decodeCursor(raw)
 		if err != nil {
@@ -185,7 +194,7 @@ func (h *Handler) parseLimit(w http.ResponseWriter, r *http.Request) (int, bool)
 // changed-since feed refuses, rather than silently ignoring: it always reads
 // the whole collection, so a caller believing it scoped a sync would
 // otherwise get every Entry with no signal that the scope was dropped.
-var sinceScopeParams = []string{"feed", "group", "unread", "starred", "archived", "around", "cursor"}
+var sinceScopeParams = []string{"feed", "group", "unread", "starred", "archived", "order", "around", "cursor"}
 
 // listEntriesSince is the changed-since feed: every Entry changed, and every
 // Entry retention removed, after the since cursor, oldest first, over the
@@ -230,8 +239,9 @@ func (h *Handler) listEntriesSince(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// encodeCursor packs an Entry's position in the newest-first list into a token
-// the caller cannot construct, so that paging stays the server's business.
+// encodeCursor packs an Entry's position in a publish-date ordered list into a
+// token the caller cannot construct, so that paging stays the server's business.
+
 func encodeCursor(entry store.Entry) string {
 	return encodePosition(entry.PublishedAt, entry.ID)
 }

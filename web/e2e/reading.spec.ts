@@ -44,8 +44,23 @@ test('the reader opens an Entry, reads it, and triages by keyboard', async ({
   ).toBeVisible();
   await cdp.detach();
 
-  // Newest first: Wheels, then Fire.
+  // Publish-date order defaults to newest first and can be reversed without
+  // changing the current Feed scope.
   const entries = page.getByTestId('entry');
+  const entryOrder = page.getByTestId('entry-order');
+  await expect(entryOrder).toContainText('Newest first');
+  await expect(entries.nth(0)).toContainText('Wheels: a review');
+  await expect(entries.nth(1)).toContainText('Fire, and how to keep it');
+  await entryOrder.click();
+  await page.getByRole('option', { name: 'Oldest first' }).click();
+  await expect(entryOrder).toContainText('Oldest first');
+  await expect(entries.nth(0)).toContainText('Fire, and how to keep it');
+  await expect(entries.nth(1)).toContainText('Wheels: a review');
+  await entryOrder.click();
+  await page.getByRole('option', { name: 'Newest first' }).click();
+  await expect(entryOrder).toContainText('Newest first');
+
+  await expect(entries.nth(0)).toContainText('Wheels: a review');
   await expect(entries.nth(0)).toContainText('unread');
   await expect(entries.nth(1)).toContainText('unread');
 

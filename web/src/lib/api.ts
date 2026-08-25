@@ -66,7 +66,7 @@ export interface Entry {
   archived: boolean;
 }
 
-/** EntryPage is one page of the reading list, newest first. */
+/** EntryPage is one page of the publish-date ordered reading list. */
 export interface EntryPage {
   entries: Entry[];
   /** next_cursor is empty once the list is exhausted. */
@@ -282,6 +282,8 @@ export interface EntrySelectionOptions {
   archived?: boolean;
 }
 
+export type EntryOrder = 'newest' | 'oldest';
+
 function entrySelectionQuery(options: EntrySelectionOptions): URLSearchParams {
   const query = new URLSearchParams();
   for (const key of [
@@ -308,6 +310,7 @@ export async function listEntries(
     cursor?: string;
     limit?: number;
     around?: number;
+    order?: EntryOrder;
   } = {},
 ): Promise<EntryPage> {
   const query = entrySelectionQuery(options);
@@ -319,6 +322,9 @@ export async function listEntries(
   }
   if (options.around !== undefined) {
     query.set('around', String(options.around));
+  }
+  if (options.order !== undefined) {
+    query.set('order', options.order);
   }
 
   const path = query.size > 0 ? `/entries?${query}` : '/entries';

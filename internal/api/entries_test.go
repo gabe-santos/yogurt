@@ -57,6 +57,46 @@ func TestTheEntryListIsNewestFirstAndPagesWithAnOpaqueCursor(t *testing.T) {
 	}
 }
 
+func TestTheEntryListCanBeOldestFirstAcrossPages(t *testing.T) {
+	h := loggedIn(t)
+
+	const count = 5
+	items := make([]apitest.Item, 0, count)
+	wantTitles := make([]string, 0, count)
+	for i := range count {
+		title := "Post " + strconv.Itoa(i)
+		items = append(items, apitest.Item{
+			ID:        "post-" + strconv.Itoa(i),
+			Title:     title,
+			Published: published.Add(time.Duration(i) * time.Hour),
+		})
+		wantTitles = append(wantTitles, title)
+	}
+	feedURL := h.Publisher.Serve("/feed.xml", apitest.RSS("The Publisher", "", items...))
+	feed := subscribe(t, h, feedURL)
+
+	query := feedQuery(feed) + "&order=oldest&limit=2"
+	page := listEntries(t, h, query)
+	seen := entryTitles(page.Entries)
+	for page.NextCursor != "" {
+		page = listEntries(t, h, query+"&cursor="+page.NextCursor)
+		seen = append(seen, entryTitles(page.Entries)...)
+		if len(seen) > count {
+			t.Fatalf("paging returned %d entries for %d Entries", len(seen), count)
+		}
+	}
+
+	if !equalStrings(seen, wantTitles) {
+		t.Errorf("oldest-first paged entries = %v, want %v", seen, wantTitles)
+	}
+}
+
+func TestAnUnknownEntryOrderIsRefused(t *testing.T) {
+	h := loggedIn(t)
+
+	h.Do(http.MethodGet, "/api/entries?order=sideways", nil).ExpectStatus(http.StatusBadRequest)
+}
+
 func TestAnUnreadableCursorIsRefused(t *testing.T) {
 	h := loggedIn(t)
 
