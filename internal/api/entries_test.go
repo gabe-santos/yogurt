@@ -214,9 +214,16 @@ func TestAnEntryCanBeStarredUnstarredAndListedAsStarred(t *testing.T) {
 	if !body.Entry.Starred {
 		t.Fatal("replaying the Starred declaration lost the state")
 	}
+	// Read changes carry the complete current state, so they cannot silently
+	// clear Starred while declaring Read.
+	state.Read = true
+	setEntryState(t, h, starredID, state).ExpectStatus(http.StatusOK).JSON(&body)
+	if !body.Entry.Read || !body.Entry.Starred {
+		t.Fatalf("read declaration returned (Read %t, Starred %t), want both true", body.Entry.Read, body.Entry.Starred)
+	}
 	starred := listEntries(t, h, "starred=true").Entries
 	if len(starred) != 1 || starred[0].ID != starredID {
-		t.Fatalf("Starred view = %#v, want only Entry %d", starred, starredID)
+		t.Fatalf("Starred view after marking Read = %#v, want only Entry %d", starred, starredID)
 	}
 
 	state.Starred = false
