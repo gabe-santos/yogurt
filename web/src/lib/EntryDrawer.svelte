@@ -60,6 +60,13 @@
 	let loadError = $state('');
 	let loading = $state(false);
 	let loadedEntryId = $state<number | undefined>(undefined);
+	// Cookies ignore ports. A publisher on Reader's own host could therefore
+	// receive the session even when its URL has a different origin; never frame
+	// one. External publishers keep their own origin so their cookies, storage,
+	// and JavaScript applications continue to work.
+	const originalSharesAppHost = $derived(
+		original !== null && new URL(original.url).hostname === window.location.hostname
+	);
 
 	const views: { id: EntryView; label: string; icon: typeof RssIcon }[] = [
 		{ id: 'feed', label: 'From the Feed', icon: RssIcon },
@@ -217,22 +224,27 @@
 					{@html article.html}
 				{/if}
 			{:else if view === 'original'}
-				{#if original?.embeddable}
-					<!-- The publisher's live page, in an opaque origin: no
-					     allow-same-origin, so the frame reaches neither this app's
-					     cookies and session nor its DOM, and no referrer names the
-					     Entry it came from. A link the reader follows out of the
-					     frame escapes the sandbox on purpose — a tab inherited into
-					     an opaque origin would be a broken browser, not a safer
-					     one — while the embedded document itself stays isolated. -->
+				{#if original?.embeddable && !originalSharesAppHost}
+					<!-- allow-same-origin preserves the publisher's own cookies and
+					     storage. Because same-host URLs are refused below, the
+					     browser's same-origin policy still keeps Reader's session and
+					     DOM inaccessible; no referrer names the Entry it came from. -->
 					<iframe
 						data-testid="original-view"
 						title={entry.title || entry.url}
 						src={original.url}
-						sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox allow-forms"
+						sandbox="allow-same-origin allow-scripts allow-popups allow-popups-to-escape-sandbox allow-forms"
 						referrerpolicy="no-referrer"
 						class="h-full min-h-96 w-full rounded-md border border-border bg-background"
 					></iframe>
+				{:else if original && originalSharesAppHost}
+					<div class="flex flex-col items-start gap-3" data-testid="original-view-unsafe">
+						<p class="text-muted-foreground">
+							This address shares Reader's host, so embedding it could expose your session. Open it
+							in a new tab instead.
+						</p>
+						{@render openInNewTab()}
+					</div>
 				{:else if original}
 					<div class="flex flex-col items-start gap-3" data-testid="original-view-forbidden">
 						<p class="text-muted-foreground">

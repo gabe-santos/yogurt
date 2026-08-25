@@ -5,7 +5,7 @@
 import { createServer } from 'node:http';
 
 const publisherPort = Number(process.env.PUBLISHER_PORT);
-const publisherURL = `http://127.0.0.1:${publisherPort}`;
+const publisherURL = `http://localhost:${publisherPort}`;
 
 const feed = `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0">
@@ -61,6 +61,17 @@ const article = (title) => `<!doctype html>
       before it will keep the block at all.</p>
     </article>
     <footer>Footer junk the reader does not want either</footer>
+    <script>
+      try {
+        document.cookie;
+        localStorage.setItem('original-view-check', 'ready');
+        document.querySelector('article').dataset.publisherApp = 'ready';
+      } catch (error) {
+        document.querySelector('article').innerHTML =
+          '<p>Application error: publisher storage is unavailable.</p>';
+        throw error;
+      }
+    </script>
   </body>
 </html>
 `;
@@ -84,6 +95,12 @@ const documents = {
 
 createServer((request, response) => {
   const path = new URL(request.url, publisherURL).pathname;
+  if (path === '/session-check') {
+    response
+      .writeHead(200, { 'Content-Type': 'application/json' })
+      .end(JSON.stringify({ cookie: request.headers.cookie ?? '' }));
+    return;
+  }
   const document = documents[path];
   if (!document) {
     response.writeHead(404, { 'Content-Type': 'text/plain' }).end('not here\n');
@@ -92,4 +109,4 @@ createServer((request, response) => {
   response
     .writeHead(200, { 'Content-Type': document.type, ...document.headers })
     .end(document.body);
-}).listen(publisherPort, '127.0.0.1');
+}).listen(publisherPort, 'localhost');

@@ -43,29 +43,38 @@ test('the reader switches views, keeps the choice, and is offered a tab when a p
   await expect(embedded.locator('nav')).toContainText(
     'Site navigation the reader does not want',
   );
+  await expect(embedded.locator('article')).toHaveAttribute(
+    'data-publisher-app',
+    'ready',
+  );
+  await expect(embedded.getByText('Application error')).toHaveCount(0);
 
-  // The embed is isolated from this app: an opaque origin, so it reaches
-  // neither the session cookie that fetched it nor the DOM around it.
+  // The publisher keeps its own origin, so its storage-dependent application
+  // works. That origin still reaches neither Reader's session nor its DOM.
   const embeddedFrame = page.frame({ url: `${publisherURL}/fire` });
   expect(embeddedFrame).not.toBeNull();
-  const isolation = await embeddedFrame!.evaluate(() => {
-    let cookies: string;
-    try {
-      cookies = document.cookie;
-    } catch {
-      cookies = 'refused';
-    }
+  const isolation = await embeddedFrame!.evaluate(async () => {
     let parentDom: string;
     try {
       parentDom = String(!!window.parent.document.body);
     } catch {
       parentDom = 'refused';
     }
-    return { origin: window.origin, cookies, parentDom };
+    const sessionResponse = await fetch('/session-check');
+    const sessionCheck = (await sessionResponse.json()) as { cookie: string };
+    return {
+      origin: window.origin,
+      cookies: document.cookie,
+      storage: localStorage.getItem('original-view-check'),
+      parentDom,
+      requestCookie: sessionCheck.cookie,
+    };
   });
-  expect(isolation.origin).toBe('null');
-  expect(isolation.cookies).not.toContain('session');
+  expect(isolation.origin).toBe(publisherURL);
+  expect(isolation.cookies).not.toContain('reader_session');
+  expect(isolation.storage).toBe('ready');
   expect(isolation.parentDom).toBe('refused');
+  expect(isolation.requestCookie).not.toContain('reader_session');
 
   // The choice is the reader's, not the Entry's: the next Entry opens in it.
   await page.keyboard.press('k');
@@ -90,5 +99,28 @@ test('the reader switches views, keeps the choice, and is offered a tab when a p
   await expect(page.getByTestId('entry-content')).toContainText(
     'Keeping a fire alive overnight.',
   );
+  await page.keyboard.press('Escape');
+
+  // A different port is still the same cookie host. Even if the API calls it
+  // embeddable, Reader refuses the frame rather than exposing its session.
+  const reader = new URL(page.url());
+  const sameHostURL = `${reader.protocol}//${reader.hostname}:65534/`;
+  await page.route('**/api/entries/*/original', async (route) => {
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        original: { url: sameHostURL, embeddable: true },
+      }),
+    });
+  });
+  await page.getByTestId('entry').nth(1).click();
+  await page.getByTestId('view-original').click();
+  await expect(page.getByTestId('original-view')).toHaveCount(0);
+  await expect(page.getByTestId('original-view-unsafe')).toBeVisible();
+  await expect(page.getByTestId('entry-content')).toContainText(
+    "shares Reader's host",
+  );
+  await page.unroute('**/api/entries/*/original');
+  await page.getByTestId('view-feed').click();
   await page.keyboard.press('Escape');
 });

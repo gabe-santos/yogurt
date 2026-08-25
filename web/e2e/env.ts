@@ -5,4 +5,4 @@ export const baseURL = `http://127.0.0.1:${port}`;
 
 // The fake publisher the binary subscribes to, standing in for a website.
 export const publisherPort = 4272;
-export const publisherURL = `http://127.0.0.1:${publisherPort}`;
+export const publisherURL = `http://localhost:${publisherPort}`;
