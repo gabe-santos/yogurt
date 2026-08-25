@@ -364,7 +364,7 @@
 		</header>
 	</Tooltip.Provider>
 
-	<div bind:this={scroller} data-testid="entry-content" class="flex-1 overflow-y-auto">
+	<div bind:this={scroller} data-testid="entry-content" class="scrollbar-hover flex-1 overflow-y-auto">
 		<!-- Reader View and Feed View are our own markup and are held to a
 		     readable measure. Original View is the publisher's layout and gets the
 		     whole pane, or a responsive site renders its phone design in a
