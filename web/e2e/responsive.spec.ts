@@ -38,12 +38,14 @@ test('on a phone-sized viewport the sidebar is a sheet and reading still works',
   );
   expect(scrollWidth).toBeLessThanOrEqual(390);
 
-  // Reading behaviour — open, next/previous, close — survives the narrow
-  // viewport untouched.
+  // Reading survives the narrow viewport, where the Reading Pane is an overlay
+  // over the Entry List rather than a third column.
   const entries = page.getByTestId('entry');
   await entries.first().click();
-  const drawer = page.getByTestId('entry-drawer');
-  await expect(drawer).toBeVisible();
+  const pane = page.getByTestId('reading-pane');
+  await expect(pane).toBeVisible();
+  // Nothing behind the overlay is reachable by tab.
+  await expect(page.getByTestId('entry-list')).toHaveAttribute('inert', '');
   const firstContent = await page.getByTestId('entry-content').textContent();
 
   await page.keyboard.press('j');
@@ -56,6 +58,13 @@ test('on a phone-sized viewport the sidebar is a sheet and reading still works',
     firstContent ?? '',
   );
 
+  // Escape backs out of the overlay, and so does the button that says so.
   await page.keyboard.press('Escape');
-  await expect(drawer).toBeHidden();
+  await expect(pane).toBeHidden();
+  await expect(page.getByTestId('entry-list')).not.toHaveAttribute('inert', '');
+
+  await entries.first().click();
+  await expect(pane).toBeVisible();
+  await page.getByTestId('reading-pane-back').click();
+  await expect(pane).toBeHidden();
 });

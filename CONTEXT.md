@@ -32,6 +32,18 @@ _Avoid_: Page, content, full text
 A single representative image for one Entry, derived from its Article rather than supplied by the Feed. Absent whenever the Article offers none.
 _Avoid_: Thumbnail, hero, cover, og image, social image
 
+**Excerpt**:
+The opening of an Entry's body as plain text, shown beneath its title in the Entry List so a list can be scanned without opening anything.
+_Avoid_: Preview, summary, teaser, snippet, description
+
+**Snippet**:
+The fragment of an Entry that a search matched, positioned at the match rather than at the Entry's start.
+_Avoid_: Excerpt, highlight, result text
+
+**Feed View**:
+An Entry's own body text, exactly as the Feed supplied it, without reaching for the Article at all.
+_Avoid_: Feed content, raw view, summary, from the feed
+
 **Reader View**:
 An Article reduced to its main text and images and re-rendered in this app's own markup.
 _Avoid_: Reader mode, readability, extracted view
@@ -40,10 +52,24 @@ _Avoid_: Reader mode, readability, extracted view
 An Article shown as the publisher laid it out, inside the app rather than in a separate browser.
 _Avoid_: Web view, browser mode, in-app browser
 
+### Layout
+
+**Feed List**:
+The leftmost column, holding every Group and Feed, from which the reader chooses what to read.
+_Avoid_: Sidebar, nav, feed tree, collections
+
+**Entry List**:
+The middle column, holding the Entries of whatever the Feed List is scoped to.
+_Avoid_: Sidebar, inbox, article list, list pane
+
+**Reading Pane**:
+The rightmost and largest column, holding one Entry in whichever view the reader chose.
+_Avoid_: Content pane, detail pane, preview, drawer
+
 ### State
 
 **Read**:
-Set once the reader has seen an Entry's contents. Always settable and unsettable by hand, and by default set when an Entry is opened.
+Set once the reader has seen an Entry's contents. Always settable and unsettable by hand, and by default set when an Entry becomes the Entry in the Reading Pane.
 _Avoid_: Seen, viewed, opened
 
 **Starred**:

@@ -52,14 +52,14 @@ test('the reader opens an Entry, reads it, and triages by keyboard', async ({
   // Opening an Entry shows the Feed-supplied content, sanitised, and marks it
   // Read by default.
   await entries.nth(0).click();
-  const drawer = page.getByTestId('entry-drawer');
-  await expect(drawer).toBeVisible();
+  const pane = page.getByTestId('reading-pane');
+  await expect(pane).toBeVisible();
   await expect(page.getByTestId('entry-content')).toContainText(
     'Round, and it rolls.',
   );
   await expect(entries.nth(0)).not.toContainText('unread');
 
-  // Next/previous from the keyboard, without leaving the drawer.
+  // Next/previous from the keyboard, without leaving the Reading Pane.
   await page.keyboard.press('j');
   await expect(page.getByTestId('entry-content')).toContainText(
     'Keeping a fire alive overnight.',
@@ -79,13 +79,17 @@ test('the reader opens an Entry, reads it, and triages by keyboard', async ({
   await page.keyboard.press('k');
   await expect(entries.nth(0)).toContainText('unread');
 
-  // Close from the keyboard.
+  // Escape has nothing to close here: on a wide viewport the Reading Pane is a
+  // column of the layout rather than something laid over the list.
   await page.keyboard.press('Escape');
-  await expect(drawer).toBeHidden();
+  await expect(pane).toBeVisible();
 
   // The Unread filter scopes the list to what mark-on-open left unread.
   await page.getByTestId('filter-unread').click();
   await expect(page.getByTestId('entry')).toHaveCount(1);
+  // Changing the filter reloads the list, which empties the Reading Pane.
+  await expect(pane).toBeHidden();
+  await expect(page.getByTestId('reading-pane-empty')).toBeVisible();
   await expect(page.getByTestId('entry').first()).toContainText(
     'Wheels: a review',
   );
@@ -102,11 +106,11 @@ test('the reader opens an Entry, reads it, and triages by keyboard', async ({
   await page.keyboard.press('Escape');
   await expect(help).toBeHidden();
 
-  // Enter on a focused button is native activation, not the global Enter
-  // binding: it must not silently open whatever the drawer last showed.
+  // Enter is no longer a binding of its own — selecting an Entry is opening it
+  // — so Enter on a focused control is plain native activation.
   await page.getByTestId('filter-unread').focus();
   await page.keyboard.press('Enter');
-  await expect(drawer).toBeHidden();
+  await expect(pane).toBeHidden();
   await expect(page.getByTestId('entry')).toHaveCount(1);
   await page.getByTestId('filter-all').click();
 
@@ -118,10 +122,13 @@ test('the reader opens an Entry, reads it, and triages by keyboard', async ({
   ).toBeVisible();
   await expect(page.getByTestId('entry').first()).toContainText('Starred');
 
-  // A rejected Archive removes the Entry immediately, then restores it without
-  // hijacking a different Entry the reader opened while the request was pending.
+  // A rejected Archive removes the Entry immediately and moves the reader on to
+  // the next one, then restores it without hijacking the Entry the Reading Pane
+  // has moved to.
   await page.route('**/api/entries/*/state', async (route) => {
-    await new Promise((resolve) => setTimeout(resolve, 250));
+    const delayed = Promise.withResolvers<void>();
+    setTimeout(delayed.resolve, 250);
+    await delayed.promise;
     await route.fulfill({
       status: 500,
       contentType: 'application/json',
@@ -129,9 +136,7 @@ test('the reader opens an Entry, reads it, and triages by keyboard', async ({
     });
   });
   await page.getByRole('button', { name: 'Archive', exact: true }).click();
-  await expect(drawer).toBeHidden();
   await expect(page.getByTestId('entry')).toHaveCount(1);
-  await page.getByTestId('entry').click();
   await expect(page.getByTestId('entry-content')).toContainText(
     'Keeping a fire alive overnight.',
   );
@@ -141,7 +146,6 @@ test('the reader opens an Entry, reads it, and triages by keyboard', async ({
     'Keeping a fire alive overnight.',
   );
   await page.unroute('**/api/entries/*/state');
-  await page.keyboard.press('Escape');
 
   // Archive disappears from Starred immediately, then appears only in Archive
   // with Read implied by the server-owned invariant.
@@ -156,7 +160,8 @@ test('the reader opens an Entry, reads it, and triages by keyboard', async ({
       response.request().method() === 'PUT',
   );
   await page.getByRole('button', { name: 'Archive', exact: true }).click();
-  await expect(drawer).toBeHidden();
+  // Archiving the last Entry of a view leaves nothing to move on to.
+  await expect(pane).toBeHidden();
   await expect(page.getByTestId('entry')).toHaveCount(0);
   await archived;
   await page.getByTestId('filter-archive').click();
@@ -168,13 +173,11 @@ test('the reader opens an Entry, reads it, and triages by keyboard', async ({
   await expect(
     page.getByRole('button', { name: 'Unstar', exact: true }),
   ).toBeVisible();
-  await page.keyboard.press('Escape');
 
   // Mark-all-read uses the current Unread filter and clears it optimistically.
   await page.getByTestId('filter-all').click();
   await page.getByTestId('entry').click();
   await page.getByRole('button', { name: 'Mark unread', exact: true }).click();
-  await page.keyboard.press('Escape');
   await page.getByTestId('filter-unread').click();
   await expect(page.getByTestId('entry')).toHaveCount(1);
   await page

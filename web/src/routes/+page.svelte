@@ -9,7 +9,7 @@
   import KeyRoundIcon from "@lucide/svelte/icons/key-round";
   import SearchIcon from "@lucide/svelte/icons/search";
   import { onMount } from "svelte";
-  import { goto, invalidateAll } from "$app/navigation";
+  import { goto, invalidateAll, replaceState } from "$app/navigation";
   import {
     ApiError,
     addFeed,
@@ -38,7 +38,10 @@
     SearchEntry,
     Settings,
   } from "$lib/api";
-  import EntryDrawer from "$lib/EntryDrawer.svelte";
+  import ReadingPane from "$lib/ReadingPane.svelte";
+  import { IsMobile } from "$lib/hooks/is-mobile.svelte.js";
+  import CheckCheckIcon from "@lucide/svelte/icons/check-check";
+  import RefreshCwIcon from "@lucide/svelte/icons/refresh-cw";
   import EntryRow from "$lib/EntryRow.svelte";
   import FeedIcon from "$lib/FeedIcon.svelte";
   import { formatPublished } from "$lib/format";
@@ -108,11 +111,17 @@
     return feed ? feedIconUrl(feed) : undefined;
   }
 
-  // The current Entry is the keyboard's notion of position in the list,
-  // independent of whether the reading drawer is open. Opening the drawer
-  // follows it; j/k move it whether the drawer is open or not.
-  let currentIndex = $state<number | undefined>(undefined);
-  let openIndex = $state<number | undefined>(undefined);
+  // Selecting an Entry and opening it are one act: the Reading Pane always
+  // shows the selected Entry, so a single index is the whole notion of
+  // position. See docs/adr/0010-selection-is-opening.md.
+  let selectedIndex = $state<number | undefined>(undefined);
+  // The Reading Pane is a column of the layout once there is room for three,
+  // and an overlay over the Entry List before that. The list behind an
+  // overlay must not be reachable by tab, which is what narrow decides.
+  const narrow = new IsMobile(1024);
+  // selectionRestored stops the empty selection the page starts with from
+  // clearing the Entry named in the address bar before it has been read.
+  let selectionRestored = $state(false);
   let helpOpen = $state(false);
   let deviceTokensOpen = $state(false);
   let searchOpen = $state(false);
@@ -154,9 +163,10 @@
   const scopeTitle = $derived(
     scopedFeed?.title ?? scopedGroup?.name ?? "All Feeds",
   );
-  const openEntry = $derived(
-    openIndex !== undefined ? entries[openIndex] : undefined,
+  const selectedEntry = $derived(
+    selectedIndex !== undefined ? entries[selectedIndex] : undefined,
   );
+  const overlayUp = $derived(narrow.current && selectedEntry !== undefined);
   const feedsByGroup = $derived.by(() => {
     const map = new Map<number, Feed[]>();
     for (const feed of feeds) {
@@ -168,10 +178,16 @@
   });
 
   onMount(async () => {
+    // An Entry named in the address bar is restored in place: the list loads
+    // around it rather than from the top, so a reload leaves the reader where
+    // they were with the rest of the list still under them.
+    const deepLink = Number(
+      new URL(window.location.href).searchParams.get("entry") ?? "",
+    );
     try {
       const [subscribed, page, settings, subscribedGroups] = await Promise.all([
         listFeeds(),
-        listEntries(),
+        listEntries(deepLink > 0 ? { around: deepLink } : {}),
         getSettings(),
         listGroups(),
       ]);
@@ -181,9 +197,30 @@
       markOnOpen = settings.mark_on_open;
       entryView = settings.entry_view;
       groups = subscribedGroups;
+      if (deepLink > 0) {
+        const index = entries.findIndex((entry) => entry.id === deepLink);
+        if (index >= 0) {
+          selectedIndex = index;
+          maybeMarkOnSelect(index);
+        }
+      }
     } finally {
       loading = false;
+      selectionRestored = true;
     }
+  });
+
+  // The selected Entry is the one piece of reading position worth surviving a
+  // reload, and it replaces rather than pushes: j down a list of forty would
+  // otherwise leave forty steps for the back button to walk back out through.
+  $effect(() => {
+    if (!selectionRestored) return;
+    const wanted = selectedEntry === undefined ? null : String(selectedEntry.id);
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("entry") === wanted) return;
+    if (wanted === null) url.searchParams.delete("entry");
+    else url.searchParams.set("entry", wanted);
+    replaceState(url, {});
   });
 
   /** selectionQuery is the single client mapping for both list reads and
@@ -212,8 +249,7 @@
     const page = await listEntries(selectionQuery());
     entries = page.entries;
     cursor = page.next_cursor;
-    currentIndex = undefined;
-    openIndex = undefined;
+    selectedIndex = undefined;
     manuallyUnread = new Set();
   }
 
@@ -299,9 +335,8 @@
       cursor = page.next_cursor;
       manuallyUnread = new Set();
       const index = entries.findIndex((candidate) => candidate.id === entry.id);
-      currentIndex = index < 0 ? undefined : index;
-      openIndex = index < 0 ? undefined : index;
-      if (index >= 0) maybeMarkOnOpen(index);
+      selectedIndex = index < 0 ? undefined : index;
+      if (index >= 0) maybeMarkOnSelect(index);
     } catch (cause) {
       reportError(cause);
     } finally {
@@ -329,11 +364,14 @@
   }
 
   async function loadMore() {
+    if (!cursor) return;
     busy = true;
     try {
       const page = await listEntries({ ...selectionQuery(), cursor });
       entries = [...entries, ...page.entries];
       cursor = page.next_cursor;
+    } catch (cause) {
+      reportError(cause);
     } finally {
       busy = false;
     }
@@ -353,12 +391,16 @@
     index: number,
     state: EntryState,
     manualRead = false,
+    // advance separates the reader's own triage from the Read the Reading Pane
+    // sets by itself. Triage takes an Entry out of a view it no longer belongs
+    // to and moves on; the automatic Read must not, or selecting an Entry in
+    // the Unread filter would empty the list one arrival at a time. The Entry
+    // being read stays until the reader leaves it, in leave() below.
+    advance = true,
   ) {
     const previous = entries[index];
     if (busy || pendingEntryIDs.has(previous.id)) return;
 
-    const previousCurrent = currentIndex;
-    const previousOpen = openIndex;
     const previousManualUnread = manuallyUnread.has(previous.id);
     const mutationFilter = filter;
     const mutationScope = scope;
@@ -369,30 +411,33 @@
       read: state.archived ? true : state.read,
     };
 
-    if (!filterDefinitions[filter].includes(optimistic)) {
+    let arrived: number | undefined;
+    if (advance && !filterDefinitions[filter].includes(optimistic)) {
       entries = entries.filter((entry) => entry.id !== previous.id);
-      if (currentIndex !== undefined) {
-        currentIndex =
-          entries.length === 0
-            ? undefined
-            : Math.min(currentIndex > index ? currentIndex - 1 : currentIndex, entries.length - 1);
-      }
-      if (openIndex === index) {
-        openIndex = undefined;
-      } else if (openIndex !== undefined && openIndex > index) {
-        openIndex--;
+      if (selectedIndex !== undefined) {
+        if (entries.length === 0) {
+          selectedIndex = undefined;
+        } else if (selectedIndex === index) {
+          // The next Entry has slid into the triaged one's place. On the last
+          // row there is no next, so the new last row takes the selection
+          // rather than the Reading Pane emptying itself.
+          selectedIndex = Math.min(index, entries.length - 1);
+          arrived = selectedIndex;
+        } else if (selectedIndex > index) {
+          selectedIndex--;
+        }
       }
     } else {
       entries[index] = optimistic;
     }
-    const optimisticCurrentID =
-      currentIndex === undefined ? undefined : entries[currentIndex]?.id;
-    const optimisticOpenID = openIndex === undefined ? undefined : entries[openIndex]?.id;
     if (manualRead && !state.read) {
       manuallyUnread = new Set([...manuallyUnread, previous.id]);
     } else if (manualRead) {
       manuallyUnread = new Set([...manuallyUnread].filter((id) => id !== previous.id));
     }
+    // Whatever the triage moved the reader on to is in the Reading Pane now,
+    // and is Read on the same terms as any other arrival there.
+    if (arrived !== undefined) maybeMarkOnSelect(arrived);
 
     let stored: Entry;
     try {
@@ -402,9 +447,8 @@
       if (filter !== mutationFilter || scope !== mutationScope) {
         await reload();
       } else {
-        const activeCurrentID =
-          currentIndex === undefined ? undefined : entries[currentIndex]?.id;
-        const activeOpenID = openIndex === undefined ? undefined : entries[openIndex]?.id;
+        const activeSelectedID =
+          selectedIndex === undefined ? undefined : entries[selectedIndex]?.id;
         const existingIndex = entries.findIndex((entry) => entry.id === previous.id);
         if (filterDefinitions[filter].includes(previous)) {
           if (existingIndex >= 0) {
@@ -417,17 +461,14 @@
         } else if (existingIndex >= 0) {
           entries = entries.filter((entry) => entry.id !== previous.id);
         }
-        const selectionMoved =
-          activeCurrentID !== optimisticCurrentID || activeOpenID !== optimisticOpenID;
-        if (selectionMoved) {
-          const current = entries.findIndex((entry) => entry.id === activeCurrentID);
-          const open = entries.findIndex((entry) => entry.id === activeOpenID);
-          currentIndex = current < 0 ? undefined : current;
-          openIndex = open < 0 ? undefined : open;
-        } else {
-          currentIndex = previousCurrent;
-          openIndex = previousOpen;
-        }
+        // Restored by identity, never by index: the list has shifted under the
+        // reader, and whatever the Reading Pane is showing now has to keep
+        // showing rather than be replaced by the Entry that came back.
+        const selected =
+          activeSelectedID === undefined
+            ? -1
+            : entries.findIndex((entry) => entry.id === activeSelectedID);
+        selectedIndex = selected < 0 ? undefined : selected;
       }
       if (previousManualUnread) {
         manuallyUnread = new Set([...manuallyUnread, previous.id]);
@@ -443,10 +484,12 @@
       await reload();
     } else {
       const storedIndex = entries.findIndex((entry) => entry.id === stored.id);
-      if (filterDefinitions[filter].includes(stored)) {
-        if (storedIndex >= 0) entries[storedIndex] = stored;
-      } else if (storedIndex >= 0) {
-        entries = entries.filter((entry) => entry.id !== stored.id);
+      if (storedIndex >= 0) {
+        if (!advance || filterDefinitions[filter].includes(stored)) {
+          entries[storedIndex] = stored;
+        } else {
+          entries = entries.filter((entry) => entry.id !== stored.id);
+        }
       }
     }
     try {
@@ -462,52 +505,72 @@
       index,
       { read, starred: entry.starred, archived: entry.archived },
       manual,
+      manual,
     );
   }
 
-  function moveCurrent(delta: number) {
-    if (busy || entries.length === 0) {
-      return;
-    }
-    const base = currentIndex ?? (delta > 0 ? -1 : entries.length);
-    currentIndex = Math.min(Math.max(base + delta, 0), entries.length - 1);
-    if (openIndex !== undefined) {
-      openIndex = currentIndex;
-      maybeMarkOnOpen(currentIndex);
-    }
+  /** leave drops the Entry the reader is moving away from when the Read it
+   * earned in the Reading Pane has left it outside the current filter. An
+   * Entry stays put while it is being read and goes when the reader goes,
+   * which keeps the Unread filter honest without the list shifting under the
+   * Entry still on screen. Reports whether it removed anything. */
+  function leave(leaving: number | undefined, staying: number | undefined): boolean {
+    if (leaving === undefined || leaving === staying) return false;
+    const entry = entries[leaving];
+    if (!entry || pendingEntryIDs.has(entry.id)) return false;
+    if (filterDefinitions[filter].includes(entry)) return false;
+    entries = entries.filter((candidate) => candidate.id !== entry.id);
+    return true;
   }
 
-  function openCurrent() {
-    if (busy || entries.length === 0) {
-      return;
+  async function moveSelection(delta: number) {
+    if (busy || entries.length === 0) return;
+    const base = selectedIndex ?? (delta > 0 ? -1 : entries.length);
+    let target = base + delta;
+    // The end of the loaded list is not the end of the reading list: j reaches
+    // for the next page rather than stopping dead on the last row.
+    if (target >= entries.length && cursor) {
+      await loadMore();
     }
-    if (currentIndex === undefined) {
-      currentIndex = 0;
+    if (entries.length === 0) return;
+    const leaving = selectedIndex;
+    target = Math.min(Math.max(target, 0), entries.length - 1);
+    if (leave(leaving, target) && leaving !== undefined && target > leaving) {
+      target -= 1;
     }
-    openIndex = currentIndex;
-    maybeMarkOnOpen(openIndex);
+    selectedIndex = target;
+    maybeMarkOnSelect(target);
   }
 
-  function openEntryAt(index: number) {
+  function selectEntryAt(index: number) {
     if (busy) return;
-    currentIndex = index;
-    openIndex = index;
-    maybeMarkOnOpen(index);
+    const leaving = selectedIndex;
+    let target = index;
+    if (leave(leaving, target) && leaving !== undefined && target > leaving) {
+      target -= 1;
+    }
+    selectedIndex = target;
+    maybeMarkOnSelect(target);
   }
 
-  function closeDrawer() {
-    if (!busy) openIndex = undefined;
+  /** clearSelection backs out of the overlay the Reading Pane is before there
+   * is room for a third column. With the room, there is nothing to back out
+   * of and the pane keeps what it is showing. */
+  function clearSelection() {
+    if (busy || !narrow.current) return;
+    leave(selectedIndex, undefined);
+    selectedIndex = undefined;
   }
 
-  function maybeMarkOnOpen(index: number) {
+  function maybeMarkOnSelect(index: number) {
     const entry = entries[index];
-    if (markOnOpen && !entry.read && !manuallyUnread.has(entry.id)) {
+    if (entry && markOnOpen && !entry.read && !manuallyUnread.has(entry.id)) {
       void applyRead(index, true);
     }
   }
 
   function toggleReadCurrent() {
-    const index = openIndex ?? currentIndex;
+    const index = selectedIndex;
     if (index === undefined || entries[index].archived) {
       return;
     }
@@ -515,7 +578,7 @@
   }
 
   function toggleStarCurrent() {
-    const index = openIndex ?? currentIndex;
+    const index = selectedIndex;
     if (index === undefined) {
       return;
     }
@@ -528,7 +591,7 @@
   }
 
   function archiveCurrent() {
-    const index = openIndex ?? currentIndex;
+    const index = selectedIndex;
     if (index === undefined || entries[index].archived) {
       return;
     }
@@ -545,8 +608,7 @@
     busy = true;
     const previousEntries = [...entries];
     const previousCursor = cursor;
-    const previousCurrent = currentIndex;
-    const previousOpen = openIndex;
+    const previousSelected = selectedIndex;
     const previousManualUnread = new Set(manuallyUnread);
 
     entries = entries
@@ -554,8 +616,7 @@
       .filter(filterDefinitions[filter].includes);
     if (entries.length !== previousEntries.length) {
       cursor = "";
-      currentIndex = undefined;
-      openIndex = undefined;
+      selectedIndex = undefined;
     }
     manuallyUnread = new Set();
     try {
@@ -563,8 +624,7 @@
     } catch (cause) {
       entries = previousEntries;
       cursor = previousCursor;
-      currentIndex = previousCurrent;
-      openIndex = previousOpen;
+      selectedIndex = previousSelected;
       manuallyUnread = previousManualUnread;
       reportError(cause);
       busy = false;
@@ -742,8 +802,8 @@
       helpOpen = false;
     } else if (deviceTokensOpen) {
       deviceTokensOpen = false;
-    } else if (openIndex !== undefined) {
-      closeDrawer();
+    } else {
+      clearSelection();
     }
   }
 
@@ -751,9 +811,8 @@
   // so a new shortcut is a row in keys.ts plus one entry here rather than a
   // second switch that can drift from the first.
   const actions: Record<Action, () => void> = {
-    next: () => moveCurrent(1),
-    prev: () => moveCurrent(-1),
-    open: openCurrent,
+    next: () => void moveSelection(1),
+    prev: () => void moveSelection(-1),
     close: closeCurrent,
     toggleRead: toggleReadCurrent,
     help: () => (helpOpen = true),
@@ -771,21 +830,7 @@
     );
   }
 
-  /** isActivatable reports a focused control whose own Enter activation
-   * (a native click) must win over the global Enter binding, so tabbing to
-   * "Sign out" or the drawer's "Close" button and pressing Enter does not
-   * open the current Entry instead. */
-  function isActivatable(target: EventTarget | null): boolean {
-    return (
-      target instanceof HTMLElement &&
-      (target.tagName === "BUTTON" || target.tagName === "A")
-    );
-  }
-
   function onKeydown(event: KeyboardEvent) {
-    if (event.key === "Enter" && isActivatable(event.target)) {
-      return;
-    }
     if (isTypingTarget(event.target)) {
       return;
     }
@@ -1067,97 +1112,136 @@
           checked={markOnOpen}
           onchange={toggleMarkOnOpen}
         />
-        Mark an Entry read when opened
+        Mark an Entry read when it opens in the Reading Pane
       </label>
     </Sidebar.Footer>
   </Sidebar.Root>
 
-  <Sidebar.Inset>
-    <div class="mx-auto flex w-full max-w-3xl flex-col gap-4 p-6">
-      <div class="flex items-center gap-2">
-        <Sidebar.Trigger class="-ml-1" />
-        <div class="flex flex-1 flex-wrap items-center justify-between gap-3">
-          <h2 data-testid="scope" class="truncate text-lg font-medium">
+  <Sidebar.Inset class="relative h-svh flex-row overflow-hidden">
+    <div
+      data-testid="entry-list"
+      class="flex h-full w-full flex-col overflow-hidden lg:w-88 lg:shrink-0"
+      inert={overlayUp}
+    >
+      <div class="flex shrink-0 flex-col gap-2 border-b border-border p-3">
+        <div class="flex items-center gap-2">
+          <Sidebar.Trigger class="-ml-1" />
+          <h2
+            data-testid="scope"
+            class="min-w-0 flex-1 truncate text-base font-medium"
+          >
             {scopeTitle}
           </h2>
-          <div class="flex items-center gap-2">
-            {#if filterDefinitions[filter].canMarkAllRead}
-              <Button variant="outline" size="sm" onclick={markAllRead} disabled={busy || entries.length === 0}>
-                Mark all read
-              </Button>
-            {/if}
-            <Button variant="outline" size="sm" onclick={refresh} disabled={busy}>Refresh all</Button>
-          </div>
-        </div>
-      </div>
-
-      <Tabs.Root value={filter} onValueChange={(value) => setFilter(value as Filter)}>
-        <Tabs.List aria-label="Filter">
-          <Tabs.Trigger value="all" data-testid="filter-all">All</Tabs.Trigger>
-          <Tabs.Trigger value="unread" data-testid="filter-unread">Unread</Tabs.Trigger>
-          <Tabs.Trigger value="starred" data-testid="filter-starred">Starred</Tabs.Trigger>
-          <Tabs.Trigger value="archive" data-testid="filter-archive">Archive</Tabs.Trigger>
-        </Tabs.List>
-      </Tabs.Root>
-
-      {#if notice}
-        <p data-testid="notice" class="text-sm text-muted-foreground">
-          {notice}
-        </p>
-      {/if}
-
-      {#if loading}
-        <p class="text-muted-foreground">Loading your Entries…</p>
-      {:else if entries.length === 0}
-        <p class="text-muted-foreground">
-          {feeds.length === 0
-            ? "No Feeds yet. Add one to start reading."
-            : filterDefinitions[filter].empty}
-        </p>
-      {:else}
-        <ul class="flex flex-col divide-y divide-border">
-          {#each entries as entry, index (entry.id)}
-            <EntryRow
-              {entry}
-              isCurrent={index === currentIndex}
-              iconUrl={iconForEntry(entry)}
-              onClick={() => openEntryAt(index)}
-            />
-          {/each}
-        </ul>
-
-        {#if cursor}
+          {#if filterDefinitions[filter].canMarkAllRead}
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Mark all read"
+              title="Mark all read"
+              onclick={markAllRead}
+              disabled={busy || entries.length === 0}
+            >
+              <CheckCheckIcon />
+            </Button>
+          {/if}
           <Button
-            variant="outline"
-            size="sm"
-            class="self-start"
-            onclick={loadMore}
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Refresh all"
+            title="Refresh all"
+            onclick={refresh}
             disabled={busy}
           >
-            Load more
+            <RefreshCwIcon />
           </Button>
+        </div>
+
+        <Tabs.Root
+          value={filter}
+          onValueChange={(value) => setFilter(value as Filter)}
+        >
+          <Tabs.List aria-label="Filter" class="w-full">
+            <Tabs.Trigger value="all" data-testid="filter-all">All</Tabs.Trigger>
+            <Tabs.Trigger value="unread" data-testid="filter-unread">
+              Unread
+            </Tabs.Trigger>
+            <Tabs.Trigger value="starred" data-testid="filter-starred">
+              Starred
+            </Tabs.Trigger>
+            <Tabs.Trigger value="archive" data-testid="filter-archive">
+              Archive
+            </Tabs.Trigger>
+          </Tabs.List>
+        </Tabs.Root>
+      </div>
+
+      <div class="flex-1 overflow-y-auto">
+        {#if notice}
+          <p
+            data-testid="notice"
+            class="px-3 py-2 text-sm text-muted-foreground"
+          >
+            {notice}
+          </p>
         {/if}
-      {/if}
+
+        {#if loading}
+          <p class="p-3 text-muted-foreground">Loading your Entries…</p>
+        {:else if entries.length === 0}
+          <p class="p-3 text-muted-foreground">
+            {feeds.length === 0
+              ? "No Feeds yet. Add one to start reading."
+              : filterDefinitions[filter].empty}
+          </p>
+        {:else}
+          <ul class="flex flex-col divide-y divide-border">
+            {#each entries as entry, index (entry.id)}
+              <EntryRow
+                {entry}
+                isCurrent={index === selectedIndex}
+                iconUrl={iconForEntry(entry)}
+                onClick={() => selectEntryAt(index)}
+              />
+            {/each}
+          </ul>
+
+          {#if cursor}
+            <div class="p-3">
+              <Button
+                variant="outline"
+                size="sm"
+                onclick={loadMore}
+                disabled={busy}
+              >
+                Load more
+              </Button>
+            </div>
+          {/if}
+        {/if}
+      </div>
     </div>
+
+    {#if selectedEntry}
+      <ReadingPane
+        entry={selectedEntry}
+        busy={busy || pendingEntryIDs.has(selectedEntry.id)}
+        view={entryView}
+        onClose={clearSelection}
+        onView={chooseEntryView}
+        onToggleRead={toggleReadCurrent}
+        onToggleStar={toggleStarCurrent}
+        onArchive={archiveCurrent}
+      />
+    {:else}
+      <div
+        data-testid="reading-pane-empty"
+        class="hidden flex-1 items-center justify-center border-l border-border text-muted-foreground lg:flex"
+      >
+        Pick an Entry to read it here.
+      </div>
+    {/if}
   </Sidebar.Inset>
 </Sidebar.Provider>
-
-{#if openEntry}
-  <EntryDrawer
-    entry={openEntry}
-    hasPrev={(currentIndex ?? 0) > 0}
-    hasNext={(currentIndex ?? 0) < entries.length - 1}
-    onClose={closeDrawer}
-    onPrev={() => moveCurrent(-1)}
-    onNext={() => moveCurrent(1)}
-    view={entryView}
-    onView={chooseEntryView}
-    busy={busy || pendingEntryIDs.has(openEntry.id)}
-    onToggleRead={toggleReadCurrent}
-    onToggleStar={toggleStarCurrent}
-    onArchive={archiveCurrent}
-  />
-{/if}
 
 {#if helpOpen}
   <HelpDialog onClose={() => (helpOpen = false)} />

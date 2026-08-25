@@ -1,0 +1,5 @@
+# Selection is opening
+
+With a permanently populated Reading Pane, selecting an Entry and opening it are one gesture, so Read is set the moment an Entry reaches the Reading Pane, and the `mark_on_open` setting (internal/api/settings.go) now gates exactly that. A dwell timer was considered, so that skimming with j would not consume the list; it was rejected because an invisible timer is unexplainable to the reader and untestable in a way anyone believes. The cost is that fast keyboard skimming marks Entries Read in passing; Mark-unread is the undo, and the manuallyUnread guard keeps a hand-unread Entry from being re-marked.
+
+One consequence is worth naming, because it looks like a bug: in the Unread filter the Entry being read stays in the list even though it is now Read, and leaves only when the reader moves off it. Letting the automatic Read remove it would take the arrival that replaced it too, and the one after that, until the list had emptied itself. Only the reader's own triage — Archive, Star, a manual Mark read — takes an Entry out of a view it no longer belongs to.

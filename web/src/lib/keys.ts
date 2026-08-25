@@ -8,7 +8,6 @@
 export type Action =
   | 'next'
   | 'prev'
-  | 'open'
   | 'close'
   | 'toggleRead'
   | 'help'
@@ -25,9 +24,7 @@ export interface Binding {
 export const bindings: Binding[] = [
   { key: 'j', description: 'Next Entry', action: 'next' },
   { key: 'k', description: 'Previous Entry', action: 'prev' },
-  { key: 'Enter', description: 'Open the current Entry', action: 'open' },
-  { key: 'o', description: 'Open the current Entry', action: 'open' },
-  { key: 'Escape', description: 'Close the open Entry', action: 'close' },
+  { key: 'Escape', description: 'Back to the Entry List', action: 'close' },
   { key: 'm', description: 'Toggle Read / unread', action: 'toggleRead' },
   { key: '/', description: 'Search', action: 'search' },
   { key: '?', description: 'Show this help', action: 'help' },

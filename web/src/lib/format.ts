@@ -16,3 +16,62 @@ export function formatPublished(publishedAt: string): string {
 export function feedMonogram(feedTitle: string): string {
   return feedTitle.trim().charAt(0).toUpperCase() || '?';
 }
+
+/** fromCodePoint decodes one numeric character reference, leaving anything
+ * outside Unicode's range as the literal text it already was: an Excerpt comes
+ * from a publisher, so a malformed reference must not throw where a row is
+ * being rendered. */
+function fromCodePoint(reference: string, code: number): string {
+  return Number.isInteger(code) && code >= 0 && code <= 0x10ffff
+    ? String.fromCodePoint(code)
+    : reference;
+}
+
+/** entryExcerpt reduces an Entry's content — publisher-supplied HTML — to a
+ * short plain-text Excerpt, so an Entry List row is scannable without
+ * opening the Entry. The content can never be trusted as text, so this is
+ * pure string work with no DOM: format.ts is imported during server-side
+ * rendering, where there is no document to parse HTML with. This is an
+ * Excerpt of the Entry's own body, distinct from SearchEntry.snippet, which
+ * is a search-match fragment the server produces. */
+export function entryExcerpt(content: string, limit = 180): string {
+  const withoutScriptsAndStyles = content.replace(
+    /<(script|style)\b[^>]*>[\s\S]*?<\/\1\s*>/gi,
+    ' ',
+  );
+  const withoutTags = withoutScriptsAndStyles.replace(/<[^>]*>/g, ' ');
+  // Undo the handful of named and numeric character references that survive
+  // tag-stripping, so an Excerpt reads as plain text rather than leaking
+  // markup escapes like "&amp;" into the Entry List. Named entities are
+  // decoded before "&amp;" itself, so a double-encoded "&amp;lt;" resolves
+  // to the literal text "&lt;" rather than "<".
+  const decoded = withoutTags
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#0*39;/g, "'")
+    .replace(/&#x0*27;/gi, "'")
+    .replace(/&#(\d+);/g, (match, dec: string) =>
+      fromCodePoint(match, Number(dec)),
+    )
+    .replace(/&#x([0-9a-f]+);/gi, (match, hex: string) =>
+      fromCodePoint(match, parseInt(hex, 16)),
+    )
+    .replace(/&amp;/gi, '&');
+  const collapsed = decoded.replace(/\s+/g, ' ').trim();
+  if (!collapsed) {
+    return '';
+  }
+  if (collapsed.length <= limit) {
+    return collapsed;
+  }
+  // Cut at the last word boundary at or before the limit, so a truncated
+  // Excerpt never ends mid-word. Falling back to a hard cut covers the
+  // pathological case of a single word longer than the whole limit.
+  const withinLimit = collapsed.slice(0, limit);
+  const lastSpace = withinLimit.lastIndexOf(' ');
+  const truncated =
+    lastSpace > 0 ? withinLimit.slice(0, lastSpace) : withinLimit;
+  return `${truncated}…`;
+}

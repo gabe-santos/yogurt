@@ -20,7 +20,7 @@ test('the reader switches views, keeps the choice, and is offered a tab when a p
   // Newest first: Wheels, which forbids framing, then Fire, which allows it.
   const entries = page.getByTestId('entry');
   await entries.nth(1).click();
-  await expect(page.getByTestId('entry-drawer')).toBeVisible();
+  await expect(page.getByTestId('reading-pane')).toBeVisible();
   await expect(page.getByTestId('entry-content')).toContainText(
     'Keeping a fire alive overnight.',
   );
@@ -78,7 +78,7 @@ test('the reader switches views, keeps the choice, and is offered a tab when a p
 
   // The choice is the reader's, not the Entry's: the next Entry opens in it.
   await page.keyboard.press('k');
-  await expect(page.getByTestId('entry-drawer')).toBeVisible();
+  await expect(page.getByTestId('reading-pane')).toBeVisible();
   await expect(page.getByTestId('original-view')).toHaveCount(0);
   await expect(page.getByTestId('original-view-forbidden')).toBeVisible();
   await expect(page.getByTestId('entry-content')).toContainText(
@@ -99,7 +99,6 @@ test('the reader switches views, keeps the choice, and is offered a tab when a p
   await expect(page.getByTestId('entry-content')).toContainText(
     'Keeping a fire alive overnight.',
   );
-  await page.keyboard.press('Escape');
 
   // A different port is still the same cookie host. Even if the API calls it
   // embeddable, Reader refuses the frame rather than exposing its session.
@@ -113,6 +112,10 @@ test('the reader switches views, keeps the choice, and is offered a tab when a p
       }),
     });
   });
+  // Moving off the Entry and back drops what was loaded for it, so the
+  // Original is fetched again — this time through the route above. The Reading
+  // Pane is furniture now: it never unmounts, so nothing else would.
+  await page.getByTestId('entry').nth(0).click();
   await page.getByTestId('entry').nth(1).click();
   await page.getByTestId('view-original').click();
   await expect(page.getByTestId('original-view')).toHaveCount(0);
@@ -122,5 +125,4 @@ test('the reader switches views, keeps the choice, and is offered a tab when a p
   );
   await page.unroute('**/api/entries/*/original');
   await page.getByTestId('view-feed').click();
-  await page.keyboard.press('Escape');
 });
