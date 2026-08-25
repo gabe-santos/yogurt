@@ -15,7 +15,6 @@
   import PlusIcon from "@lucide/svelte/icons/plus";
   import SearchIcon from "@lucide/svelte/icons/search";
   import Settings2Icon from "@lucide/svelte/icons/settings-2";
-  import TriangleAlertIcon from "@lucide/svelte/icons/triangle-alert";
   import XIcon from "@lucide/svelte/icons/x";
   import { onMount } from "svelte";
   import { goto, invalidateAll, replaceState } from "$app/navigation";
@@ -55,7 +54,8 @@
   import RefreshCwIcon from "@lucide/svelte/icons/refresh-cw";
   import ConfirmDialog from "$lib/ConfirmDialog.svelte";
   import EntryRow from "$lib/EntryRow.svelte";
-  import FeedIcon from "$lib/FeedIcon.svelte";
+  import FeedRow from "$lib/FeedRow.svelte";
+  import GroupRow from "$lib/GroupRow.svelte";
   import { formatPublished } from "$lib/format";
   import DeviceTokensDialog from "$lib/DeviceTokensDialog.svelte";
   import HelpDialog from "$lib/HelpDialog.svelte";
@@ -178,6 +178,17 @@
   let groupNameDraft = $state("");
   let editingFeed = $state<number | undefined>(undefined);
   let feedTitleDraft = $state("");
+  // Renaming is reached from a Feed's or Group's own context menu, so the
+  // field it opens takes focus and selects the current name: the menu closed
+  // over it, and nothing else would put a cursor there.
+  let groupNameInput = $state<HTMLInputElement | null>(null);
+  let feedTitleInput = $state<HTMLInputElement | null>(null);
+  $effect(() => {
+    groupNameInput?.select();
+  });
+  $effect(() => {
+    feedTitleInput?.select();
+  });
   // Managing the collection — renaming, moving, suspending, deleting — is rare
   // next to reading it, so the Feed List is navigation at rest and reveals its
   // controls only when the reader asks for them. Without this, every Feed cost
@@ -1046,6 +1057,7 @@
               <Sidebar.MenuItem>
                 {#if editingGroup === group.id}
                   <Input
+                    bind:ref={groupNameInput}
                     class="h-8 text-sm"
                     aria-label={`Rename the Group ${group.name}`}
                     bind:value={groupNameDraft}
@@ -1056,23 +1068,13 @@
                     }}
                   />
                 {:else}
-                  <!-- The unread count is absolutely positioned chrome, so the
-                       name has to be told to stop before it. -->
-                  <Sidebar.MenuButton
-                    data-testid="group"
-                    class={group.unread_count > 0 ? "pr-11" : undefined}
+                  <GroupRow
+                    {group}
                     isActive={scope?.type === "group" && scope.id === group.id}
-                    aria-current={scope?.type === "group" &&
-                      scope.id === group.id}
-                    onclick={() => scopeTo({ type: "group", id: group.id })}
-                  >
-                    <span class="truncate font-medium">{group.name}</span>
-                  </Sidebar.MenuButton>
-                  {#if group.unread_count > 0}
-                    <Sidebar.MenuBadge class="top-1.5 tabular-nums">
-                      {group.unread_count}
-                    </Sidebar.MenuBadge>
-                  {/if}
+                    onSelect={() => scopeTo({ type: "group", id: group.id })}
+                    onRename={() => startEditGroup(group)}
+                    onDelete={() => removeGroup(group)}
+                  />
                 {/if}
               </Sidebar.MenuItem>
 
@@ -1102,6 +1104,7 @@
                   <Sidebar.MenuSubItem>
                     {#if editingFeed === feed.id}
                       <Input
+                        bind:ref={feedTitleInput}
                         class="h-8 text-sm"
                         aria-label={`Rename the Feed ${feed.title}`}
                         bind:value={feedTitleDraft}
@@ -1112,38 +1115,17 @@
                         }}
                       />
                     {:else}
-                      <Sidebar.MenuSubButton
-                        data-testid="feed"
-                        class={feed.unread_count > 0 ? "pr-10" : undefined}
+                      <FeedRow
+                        {feed}
+                        {groups}
                         isActive={scope?.type === "feed" &&
                           scope.id === feed.id}
-                        aria-current={scope?.type === "feed" &&
-                          scope.id === feed.id}
-                        onclick={() => scopeTo({ type: "feed", id: feed.id })}
-                      >
-                        <FeedIcon
-                          feedTitle={feed.title}
-                          iconUrl={feedIconUrl(feed)}
-                        />
-                        {#if feed.last_error}
-                          <TriangleAlertIcon
-                            class="size-3 shrink-0 text-destructive"
-                            aria-label="This Feed is failing"
-                          />
-                        {/if}
-                        <span
-                          class="truncate {feed.suspended
-                            ? 'text-muted-foreground italic'
-                            : ''}"
-                        >
-                          {feed.title}
-                        </span>
-                      </Sidebar.MenuSubButton>
-                      {#if feed.unread_count > 0}
-                        <Sidebar.MenuBadge class="top-1 tabular-nums">
-                          {feed.unread_count}
-                        </Sidebar.MenuBadge>
-                      {/if}
+                        onSelect={() => scopeTo({ type: "feed", id: feed.id })}
+                        onRename={() => startEditFeed(feed)}
+                        onToggleSuspend={() => toggleSuspend(feed)}
+                        onMove={(groupID) => moveFeed(feed, groupID)}
+                        onDelete={() => removeFeed(feed)}
+                      />
 
                       {#if managing}
                         <div
