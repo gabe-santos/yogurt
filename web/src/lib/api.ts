@@ -407,3 +407,43 @@ export async function setSettings(settings: Settings): Promise<Settings> {
   const body = (await response.json()) as { settings: Settings };
   return body.settings;
 }
+
+/** DeviceToken is a named, hashed-at-rest credential for a non-browser
+ * client. last_used_at is null until the token first authenticates a
+ * request. */
+export interface DeviceToken {
+  id: number;
+  name: string;
+  created_at: string;
+  last_used_at: string | null;
+}
+
+/** listDeviceTokens is the reader's whole set of device tokens. */
+export async function listDeviceTokens(): Promise<DeviceToken[]> {
+  const response = await send(
+    'GET',
+    '/device-tokens',
+    'Could not load your device tokens',
+  );
+  const body = (await response.json()) as { device_tokens: DeviceToken[] | null };
+  return body.device_tokens ?? [];
+}
+
+/** createDeviceToken issues a new device token. Its raw value is returned
+ * only once, in this response, and cannot be recovered again afterwards. */
+export async function createDeviceToken(
+  name: string,
+): Promise<{ device_token: DeviceToken; token: string }> {
+  const response = await send(
+    'POST',
+    '/device-tokens',
+    'Could not create that device token',
+    { name },
+  );
+  return (await response.json()) as { device_token: DeviceToken; token: string };
+}
+
+/** revokeDeviceToken ends a device token immediately. */
+export async function revokeDeviceToken(id: number): Promise<void> {
+  await send('DELETE', `/device-tokens/${id}`, 'Could not revoke that device token');
+}

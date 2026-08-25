@@ -6,6 +6,7 @@
   import * as Sidebar from "$lib/components/ui/sidebar";
   import * as Tabs from "$lib/components/ui/tabs";
   import CircleHelpIcon from "@lucide/svelte/icons/circle-help";
+  import KeyRoundIcon from "@lucide/svelte/icons/key-round";
   import SearchIcon from "@lucide/svelte/icons/search";
   import { onMount } from "svelte";
   import { goto, invalidateAll } from "$app/navigation";
@@ -38,6 +39,7 @@
   } from "$lib/api";
   import EntryDrawer from "$lib/EntryDrawer.svelte";
   import { formatPublished } from "$lib/format";
+  import DeviceTokensDialog from "$lib/DeviceTokensDialog.svelte";
   import HelpDialog from "$lib/HelpDialog.svelte";
   import SearchDialog from "$lib/SearchDialog.svelte";
   import { bindings, matches } from "$lib/keys";
@@ -96,6 +98,7 @@
   let currentIndex = $state<number | undefined>(undefined);
   let openIndex = $state<number | undefined>(undefined);
   let helpOpen = $state(false);
+  let deviceTokensOpen = $state(false);
   let searchOpen = $state(false);
   let markOnOpen = $state(true);
   // The view an Entry opens in belongs to the reader, not to an Entry: it is
@@ -721,6 +724,8 @@
       searchOpen = false;
     } else if (helpOpen) {
       helpOpen = false;
+    } else if (deviceTokensOpen) {
+      deviceTokensOpen = false;
     } else if (openIndex !== undefined) {
       closeDrawer();
     }
@@ -772,7 +777,7 @@
       if (!matches(binding, event)) {
         continue;
       }
-      if ((helpOpen || searchOpen) && binding.action !== "close") {
+      if ((helpOpen || searchOpen || deviceTokensOpen) && binding.action !== "close") {
         return;
       }
       actions[binding.action]();
@@ -798,6 +803,14 @@
             onclick={() => (searchOpen = true)}
           >
             <SearchIcon />
+          </Button>
+          <Button
+            variant="outline"
+            size="icon-sm"
+            aria-label="Device tokens"
+            onclick={() => (deviceTokensOpen = true)}
+          >
+            <KeyRoundIcon />
           </Button>
           <Button
             variant="outline"
@@ -1148,6 +1161,10 @@
 
 {#if helpOpen}
   <HelpDialog onClose={() => (helpOpen = false)} />
+{/if}
+
+{#if deviceTokensOpen}
+  <DeviceTokensDialog onClose={() => (deviceTokensOpen = false)} />
 {/if}
 
 {#if searchOpen}
