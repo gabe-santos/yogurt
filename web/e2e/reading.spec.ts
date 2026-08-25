@@ -64,6 +64,71 @@ test('the reader opens an Entry, reads it, and triages by keyboard', async ({
   await expect(entries.nth(0)).toContainText('unread');
   await expect(entries.nth(1)).toContainText('unread');
 
+  // Right-click actions target the Entry under the pointer without opening it.
+  const stateResponse = () =>
+    page.waitForResponse(
+      (response) =>
+        response.url().includes('/api/entries/') &&
+        response.url().endsWith('/state') &&
+        response.request().method() === 'PUT',
+    );
+  await entries.nth(1).click({ button: 'right' });
+  const entryMenu = page.getByTestId('entry-context-menu');
+  await expect(
+    entryMenu.getByRole('menuitem', { name: 'Mark read' }),
+  ).toBeVisible();
+  await expect(entryMenu.getByRole('menuitem', { name: 'Star' })).toBeVisible();
+  await expect(
+    entryMenu.getByRole('menuitem', { name: 'Archive' }),
+  ).toBeVisible();
+  let saved = stateResponse();
+  await entryMenu.getByRole('menuitem', { name: 'Mark read' }).click();
+  await saved;
+  await expect(entries.nth(1)).not.toContainText('unread');
+
+  await entries.nth(1).click({ button: 'right' });
+  saved = stateResponse();
+  await entryMenu.getByRole('menuitem', { name: 'Mark unread' }).click();
+  await saved;
+  await expect(entries.nth(1)).toContainText('unread');
+
+  await entries.nth(1).click({ button: 'right' });
+  saved = stateResponse();
+  await entryMenu.getByRole('menuitem', { name: 'Star' }).click();
+  await saved;
+  await expect(entries.nth(1)).toContainText('Starred');
+
+  await entries.nth(1).click({ button: 'right' });
+  saved = stateResponse();
+  await entryMenu.getByRole('menuitem', { name: 'Unstar' }).click();
+  await saved;
+  await expect(entries.nth(1)).not.toContainText('Starred');
+
+  await page.route('**/api/entries/*/state', async (route) => {
+    const delayed = Promise.withResolvers<void>();
+    setTimeout(delayed.resolve, 150);
+    await delayed.promise;
+    await route.fulfill({
+      status: 500,
+      contentType: 'application/json',
+      body: JSON.stringify({ error: 'Context Archive rejected' }),
+    });
+  });
+  await entries.nth(1).click({ button: 'right' });
+  await entryMenu.getByRole('menuitem', { name: 'Archive' }).click();
+  await expect(entries).toHaveCount(1);
+  await expect(page.getByTestId('notice')).toContainText(
+    'Context Archive rejected',
+  );
+  await expect(entries).toHaveCount(2);
+  await page.unroute('**/api/entries/*/state');
+  // Reload clears the session-only manual-unread override exercised above,
+  // restoring the journey's ordinary mark-on-open starting state.
+  await page.reload();
+  await expect(entries).toHaveCount(2);
+  await expect(entries.nth(0)).toContainText('unread');
+  await expect(entries.nth(1)).toContainText('unread');
+
   // Opening an Entry shows the Feed-supplied content, sanitised, and marks it
   // Read by default.
   await entries.nth(0).click();

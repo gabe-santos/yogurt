@@ -643,20 +643,19 @@
     }
   }
 
-  function toggleReadCurrent() {
-    const index = selectedIndex;
-    if (index === undefined || entries[index].archived) {
-      return;
-    }
-    void applyRead(index, !entries[index].read, true);
+  function toggleReadAt(index: number) {
+    const entry = entries[index];
+    if (!entry || entry.archived) return;
+    void applyRead(index, !entry.read, true);
   }
 
-  function toggleStarCurrent() {
-    const index = selectedIndex;
-    if (index === undefined) {
-      return;
-    }
+  function toggleReadCurrent() {
+    if (selectedIndex !== undefined) toggleReadAt(selectedIndex);
+  }
+
+  function toggleStarAt(index: number) {
     const entry = entries[index];
+    if (!entry) return;
     void applyEntryState(index, {
       read: entry.read,
       starred: !entry.starred,
@@ -664,17 +663,22 @@
     });
   }
 
-  function archiveCurrent() {
-    const index = selectedIndex;
-    if (index === undefined || entries[index].archived) {
-      return;
-    }
+  function toggleStarCurrent() {
+    if (selectedIndex !== undefined) toggleStarAt(selectedIndex);
+  }
+
+  function archiveAt(index: number) {
     const entry = entries[index];
+    if (!entry || entry.archived) return;
     void applyEntryState(index, {
       read: true,
       starred: entry.starred,
       archived: true,
     });
+  }
+
+  function archiveCurrent() {
+    if (selectedIndex !== undefined) archiveAt(selectedIndex);
   }
 
   async function markAllRead() {
@@ -1429,8 +1433,13 @@
                 isCurrent={index === selectedIndex}
                 iconUrl={iconForEntry(entry)}
                 tabbable={index === (selectedIndex ?? 0)}
+                disabled={busy || pendingEntryIDs.has(entry.id)}
                 onClick={() => selectEntryAt(index)}
+                onToggleRead={() => toggleReadAt(index)}
+                onToggleStar={() => toggleStarAt(index)}
+                onArchive={() => archiveAt(index)}
               />
+
             {/each}
           </ul>
 
