@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"strings"
 )
 
 // SessionCookie is the name of the browser's session cookie.
@@ -92,9 +93,26 @@ func clearSessionCookie(w http.ResponseWriter, r *http.Request) {
 	setSessionCookie(w, r, "", -1)
 }
 
-// requireSession rejects any request that does not carry a live session.
-func (h *Handler) requireSession(next http.Handler) http.Handler {
+// requireAuth rejects any request that does not carry a live credential:
+// either the browser's session cookie, or a device token presented as a
+// bearer credential, which authenticates anywhere the cookie would per
+// ADR-0005.
+func (h *Handler) requireAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if token, ok := bearerToken(r); ok {
+			valid, err := h.deps.DeviceTokens.Authenticate(r.Context(), token)
+			if err != nil {
+				h.serverError(w, r, err)
+				return
+			}
+			if !valid {
+				h.writeError(w, r, http.StatusUnauthorized, "not logged in")
+				return
+			}
+			next.ServeHTTP(w, r)
+			return
+		}
+
 		cookie, err := r.Cookie(SessionCookie)
 		if err != nil {
 			h.writeError(w, r, http.StatusUnauthorized, "not logged in")
@@ -111,6 +129,18 @@ func (h *Handler) requireSession(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// bearerToken extracts a device token from the Authorization header, if the
+// request carries one. The scheme is matched case-insensitively per RFC 7235
+// §2.1, since some clients and proxies send "bearer" rather than "Bearer".
+func bearerToken(r *http.Request) (string, bool) {
+	const scheme = "Bearer "
+	header := r.Header.Get("Authorization")
+	if len(header) <= len(scheme) || !strings.EqualFold(header[:len(scheme)], scheme) {
+		return "", false
+	}
+	return header[len(scheme):], true
 }
 
 // clientKey identifies the caller for rate-limiting purposes. Proxy headers are

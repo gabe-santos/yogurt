@@ -146,6 +146,23 @@ type Response struct {
 // Do sends a request to the application. A non-nil body is sent as JSON.
 func (h *Harness) Do(method, path string, body any) *Response {
 	h.t.Helper()
+	return h.send(h.jsonRequest(method, path, body))
+}
+
+// DoBearer sends a request carrying token as a bearer credential, instead of
+// whatever session cookie the client holds.
+func (h *Harness) DoBearer(method, path, token string, body any) *Response {
+	h.t.Helper()
+	req := h.jsonRequest(method, path, body)
+	req.Header.Set("Authorization", "Bearer "+token)
+	return h.send(req)
+}
+
+// jsonRequest builds a request against the running server, sending a
+// non-nil body as JSON, for Do and DoBearer to send as-is or add a header
+// to first.
+func (h *Harness) jsonRequest(method, path string, body any) *http.Request {
+	h.t.Helper()
 
 	var payload io.Reader
 	if body != nil {
@@ -163,8 +180,7 @@ func (h *Harness) Do(method, path string, body any) *Response {
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-
-	return h.send(req)
+	return req
 }
 
 // DoRaw sends a request whose body is not JSON, such as an OPML document, at
@@ -181,8 +197,9 @@ func (h *Harness) DoRaw(method, path, contentType string, body []byte) *Response
 	return h.send(req)
 }
 
-// send issues a request already built and drains its response, the tail Do
-// and DoRaw share once they differ only in how the request itself is built.
+// send issues a request already built and drains its response, the tail
+// every request-sending method shares once they differ only in how the
+// request itself is built.
 func (h *Harness) send(req *http.Request) *Response {
 	h.t.Helper()
 

@@ -87,15 +87,16 @@ func New(cfg config.Config, deps Deps) (*App, error) {
 	}))
 
 	handler := api.New(api.Deps{
-		Password:   password,
-		Sessions:   auth.NewSessions(db, deps.Clock, cfg.SessionTTL),
-		Limiter:    auth.NewLimiter(deps.Clock),
-		Store:      db,
-		Pull:       pullService,
-		Extraction: extractionService,
-		Clock:      deps.Clock,
-		Logger:     deps.Logger,
-		SPA:        spa,
+		Password:     password,
+		Sessions:     auth.NewSessions(db, deps.Clock, cfg.SessionTTL),
+		DeviceTokens: auth.NewDeviceTokens(db, deps.Clock),
+		Limiter:      auth.NewLimiter(deps.Clock),
+		Store:        db,
+		Pull:         pullService,
+		Extraction:   extractionService,
+		Clock:        deps.Clock,
+		Logger:       deps.Logger,
+		SPA:          spa,
 	})
 
 	ctx, cancel := context.WithCancel(context.Background())

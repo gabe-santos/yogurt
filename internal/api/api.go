@@ -17,14 +17,15 @@ import (
 
 // Deps are the collaborators the HTTP surface needs.
 type Deps struct {
-	Password   *auth.Password
-	Sessions   *auth.Sessions
-	Limiter    *auth.Limiter
-	Store      *store.Store
-	Pull       *pull.Service
-	Extraction *extraction.Service
-	Clock      clock.Clock
-	Logger     *slog.Logger
+	Password     *auth.Password
+	Sessions     *auth.Sessions
+	DeviceTokens *auth.DeviceTokens
+	Limiter      *auth.Limiter
+	Store        *store.Store
+	Pull         *pull.Service
+	Extraction   *extraction.Service
+	Clock        clock.Clock
+	Logger       *slog.Logger
 	// SPA is the compiled frontend, or nil when the binary carries none.
 	SPA fs.FS
 }
@@ -41,32 +42,36 @@ func New(deps Deps) *Handler {
 
 	h.mux.HandleFunc("POST /api/session", h.login)
 	h.mux.HandleFunc("DELETE /api/session", h.logout)
-	h.mux.Handle("GET /api/session", h.requireSession(http.HandlerFunc(h.currentSession)))
+	h.mux.Handle("GET /api/session", h.requireAuth(http.HandlerFunc(h.currentSession)))
 
-	h.mux.Handle("GET /api/feeds", h.requireSession(http.HandlerFunc(h.listFeeds)))
-	h.mux.Handle("POST /api/feeds", h.requireSession(http.HandlerFunc(h.createFeed)))
-	h.mux.Handle("PUT /api/feeds/{id}", h.requireSession(http.HandlerFunc(h.updateFeed)))
-	h.mux.Handle("DELETE /api/feeds/{id}", h.requireSession(http.HandlerFunc(h.deleteFeed)))
-	h.mux.Handle("POST /api/feeds/refresh", h.requireSession(http.HandlerFunc(h.refreshFeeds)))
-	h.mux.Handle("POST /api/feeds/{id}/refresh", h.requireSession(http.HandlerFunc(h.refreshFeed)))
+	h.mux.Handle("GET /api/feeds", h.requireAuth(http.HandlerFunc(h.listFeeds)))
+	h.mux.Handle("POST /api/feeds", h.requireAuth(http.HandlerFunc(h.createFeed)))
+	h.mux.Handle("PUT /api/feeds/{id}", h.requireAuth(http.HandlerFunc(h.updateFeed)))
+	h.mux.Handle("DELETE /api/feeds/{id}", h.requireAuth(http.HandlerFunc(h.deleteFeed)))
+	h.mux.Handle("POST /api/feeds/refresh", h.requireAuth(http.HandlerFunc(h.refreshFeeds)))
+	h.mux.Handle("POST /api/feeds/{id}/refresh", h.requireAuth(http.HandlerFunc(h.refreshFeed)))
 
-	h.mux.Handle("GET /api/groups", h.requireSession(http.HandlerFunc(h.listGroups)))
-	h.mux.Handle("POST /api/groups", h.requireSession(http.HandlerFunc(h.createGroup)))
-	h.mux.Handle("PUT /api/groups/{id}", h.requireSession(http.HandlerFunc(h.renameGroup)))
-	h.mux.Handle("DELETE /api/groups/{id}", h.requireSession(http.HandlerFunc(h.deleteGroup)))
+	h.mux.Handle("GET /api/groups", h.requireAuth(http.HandlerFunc(h.listGroups)))
+	h.mux.Handle("POST /api/groups", h.requireAuth(http.HandlerFunc(h.createGroup)))
+	h.mux.Handle("PUT /api/groups/{id}", h.requireAuth(http.HandlerFunc(h.renameGroup)))
+	h.mux.Handle("DELETE /api/groups/{id}", h.requireAuth(http.HandlerFunc(h.deleteGroup)))
 
-	h.mux.Handle("GET /api/entries", h.requireSession(http.HandlerFunc(h.listEntries)))
-	h.mux.Handle("PUT /api/entries/state", h.requireSession(http.HandlerFunc(h.setEntriesRead)))
-	h.mux.Handle("PUT /api/entries/{id}/state", h.requireSession(http.HandlerFunc(h.setEntryState)))
-	h.mux.Handle("GET /api/entries/{id}/article", h.requireSession(http.HandlerFunc(h.getArticle)))
-	h.mux.Handle("GET /api/entries/{id}/original", h.requireSession(http.HandlerFunc(h.getOriginal)))
-	h.mux.Handle("GET /api/search", h.requireSession(http.HandlerFunc(h.search)))
+	h.mux.Handle("GET /api/entries", h.requireAuth(http.HandlerFunc(h.listEntries)))
+	h.mux.Handle("PUT /api/entries/state", h.requireAuth(http.HandlerFunc(h.setEntriesRead)))
+	h.mux.Handle("PUT /api/entries/{id}/state", h.requireAuth(http.HandlerFunc(h.setEntryState)))
+	h.mux.Handle("GET /api/entries/{id}/article", h.requireAuth(http.HandlerFunc(h.getArticle)))
+	h.mux.Handle("GET /api/entries/{id}/original", h.requireAuth(http.HandlerFunc(h.getOriginal)))
+	h.mux.Handle("GET /api/search", h.requireAuth(http.HandlerFunc(h.search)))
 
-	h.mux.Handle("GET /api/settings", h.requireSession(http.HandlerFunc(h.getSettings)))
-	h.mux.Handle("PUT /api/settings", h.requireSession(http.HandlerFunc(h.setSettings)))
+	h.mux.Handle("GET /api/settings", h.requireAuth(http.HandlerFunc(h.getSettings)))
+	h.mux.Handle("PUT /api/settings", h.requireAuth(http.HandlerFunc(h.setSettings)))
 
-	h.mux.Handle("POST /api/opml/import", h.requireSession(http.HandlerFunc(h.importOPML)))
-	h.mux.Handle("GET /api/opml/export", h.requireSession(http.HandlerFunc(h.exportOPML)))
+	h.mux.Handle("POST /api/opml/import", h.requireAuth(http.HandlerFunc(h.importOPML)))
+	h.mux.Handle("GET /api/opml/export", h.requireAuth(http.HandlerFunc(h.exportOPML)))
+
+	h.mux.Handle("GET /api/device-tokens", h.requireAuth(http.HandlerFunc(h.listDeviceTokens)))
+	h.mux.Handle("POST /api/device-tokens", h.requireAuth(http.HandlerFunc(h.createDeviceToken)))
+	h.mux.Handle("DELETE /api/device-tokens/{id}", h.requireAuth(http.HandlerFunc(h.deleteDeviceToken)))
 
 	h.mux.HandleFunc("GET /", h.spa)
 
