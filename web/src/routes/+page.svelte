@@ -1376,7 +1376,7 @@
         </div>
       {/if}
 
-      <div class="flex-1 overflow-y-auto">
+      <div class="flex-1 overflow-y-auto scrollbar-hover">
         {#if loading}
           <!-- The shape of the list that is coming, so the first rows land in
                place instead of replacing a sentence. -->
