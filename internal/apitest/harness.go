@@ -150,9 +150,31 @@ func (h *Harness) Do(method, path string, body any) *Response {
 		req.Header.Set("Content-Type", "application/json")
 	}
 
+	return h.send(req)
+}
+
+// DoRaw sends a request whose body is not JSON, such as an OPML document, at
+// the given Content-Type.
+func (h *Harness) DoRaw(method, path, contentType string, body []byte) *Response {
+	h.t.Helper()
+
+	req, err := http.NewRequest(method, h.Server.URL+path, bytes.NewReader(body))
+	if err != nil {
+		h.t.Fatalf("build request: %v", err)
+	}
+	req.Header.Set("Content-Type", contentType)
+
+	return h.send(req)
+}
+
+// send issues a request already built and drains its response, the tail Do
+// and DoRaw share once they differ only in how the request itself is built.
+func (h *Harness) send(req *http.Request) *Response {
+	h.t.Helper()
+
 	resp, err := h.Client.Do(req)
 	if err != nil {
-		h.t.Fatalf("%s %s: %v", method, path, err)
+		h.t.Fatalf("%s %s: %v", req.Method, req.URL.Path, err)
 	}
 	defer resp.Body.Close()
 

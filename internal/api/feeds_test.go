@@ -372,6 +372,9 @@ func TestFeedAndEntryEndpointsRequireASession(t *testing.T) {
 	h.Do(http.MethodGet, "/api/settings", nil).ExpectStatus(http.StatusUnauthorized)
 	h.Do(http.MethodPut, "/api/settings", map[string]any{"mark_on_open": true}).
 		ExpectStatus(http.StatusUnauthorized)
+	h.DoRaw(http.MethodPost, "/api/opml/import", "text/x-opml", []byte("<opml/>")).
+		ExpectStatus(http.StatusUnauthorized)
+	h.Do(http.MethodGet, "/api/opml/export", nil).ExpectStatus(http.StatusUnauthorized)
 }
 
 func equalStrings(got, want []string) bool {

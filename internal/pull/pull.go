@@ -70,6 +70,14 @@ func New(db *store.Store, client *fetch.Client, now clock.Clock, logger *slog.Lo
 // Subscribe validates an address, discovering the Feed on it when the address is
 // a web page rather than a Feed, saves the Feed, and stores what it carries.
 func (s *Service) Subscribe(ctx context.Context, rawURL string) (store.Feed, error) {
+	return s.SubscribeInGroup(ctx, rawURL, 0)
+}
+
+// SubscribeInGroup is Subscribe, saving the Feed directly into groupID
+// rather than the default Group. It exists for OPML import, which resolves a
+// Feed's Group before the Feed itself is subscribed. A zero groupID behaves
+// exactly like Subscribe.
+func (s *Service) SubscribeInGroup(ctx context.Context, rawURL string, groupID int64) (store.Feed, error) {
 	target, err := fetch.ParseURL(strings.TrimSpace(rawURL))
 	if err != nil {
 		return store.Feed{}, err
@@ -103,6 +111,7 @@ func (s *Service) Subscribe(ctx context.Context, rawURL string) (store.Feed, err
 		URL:     feedURL,
 		Title:   feedTitle(document, feedURL),
 		SiteURL: document.SiteURL,
+		GroupID: groupID,
 	}, now)
 	if err != nil {
 		return store.Feed{}, err
@@ -116,6 +125,44 @@ func (s *Service) Subscribe(ctx context.Context, rawURL string) (store.Feed, err
 		return store.Feed{}, err
 	}
 	return saved, nil
+}
+
+// SubscribeRequest is one address OPML import wants to subscribe to, and the
+// Group it belongs to.
+type SubscribeRequest struct {
+	URL     string
+	GroupID int64
+}
+
+// SubscribeOutcome is what came of one SubscribeRequest: the Feed on success,
+// or the error SubscribeInGroup returned.
+type SubscribeOutcome struct {
+	Feed store.Feed
+	Err  error
+}
+
+// SubscribeMany subscribes to a set of addresses concurrently, bounded by
+// concurrency, and returns one SubscribeOutcome per request in the same
+// order — so a slow or dead publisher among hundreds an OPML import names
+// does not hold the whole import open, the way refreshMany already bounds
+// refreshing many Feeds at once.
+func (s *Service) SubscribeMany(ctx context.Context, requests []SubscribeRequest) []SubscribeOutcome {
+	results := make([]SubscribeOutcome, len(requests))
+	var wait sync.WaitGroup
+	slots := make(chan struct{}, concurrency)
+	for i, request := range requests {
+		wait.Add(1)
+		go func(i int, request SubscribeRequest) {
+			defer wait.Done()
+			slots <- struct{}{}
+			defer func() { <-slots }()
+
+			feed, err := s.SubscribeInGroup(ctx, request.URL, request.GroupID)
+			results[i] = SubscribeOutcome{Feed: feed, Err: err}
+		}(i, request)
+	}
+	wait.Wait()
+	return results
 }
 
 // Refresh re-reads one Feed, whatever the schedule would have said.

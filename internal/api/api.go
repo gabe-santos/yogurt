@@ -65,6 +65,9 @@ func New(deps Deps) *Handler {
 	h.mux.Handle("GET /api/settings", h.requireSession(http.HandlerFunc(h.getSettings)))
 	h.mux.Handle("PUT /api/settings", h.requireSession(http.HandlerFunc(h.setSettings)))
 
+	h.mux.Handle("POST /api/opml/import", h.requireSession(http.HandlerFunc(h.importOPML)))
+	h.mux.Handle("GET /api/opml/export", h.requireSession(http.HandlerFunc(h.exportOPML)))
+
 	h.mux.HandleFunc("GET /", h.spa)
 
 	return h
