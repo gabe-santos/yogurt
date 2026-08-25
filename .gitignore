@@ -10,3 +10,5 @@
 /web/.svelte-kit/
 /web/test-results/
 /web/playwright-report/
+# Impeccable runtime artifacts
+/.impeccable/
