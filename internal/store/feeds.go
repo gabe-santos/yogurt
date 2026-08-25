@@ -61,6 +61,15 @@ type Entry struct {
 	URL         string
 	Content     string
 	PublishedAt time.Time
+	// UpdatedAt is when this Entry last changed, by SaveEntries or by the
+	// reader's own state.
+	UpdatedAt time.Time
+	// ChangeSeq is this Entry's position in the changed-since feed's total
+	// order, per ADR-0004: assigned fresh whenever SaveEntries or the
+	// reader's own state actually changes it. Entry ids cannot serve this —
+	// an id is assigned once at creation and never renumbered by a later
+	// update.
+	ChangeSeq int64
 	// Read, Starred, and Archived belong to the reader and are untouched by
 	// SaveEntries. Archived always implies Read.
 	Read     bool
@@ -416,14 +425,15 @@ func (s *Store) SaveEntries(ctx context.Context, feedID int64, entries []Entry, 
 	defer tx.Rollback()
 
 	statement, err := tx.PrepareContext(ctx,
-		`INSERT INTO entries (feed_id, guid, title, url, content, published_at, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		`INSERT INTO entries (feed_id, guid, title, url, content, published_at, created_at, updated_at, change_seq)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT (feed_id, guid) DO UPDATE SET
 		     title = excluded.title,
 		     url = excluded.url,
 		     content = excluded.content,
 		     published_at = excluded.published_at,
-		     updated_at = excluded.updated_at
+		     updated_at = excluded.updated_at,
+		     change_seq = excluded.change_seq
 		 WHERE title <> excluded.title
 		    OR url <> excluded.url
 		    OR content <> excluded.content
@@ -435,10 +445,14 @@ func (s *Store) SaveEntries(ctx context.Context, feedID int64, entries []Entry, 
 	defer statement.Close()
 
 	for _, entry := range entries {
+		seq, err := nextChangeSeq(ctx, tx)
+		if err != nil {
+			return fmt.Errorf("save entry %q of feed %d: %w", entry.GUID, feedID, err)
+		}
 		var id int64
-		err := statement.QueryRowContext(ctx,
+		err = statement.QueryRowContext(ctx,
 			feedID, entry.GUID, entry.Title, entry.URL, entry.Content,
-			entry.PublishedAt.Unix(), now.Unix(), now.Unix()).Scan(&id)
+			entry.PublishedAt.Unix(), now.Unix(), now.Unix(), seq).Scan(&id)
 		switch {
 		case errors.Is(err, sql.ErrNoRows):
 			// The WHERE clause found nothing changed: no row was touched, so
@@ -483,16 +497,17 @@ func entryWhere(selection EntrySelection) ([]string, []any) {
 // entryColumns is the column list every Entry read selects, aliased for the
 // entries-joined-to-feeds shape every one of those reads uses.
 const entryColumns = `e.id, e.feed_id, f.title, e.guid, e.title, e.url, e.content,
-	e.published_at, e.read, e.starred, e.archived`
+	e.published_at, e.read, e.starred, e.archived, e.updated_at, e.change_seq`
 
 func scanEntry(row rowScanner) (Entry, error) {
 	var entry Entry
-	var publishedAt, read, starred, archived int64
+	var publishedAt, read, starred, archived, updatedAt int64
 	if err := row.Scan(&entry.ID, &entry.FeedID, &entry.FeedTitle, &entry.GUID, &entry.Title,
-		&entry.URL, &entry.Content, &publishedAt, &read, &starred, &archived); err != nil {
+		&entry.URL, &entry.Content, &publishedAt, &read, &starred, &archived, &updatedAt, &entry.ChangeSeq); err != nil {
 		return Entry{}, err
 	}
 	entry.PublishedAt = time.Unix(publishedAt, 0).UTC()
+	entry.UpdatedAt = time.Unix(updatedAt, 0).UTC()
 	entry.Read = read != 0
 	entry.Starred = starred != 0
 	entry.Archived = archived != 0
@@ -569,17 +584,31 @@ type EntryState struct {
 }
 
 // SetEntryState declares an Entry's reader-owned state and returns it as
-// stored. Archived always implies Read. A replay leaves updated_at untouched.
+// stored. Archived always implies Read. A replay leaves updated_at and
+// change_seq untouched.
 func (s *Store) SetEntryState(ctx context.Context, id int64, state EntryState, now time.Time) (Entry, error) {
 	if state.Archived {
 		state.Read = true
 	}
 	read, starred, archived := boolToInt(state.Read), boolToInt(state.Starred), boolToInt(state.Archived)
-	_, err := s.db.ExecContext(ctx,
-		`UPDATE entries SET read = ?, starred = ?, archived = ?, updated_at = ?
-		 WHERE id = ? AND (read <> ? OR starred <> ? OR archived <> ?)`,
-		read, starred, archived, now.Unix(), id, read, starred, archived)
+
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
+		return Entry{}, fmt.Errorf("set entry state: %w", err)
+	}
+	defer tx.Rollback()
+
+	seq, err := nextChangeSeq(ctx, tx)
+	if err != nil {
+		return Entry{}, fmt.Errorf("set entry state: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE entries SET read = ?, starred = ?, archived = ?, updated_at = ?, change_seq = ?
+		 WHERE id = ? AND (read <> ? OR starred <> ? OR archived <> ?)`,
+		read, starred, archived, now.Unix(), seq, id, read, starred, archived); err != nil {
+		return Entry{}, fmt.Errorf("set entry state: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
 		return Entry{}, fmt.Errorf("set entry state: %w", err)
 	}
 	return s.Entry(ctx, id)
@@ -590,16 +619,27 @@ func (s *Store) SetEntryState(ctx context.Context, id int64, state EntryState, n
 // additional effect and Archived can never be made unread through this path.
 func (s *Store) MarkEntriesRead(ctx context.Context, selection EntrySelection, now time.Time) error {
 	where, selectionArgs := entryWhere(selection)
-	args := make([]any, 0, len(selectionArgs)+1)
-	args = append(args, now.Unix())
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("mark Entries read: %w", err)
+	}
+	defer tx.Rollback()
+
+	seq, err := nextChangeSeq(ctx, tx)
+	if err != nil {
+		return fmt.Errorf("mark Entries read: %w", err)
+	}
+	args := make([]any, 0, len(selectionArgs)+2)
+	args = append(args, now.Unix(), seq)
 	args = append(args, selectionArgs...)
-	query := `UPDATE entries SET read = 1, updated_at = ?
+	query := `UPDATE entries SET read = 1, updated_at = ?, change_seq = ?
 		 WHERE id IN (
 			 SELECT e.id FROM entries e JOIN feeds f ON f.id = e.feed_id
 			 WHERE ` + strings.Join(where, " AND ") +
 		") AND read = 0"
-	if _, err := s.db.ExecContext(ctx, query, args...); err != nil {
+	if _, err := tx.ExecContext(ctx, query, args...); err != nil {
 		return fmt.Errorf("mark Entries read: %w", err)
 	}
-	return nil
+	return tx.Commit()
 }

@@ -38,6 +38,21 @@ func boolToInt(b bool) int64 {
 	return 0
 }
 
+// nextChangeSeq allocates the next value in the changed-since feed's total
+// order, per ADR-0004, inside the caller's transaction so the allocation
+// lands exactly when the write it orders about commits. Entry ids cannot
+// serve this role: an id is assigned once at creation and never renumbered
+// by a later update, so ordering by id would silently skip an update that
+// lands in the same second as a cursor sitting on a higher id.
+func nextChangeSeq(ctx context.Context, tx *sql.Tx) (int64, error) {
+	var seq int64
+	if err := tx.QueryRowContext(ctx,
+		`UPDATE change_sequence SET next = next + 1 WHERE id = 1 RETURNING next`).Scan(&seq); err != nil {
+		return 0, fmt.Errorf("allocate change sequence: %w", err)
+	}
+	return seq, nil
+}
+
 // Open creates the data directory and database file if they do not exist,
 // applies every pending migration, and returns a ready store.
 func Open(ctx context.Context, dataDir string) (*Store, error) {

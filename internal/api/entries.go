@@ -103,22 +103,26 @@ func (h *Handler) parseEntrySelection(w http.ResponseWriter, r *http.Request) (s
 	return selection, true
 }
 
-// listEntries is the reading list: newest first, one page at a time.
+// listEntries is the reading list: newest first, one page at a time. With a
+// since query parameter present, it is instead the changed-since feed, per
+// ADR-0004: Entries changed and Entries removed after that position, oldest
+// first. No since parameter at all behaves exactly like the plain list.
 func (h *Handler) listEntries(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Query().Has("since") {
+		h.listEntriesSince(w, r)
+		return
+	}
+
 	selection, ok := h.parseEntrySelection(w, r)
 	if !ok {
 		return
 	}
-	query := r.URL.Query()
-	q := store.EntryQuery{EntrySelection: selection, Limit: defaultPageSize}
-	if raw := query.Get("limit"); raw != "" {
-		limit, err := strconv.Atoi(raw)
-		if err != nil || limit < 1 {
-			h.writeError(w, r, http.StatusBadRequest, "limit must be a positive number")
-			return
-		}
-		q.Limit = min(limit, maxPageSize)
+	limit, ok := h.parseLimit(w, r)
+	if !ok {
+		return
 	}
+	query := r.URL.Query()
+	q := store.EntryQuery{EntrySelection: selection, Limit: limit}
 	if raw := query.Get("cursor"); raw != "" {
 		cursor, err := decodeCursor(raw)
 		if err != nil {
@@ -162,31 +166,136 @@ func (h *Handler) listEntries(w http.ResponseWriter, r *http.Request) {
 	h.writeJSON(w, r, http.StatusOK, map[string]any{"entries": views, "next_cursor": next})
 }
 
+// parseLimit reads the shared page-size query parameter, defaulting and
+// capping it, for both the reading list and the changed-since feed.
+func (h *Handler) parseLimit(w http.ResponseWriter, r *http.Request) (int, bool) {
+	limit := defaultPageSize
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 1 {
+			h.writeError(w, r, http.StatusBadRequest, "limit must be a positive number")
+			return 0, false
+		}
+		limit = min(n, maxPageSize)
+	}
+	return limit, true
+}
+
+// sinceScopeParams are the reading-list scope and filter parameters the
+// changed-since feed refuses, rather than silently ignoring: it always reads
+// the whole collection, so a caller believing it scoped a sync would
+// otherwise get every Entry with no signal that the scope was dropped.
+var sinceScopeParams = []string{"feed", "group", "unread", "starred", "archived", "around", "cursor"}
+
+// listEntriesSince is the changed-since feed: every Entry changed, and every
+// Entry retention removed, after the since cursor, oldest first, over the
+// whole collection. An absent value (since=, present but empty) reads from
+// the start of history.
+func (h *Handler) listEntriesSince(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query()
+	for _, param := range sinceScopeParams {
+		if query.Has(param) {
+			h.writeError(w, r, http.StatusBadRequest,
+				"since reads the whole collection and does not accept "+param)
+			return
+		}
+	}
+
+	cursor, err := decodeSinceCursor(query.Get("since"))
+	if err != nil {
+		h.writeError(w, r, http.StatusBadRequest, "that cursor is not one this server issued")
+		return
+	}
+	limit, ok := h.parseLimit(w, r)
+	if !ok {
+		return
+	}
+
+	entries, tombstones, next, err := h.deps.Store.EntriesSince(r.Context(), cursor, limit)
+	if err != nil {
+		h.serverError(w, r, err)
+		return
+	}
+
+	views := make([]entryView, 0, len(entries))
+	for _, entry := range entries {
+		views = append(views, viewEntry(entry))
+	}
+	removed := make([]int64, 0, len(tombstones))
+	for _, tombstone := range tombstones {
+		removed = append(removed, tombstone.EntryID)
+	}
+	h.writeJSON(w, r, http.StatusOK, map[string]any{
+		"entries": views, "tombstones": removed, "next_since": encodeSinceCursor(next),
+	})
+}
+
 // encodeCursor packs an Entry's position in the newest-first list into a token
 // the caller cannot construct, so that paging stays the server's business.
 func encodeCursor(entry store.Entry) string {
-	position := fmt.Sprintf("%d:%d", entry.PublishedAt.Unix(), entry.ID)
-	return base64.RawURLEncoding.EncodeToString([]byte(position))
+	return encodePosition(entry.PublishedAt, entry.ID)
 }
 
 func decodeCursor(raw string) (store.Cursor, error) {
+	at, id, err := decodePosition(raw)
+	if err != nil {
+		return store.Cursor{}, err
+	}
+	return store.Cursor{PublishedAt: at, ID: id}, nil
+}
+
+// encodeSinceCursor packs a change sequence into a token the caller cannot
+// construct. A zero cursor — the start of history — encodes as the empty
+// string, so a bootstrap request can ask for it as since=.
+func encodeSinceCursor(cursor store.SinceCursor) string {
+	if cursor == 0 {
+		return ""
+	}
+	return base64.RawURLEncoding.EncodeToString([]byte(strconv.FormatInt(int64(cursor), 10)))
+}
+
+// decodeSinceCursor reads a since query value; an empty value is the start of
+// history, not an error, so a bootstrap request can spell it as since=.
+func decodeSinceCursor(raw string) (store.SinceCursor, error) {
+	if raw == "" {
+		return 0, nil
+	}
 	decoded, err := base64.RawURLEncoding.DecodeString(raw)
 	if err != nil {
-		return store.Cursor{}, fmt.Errorf("decode cursor: %w", err)
+		return 0, fmt.Errorf("decode cursor: %w", err)
 	}
-	publishedAt, id, found := strings.Cut(string(decoded), ":")
-	if !found {
-		return store.Cursor{}, errors.New("cursor has no position in it")
-	}
-	seconds, err := strconv.ParseInt(publishedAt, 10, 64)
+	seq, err := strconv.ParseInt(string(decoded), 10, 64)
 	if err != nil {
-		return store.Cursor{}, fmt.Errorf("cursor timestamp: %w", err)
+		return 0, fmt.Errorf("cursor sequence: %w", err)
+	}
+	return store.SinceCursor(seq), nil
+}
+
+// encodePosition packs a (time, id) position into an opaque token.
+func encodePosition(at time.Time, id int64) string {
+	position := fmt.Sprintf("%d:%d", at.Unix(), id)
+	return base64.RawURLEncoding.EncodeToString([]byte(position))
+}
+
+// decodePosition reads a (time, id) position back out of an opaque token.
+func decodePosition(raw string) (time.Time, int64, error) {
+	decoded, err := base64.RawURLEncoding.DecodeString(raw)
+	if err != nil {
+		return time.Time{}, 0, fmt.Errorf("decode cursor: %w", err)
+	}
+	at, id, found := strings.Cut(string(decoded), ":")
+	if !found {
+		return time.Time{}, 0, errors.New("cursor has no position in it")
+	}
+	seconds, err := strconv.ParseInt(at, 10, 64)
+	if err != nil {
+		return time.Time{}, 0, fmt.Errorf("cursor timestamp: %w", err)
 	}
 	entryID, err := strconv.ParseInt(id, 10, 64)
 	if err != nil {
-		return store.Cursor{}, fmt.Errorf("cursor entry: %w", err)
+		return time.Time{}, 0, fmt.Errorf("cursor entry: %w", err)
 	}
-	return store.Cursor{PublishedAt: time.Unix(seconds, 0).UTC(), ID: entryID}, nil
+	return time.Unix(seconds, 0).UTC(), entryID, nil
 }
 
 // maxEntryStateBody caps how much of a state-mutation request we are willing

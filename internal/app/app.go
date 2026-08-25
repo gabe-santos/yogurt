@@ -20,6 +20,7 @@ import (
 	"github.com/gabe-santos/rss-reader/internal/extraction"
 	"github.com/gabe-santos/rss-reader/internal/fetch"
 	"github.com/gabe-santos/rss-reader/internal/pull"
+	"github.com/gabe-santos/rss-reader/internal/retention"
 	"github.com/gabe-santos/rss-reader/internal/store"
 	"github.com/gabe-santos/rss-reader/internal/webui"
 )
@@ -33,12 +34,13 @@ type Deps struct {
 
 // App is one assembled application over one database.
 type App struct {
-	cfg     config.Config
-	logger  *slog.Logger
-	store   *store.Store
-	handler http.Handler
-	pull    *pull.Service
-	cancel  context.CancelFunc
+	cfg       config.Config
+	logger    *slog.Logger
+	store     *store.Store
+	handler   http.Handler
+	pull      *pull.Service
+	retention *retention.Service
+	cancel    context.CancelFunc
 }
 
 // New opens the database, applies migrations, and wires the HTTP surface. It
@@ -52,6 +54,9 @@ func New(cfg config.Config, deps Deps) (*App, error) {
 	}
 	if cfg.SessionTTL <= 0 {
 		cfg.SessionTTL = config.Defaults().SessionTTL
+	}
+	if cfg.RetentionAge <= 0 {
+		cfg.RetentionAge = config.Defaults().RetentionAge
 	}
 
 	password, err := auth.NewPassword(cfg.Password)
@@ -74,6 +79,8 @@ func New(cfg config.Config, deps Deps) (*App, error) {
 		AllowPrivate: cfg.AllowPrivateFetch,
 	}), deps.Clock, deps.Logger, cfg.PollInterval)
 
+	retentionService := retention.New(db, deps.Clock, deps.Logger, cfg.RetentionAge)
+
 	extractionService := extraction.New(fetch.New(fetch.Options{
 		AllowPrivate: cfg.AllowPrivateFetch,
 		Accept:       extraction.Accept,
@@ -93,10 +100,11 @@ func New(cfg config.Config, deps Deps) (*App, error) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	go pullService.Run(ctx, cfg.PollTick)
+	go retentionService.Run(ctx, cfg.RetentionTick)
 
 	return &App{
 		cfg: cfg, logger: deps.Logger, store: db, handler: handler,
-		pull: pullService, cancel: cancel,
+		pull: pullService, retention: retentionService, cancel: cancel,
 	}, nil
 }
 

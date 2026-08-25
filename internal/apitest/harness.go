@@ -58,6 +58,20 @@ func PollTick(d time.Duration) Option {
 	return func(cfg *config.Config) { cfg.PollTick = d }
 }
 
+// RetentionAge sets how old an unstarred Entry may get before automatic
+// cleanup removes it, for tests that want to observe retention without a
+// production-sized age.
+func RetentionAge(d time.Duration) Option {
+	return func(cfg *config.Config) { cfg.RetentionAge = d }
+}
+
+// RetentionTick sets how often the background schedule wakes to look for
+// expired Entries, for tests that want to observe cleanup within a bounded
+// real-time wait instead of a production-sized tick.
+func RetentionTick(d time.Duration) Option {
+	return func(cfg *config.Config) { cfg.RetentionTick = d }
+}
+
 // New boots the application against a fresh temporary data directory. The
 // returned harness is torn down when the test ends.
 func New(t *testing.T, opts ...Option) *Harness {

@@ -39,17 +39,25 @@ type Config struct {
 	// PollTick is how often the background schedule wakes to look for a due
 	// Feed. It only needs to be finer than PollInterval.
 	PollTick time.Duration
+	// RetentionAge is how old an unstarred Entry may get before automatic
+	// cleanup removes it. Starred Entries are exempt regardless of age.
+	RetentionAge time.Duration
+	// RetentionTick is how often the background schedule wakes to look for
+	// Entries past RetentionAge.
+	RetentionTick time.Duration
 }
 
 // Defaults are the settings used when the environment says nothing.
 func Defaults() Config {
 	return Config{
-		Addr:         ":8080",
-		DataDir:      "./data",
-		SessionTTL:   30 * 24 * time.Hour,
-		LogLevel:     slog.LevelInfo,
-		PollInterval: pullpolicy.DefaultInterval,
-		PollTick:     time.Minute,
+		Addr:          ":8080",
+		DataDir:       "./data",
+		SessionTTL:    30 * 24 * time.Hour,
+		LogLevel:      slog.LevelInfo,
+		PollInterval:  pullpolicy.DefaultInterval,
+		PollTick:      time.Minute,
+		RetentionAge:  90 * 24 * time.Hour,
+		RetentionTick: time.Hour,
 	}
 }
 
@@ -113,6 +121,26 @@ func Load() (Config, error) {
 			return Config{}, fmt.Errorf("%sPOLL_TICK must be positive, got %q", Prefix, v)
 		}
 		cfg.PollTick = tick
+	}
+	if v, ok := lookup("RETENTION_AGE"); ok {
+		age, err := time.ParseDuration(v)
+		if err != nil {
+			return Config{}, fmt.Errorf("%sRETENTION_AGE: %w", Prefix, err)
+		}
+		if age <= 0 {
+			return Config{}, fmt.Errorf("%sRETENTION_AGE must be positive, got %q", Prefix, v)
+		}
+		cfg.RetentionAge = age
+	}
+	if v, ok := lookup("RETENTION_TICK"); ok {
+		tick, err := time.ParseDuration(v)
+		if err != nil {
+			return Config{}, fmt.Errorf("%sRETENTION_TICK: %w", Prefix, err)
+		}
+		if tick <= 0 {
+			return Config{}, fmt.Errorf("%sRETENTION_TICK must be positive, got %q", Prefix, v)
+		}
+		cfg.RetentionTick = tick
 	}
 
 	if cfg.Password == "" {

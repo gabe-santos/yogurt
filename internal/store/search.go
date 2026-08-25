@@ -128,13 +128,14 @@ func (s *Store) SearchEntries(ctx context.Context, query string) ([]EntrySearchR
 	var results []EntrySearchResult
 	for rows.Next() {
 		var entry Entry
-		var publishedAt, read, starred, archived int64
+		var publishedAt, read, starred, archived, updatedAt int64
 		var snippet string
 		if err := rows.Scan(&entry.ID, &entry.FeedID, &entry.FeedTitle, &entry.GUID, &entry.Title,
-			&entry.URL, &entry.Content, &publishedAt, &read, &starred, &archived, &snippet); err != nil {
+			&entry.URL, &entry.Content, &publishedAt, &read, &starred, &archived, &updatedAt, &entry.ChangeSeq, &snippet); err != nil {
 			return nil, fmt.Errorf("search entries: %w", err)
 		}
 		entry.PublishedAt = time.Unix(publishedAt, 0).UTC()
+		entry.UpdatedAt = time.Unix(updatedAt, 0).UTC()
 		entry.Read = read != 0
 		entry.Starred = starred != 0
 		entry.Archived = archived != 0
