@@ -5,7 +5,14 @@
 // than re-listing the key literals in a second switch.
 
 /** Action is what a binding does, named rather than the key that triggers it. */
-export type Action = 'next' | 'prev' | 'open' | 'close' | 'toggleRead' | 'help';
+export type Action =
+  | 'next'
+  | 'prev'
+  | 'open'
+  | 'close'
+  | 'toggleRead'
+  | 'help'
+  | 'search';
 
 /** Binding is one keyboard shortcut: the key a reader presses, what it does. */
 export interface Binding {
@@ -22,6 +29,7 @@ export const bindings: Binding[] = [
   { key: 'o', description: 'Open the current Entry', action: 'open' },
   { key: 'Escape', description: 'Close the open Entry', action: 'close' },
   { key: 'm', description: 'Toggle Read / unread', action: 'toggleRead' },
+  { key: '/', description: 'Search', action: 'search' },
   { key: '?', description: 'Show this help', action: 'help' },
 ];
 

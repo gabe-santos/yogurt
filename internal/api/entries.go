@@ -127,12 +127,24 @@ func (h *Handler) listEntries(w http.ResponseWriter, r *http.Request) {
 		}
 		q.After = cursor
 	}
+	if raw := query.Get("around"); raw != "" {
+		id, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil {
+			h.writeError(w, r, http.StatusBadRequest, "around must be an Entry id")
+			return
+		}
+		q.Around = id
+	}
 
 	// One more than asked for: whether a further page exists is a fact about the
 	// data, not a guess from a full page.
 	q.Limit++
 	entries, err := h.deps.Store.Entries(r.Context(), q)
-	if err != nil {
+	switch {
+	case errors.Is(err, store.ErrNoEntry):
+		h.writeError(w, r, http.StatusNotFound, "no such Entry")
+		return
+	case err != nil:
 		h.serverError(w, r, err)
 		return
 	}

@@ -2,7 +2,11 @@
 // renders it, so that a hostile Feed cannot attack the reader's browser.
 package sanitize
 
-import "github.com/microcosm-cc/bluemonday"
+import (
+	"html"
+
+	"github.com/microcosm-cc/bluemonday"
+)
 
 // policy is the allowlist every piece of Feed- or Article-supplied HTML is run
 // through: the common formatting, list, table and image elements a publisher
@@ -10,8 +14,19 @@ import "github.com/microcosm-cc/bluemonday"
 // always stripped.
 var policy = bluemonday.UGCPolicy()
 
+// textPolicy strips every tag, keeping only the text a publisher wrote.
+var textPolicy = bluemonday.StrictPolicy()
+
 // HTML strips dangerous markup from raw, publisher-supplied HTML, returning
 // only what is safe to render.
 func HTML(raw string) string {
 	return policy.Sanitize(raw)
+}
+
+// PlainText reduces raw, publisher-supplied HTML to plain text: every tag is
+// stripped and HTML entities are resolved, so a fragment can stand alone —
+// a search result's excerpt, cut from wherever it matched and possibly
+// mid-tag — without leaking markup.
+func PlainText(raw string) string {
+	return html.UnescapeString(textPolicy.Sanitize(raw))
 }

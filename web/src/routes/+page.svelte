@@ -6,6 +6,7 @@
   import * as Sidebar from "$lib/components/ui/sidebar";
   import * as Tabs from "$lib/components/ui/tabs";
   import CircleHelpIcon from "@lucide/svelte/icons/circle-help";
+  import SearchIcon from "@lucide/svelte/icons/search";
   import { onMount } from "svelte";
   import { goto, invalidateAll } from "$app/navigation";
   import {
@@ -32,11 +33,13 @@
     EntryView,
     Feed,
     Group,
+    SearchEntry,
     Settings,
   } from "$lib/api";
   import EntryDrawer from "$lib/EntryDrawer.svelte";
   import { formatPublished } from "$lib/format";
   import HelpDialog from "$lib/HelpDialog.svelte";
+  import SearchDialog from "$lib/SearchDialog.svelte";
   import { bindings, matches } from "$lib/keys";
   import type { Action } from "$lib/keys";
 
@@ -93,6 +96,7 @@
   let currentIndex = $state<number | undefined>(undefined);
   let openIndex = $state<number | undefined>(undefined);
   let helpOpen = $state(false);
+  let searchOpen = $state(false);
   let markOnOpen = $state(true);
   // The view an Entry opens in belongs to the reader, not to an Entry: it is
   // stored on the server, so it survives both moving to the next Entry and
@@ -254,6 +258,42 @@
     } finally {
       busy = false;
     }
+  }
+
+  /** openSearchEntry opens a search result within its ordinary list: scoped
+   * to its own Feed, in the filter that view normally lives in, anchored at
+   * the Entry itself rather than the top of the list — not a standalone
+   * search-result view. */
+  async function openSearchEntry(entry: SearchEntry) {
+    searchOpen = false;
+    const nextScope: Scope = { type: "feed", id: entry.feed_id };
+    const nextFilter: Filter = entry.archived ? "archive" : "all";
+    scope = nextScope;
+    filter = nextFilter;
+    busy = true;
+    try {
+      const page = await listEntries({
+        ...selectionQuery(nextScope, nextFilter),
+        around: entry.id,
+      });
+      entries = page.entries;
+      cursor = page.next_cursor;
+      manuallyUnread = new Set();
+      const index = entries.findIndex((candidate) => candidate.id === entry.id);
+      currentIndex = index < 0 ? undefined : index;
+      openIndex = index < 0 ? undefined : index;
+      if (index >= 0) maybeMarkOnOpen(index);
+    } catch (cause) {
+      reportError(cause);
+    } finally {
+      busy = false;
+    }
+  }
+
+  /** openSearchFeed navigates to a Feed a search matched by name. */
+  function openSearchFeed(feed: Feed) {
+    searchOpen = false;
+    void scopeTo({ type: "feed", id: feed.id });
   }
 
   async function setFilter(next: Filter) {
@@ -677,7 +717,9 @@
   }
 
   function closeCurrent() {
-    if (helpOpen) {
+    if (searchOpen) {
+      searchOpen = false;
+    } else if (helpOpen) {
       helpOpen = false;
     } else if (openIndex !== undefined) {
       closeDrawer();
@@ -694,6 +736,7 @@
     close: closeCurrent,
     toggleRead: toggleReadCurrent,
     help: () => (helpOpen = true),
+    search: () => (searchOpen = true),
   };
 
   function isTypingTarget(target: EventTarget | null): boolean {
@@ -729,7 +772,7 @@
       if (!matches(binding, event)) {
         continue;
       }
-      if (helpOpen && binding.action !== "close") {
+      if ((helpOpen || searchOpen) && binding.action !== "close") {
         return;
       }
       actions[binding.action]();
@@ -747,6 +790,15 @@
       <div class="flex items-center justify-between gap-2 px-2">
         <h1 class="text-lg font-semibold">Reader</h1>
         <div class="flex items-center gap-1">
+          <Button
+            variant="outline"
+            size="icon-sm"
+            aria-label="Search"
+            data-testid="open-search"
+            onclick={() => (searchOpen = true)}
+          >
+            <SearchIcon />
+          </Button>
           <Button
             variant="outline"
             size="icon-sm"
@@ -1096,4 +1148,12 @@
 
 {#if helpOpen}
   <HelpDialog onClose={() => (helpOpen = false)} />
+{/if}
+
+{#if searchOpen}
+  <SearchDialog
+    onClose={() => (searchOpen = false)}
+    onSelectEntry={openSearchEntry}
+    onSelectFeed={openSearchFeed}
+  />
 {/if}

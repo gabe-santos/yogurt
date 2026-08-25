@@ -97,6 +97,12 @@ type EntryQuery struct {
 	EntrySelection
 	// After is the position the last page ended at.
 	After Cursor
+	// Around is an Entry id to start the page at, inclusive, rather than at
+	// the top of the list: how a search result opens within its ordinary
+	// list instead of a standalone view. Zero means no anchor. It takes
+	// precedence over After when both are set, and the Entry it names is
+	// only returned if the query's own selection matches it.
+	Around int64
 	// Limit is the largest number of Entries to return.
 	Limit int
 }
@@ -270,6 +276,10 @@ func (s *Store) DeleteFeed(ctx context.Context, id int64) error {
 	}
 	defer tx.Rollback()
 
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM entries_fts WHERE rowid IN (SELECT id FROM entries WHERE feed_id = ?)`, id); err != nil {
+		return fmt.Errorf("delete feed %d: %w", id, err)
+	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM entries WHERE feed_id = ?`, id); err != nil {
 		return fmt.Errorf("delete feed %d: %w", id, err)
 	}
@@ -392,7 +402,8 @@ func (s *Store) FeedUnreadCounts(ctx context.Context) (map[int64]int, error) {
 // SaveEntries stores what a Feed carried, in one transaction. An Entry the
 // publisher has shown before is updated in place when anything about it changed
 // and left alone when nothing did, so that seeing the same item twice — in one
-// document or across two fetches — stores it once.
+// document or across two fetches — stores it once. The search index is
+// updated for exactly the Entries that changed, alongside the row itself.
 func (s *Store) SaveEntries(ctx context.Context, feedID int64, entries []Entry, now time.Time) error {
 	if len(entries) == 0 {
 		return nil
@@ -416,16 +427,27 @@ func (s *Store) SaveEntries(ctx context.Context, feedID int64, entries []Entry, 
 		 WHERE title <> excluded.title
 		    OR url <> excluded.url
 		    OR content <> excluded.content
-		    OR published_at <> excluded.published_at`)
+		    OR published_at <> excluded.published_at
+		 RETURNING id`)
 	if err != nil {
 		return fmt.Errorf("save entries: %w", err)
 	}
 	defer statement.Close()
 
 	for _, entry := range entries {
-		if _, err := statement.ExecContext(ctx,
+		var id int64
+		err := statement.QueryRowContext(ctx,
 			feedID, entry.GUID, entry.Title, entry.URL, entry.Content,
-			entry.PublishedAt.Unix(), now.Unix(), now.Unix()); err != nil {
+			entry.PublishedAt.Unix(), now.Unix(), now.Unix()).Scan(&id)
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			// The WHERE clause found nothing changed: no row was touched, so
+			// nothing was returned and the search index is already correct.
+			continue
+		case err != nil:
+			return fmt.Errorf("save entry %q of feed %d: %w", entry.GUID, feedID, err)
+		}
+		if err := indexEntry(ctx, tx, id, entry.Title, entry.Content); err != nil {
 			return fmt.Errorf("save entry %q of feed %d: %w", entry.GUID, feedID, err)
 		}
 	}
@@ -458,19 +480,48 @@ func entryWhere(selection EntrySelection) ([]string, []any) {
 	return where, args
 }
 
+// entryColumns is the column list every Entry read selects, aliased for the
+// entries-joined-to-feeds shape every one of those reads uses.
+const entryColumns = `e.id, e.feed_id, f.title, e.guid, e.title, e.url, e.content,
+	e.published_at, e.read, e.starred, e.archived`
+
+func scanEntry(row rowScanner) (Entry, error) {
+	var entry Entry
+	var publishedAt, read, starred, archived int64
+	if err := row.Scan(&entry.ID, &entry.FeedID, &entry.FeedTitle, &entry.GUID, &entry.Title,
+		&entry.URL, &entry.Content, &publishedAt, &read, &starred, &archived); err != nil {
+		return Entry{}, err
+	}
+	entry.PublishedAt = time.Unix(publishedAt, 0).UTC()
+	entry.Read = read != 0
+	entry.Starred = starred != 0
+	entry.Archived = archived != 0
+	return entry, nil
+}
+
 // Entries reads one page of the reading list, newest first. Archived Entries
-// are excluded unless ArchivedOnly selects the Archive view.
+// are excluded unless ArchivedOnly selects the Archive view. It returns
+// ErrNoEntry when Around names an Entry that is not there.
 func (s *Store) Entries(ctx context.Context, q EntryQuery) ([]Entry, error) {
 	where, args := entryWhere(q.EntrySelection)
-	if !q.After.IsZero() {
+	switch {
+	case q.Around != 0:
+		// Inclusive of the anchor itself, so the page it opens starts at the
+		// Entry a search result pointed at.
+		anchor, err := s.Entry(ctx, q.Around)
+		if err != nil {
+			return nil, err
+		}
+		where = append(where, "(e.published_at < ? OR (e.published_at = ? AND e.id <= ?))")
+		args = append(args, anchor.PublishedAt.Unix(), anchor.PublishedAt.Unix(), anchor.ID)
+	case !q.After.IsZero():
 		// Keyset paging: strictly older than the last Entry of the page before,
 		// with the id settling identical timestamps.
 		where = append(where, "(e.published_at < ? OR (e.published_at = ? AND e.id < ?))")
 		args = append(args, q.After.PublishedAt.Unix(), q.After.PublishedAt.Unix(), q.After.ID)
 	}
 
-	query := `SELECT e.id, e.feed_id, f.title, e.guid, e.title, e.url, e.content,
-			e.published_at, e.read, e.starred, e.archived
+	query := `SELECT ` + entryColumns + `
 		 FROM entries e JOIN feeds f ON f.id = e.feed_id
 		 WHERE ` + strings.Join(where, " AND ") +
 		" ORDER BY e.published_at DESC, e.id DESC LIMIT ?"
@@ -484,16 +535,10 @@ func (s *Store) Entries(ctx context.Context, q EntryQuery) ([]Entry, error) {
 
 	var entries []Entry
 	for rows.Next() {
-		var entry Entry
-		var publishedAt, read, starred, archived int64
-		if err := rows.Scan(&entry.ID, &entry.FeedID, &entry.FeedTitle, &entry.GUID,
-			&entry.Title, &entry.URL, &entry.Content, &publishedAt, &read, &starred, &archived); err != nil {
+		entry, err := scanEntry(rows)
+		if err != nil {
 			return nil, fmt.Errorf("read entries: %w", err)
 		}
-		entry.PublishedAt = time.Unix(publishedAt, 0).UTC()
-		entry.Read = read != 0
-		entry.Starred = starred != 0
-		entry.Archived = archived != 0
 		entries = append(entries, entry)
 	}
 	return entries, rows.Err()
@@ -502,25 +547,16 @@ func (s *Store) Entries(ctx context.Context, q EntryQuery) ([]Entry, error) {
 // Entry reads one Entry by id. It returns ErrNoEntry when there is no such
 // Entry.
 func (s *Store) Entry(ctx context.Context, id int64) (Entry, error) {
-	var entry Entry
-	var publishedAt, read, starred, archived int64
-	err := s.db.QueryRowContext(ctx,
-		`SELECT e.id, e.feed_id, f.title, e.guid, e.title, e.url, e.content,
-			e.published_at, e.read, e.starred, e.archived
+	entry, err := scanEntry(s.db.QueryRowContext(ctx,
+		`SELECT `+entryColumns+`
 		 FROM entries e JOIN feeds f ON f.id = e.feed_id
-		 WHERE e.id = ?`, id).
-		Scan(&entry.ID, &entry.FeedID, &entry.FeedTitle, &entry.GUID, &entry.Title,
-			&entry.URL, &entry.Content, &publishedAt, &read, &starred, &archived)
+		 WHERE e.id = ?`, id))
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		return Entry{}, ErrNoEntry
 	case err != nil:
 		return Entry{}, fmt.Errorf("read entry %d: %w", id, err)
 	}
-	entry.PublishedAt = time.Unix(publishedAt, 0).UTC()
-	entry.Read = read != 0
-	entry.Starred = starred != 0
-	entry.Archived = archived != 0
 	return entry, nil
 }
 

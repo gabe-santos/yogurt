@@ -61,6 +61,19 @@ export interface EntryPage {
   next_cursor: string;
 }
 
+/** SearchEntry is one Entry a search matched, with a short excerpt of where
+ * it matched. */
+export interface SearchEntry extends Entry {
+  snippet: string;
+}
+
+/** SearchResults is what one search returns: matching Entries and matching
+ * Feeds, so a search doubles as navigation to a Feed. */
+export interface SearchResults {
+  entries: SearchEntry[];
+  feeds: Feed[];
+}
+
 /** Article is a publisher's page, reduced to its main text: Reader View. */
 export interface Article {
   title: string;
@@ -274,9 +287,16 @@ function entrySelectionQuery(options: EntrySelectionOptions): URLSearchParams {
   return query;
 }
 
-/** listEntries reads one page of the reading list. */
+/** listEntries reads one page of the reading list. around anchors the page
+ * at that Entry id, inclusive, instead of the top of the list — how a
+ * search result opens within its ordinary list rather than a standalone
+ * view. */
 export async function listEntries(
-  options: EntrySelectionOptions & { cursor?: string; limit?: number } = {},
+  options: EntrySelectionOptions & {
+    cursor?: string;
+    limit?: number;
+    around?: number;
+  } = {},
 ): Promise<EntryPage> {
   const query = entrySelectionQuery(options);
   if (options.cursor) {
@@ -284,6 +304,9 @@ export async function listEntries(
   }
   if (options.limit !== undefined) {
     query.set('limit', String(options.limit));
+  }
+  if (options.around !== undefined) {
+    query.set('around', String(options.around));
   }
 
   const path = query.size > 0 ? `/entries?${query}` : '/entries';
@@ -293,6 +316,18 @@ export async function listEntries(
     next_cursor: string;
   };
   return { entries: body.entries ?? [], next_cursor: body.next_cursor ?? '' };
+}
+
+/** search finds Entries by title or Feed-supplied content, and Feeds by
+ * name, so a search doubles as navigation. Blank query matches nothing. */
+export async function search(query: string): Promise<SearchResults> {
+  const path = `/search?q=${encodeURIComponent(query)}`;
+  const response = await send('GET', path, 'Could not search your Entries');
+  const body = (await response.json()) as {
+    entries: SearchEntry[] | null;
+    feeds: Feed[] | null;
+  };
+  return { entries: body.entries ?? [], feeds: body.feeds ?? [] };
 }
 
 /** setEntryState declares complete reader-owned state, never a toggle. */

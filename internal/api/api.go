@@ -60,6 +60,7 @@ func New(deps Deps) *Handler {
 	h.mux.Handle("PUT /api/entries/{id}/state", h.requireSession(http.HandlerFunc(h.setEntryState)))
 	h.mux.Handle("GET /api/entries/{id}/article", h.requireSession(http.HandlerFunc(h.getArticle)))
 	h.mux.Handle("GET /api/entries/{id}/original", h.requireSession(http.HandlerFunc(h.getOriginal)))
+	h.mux.Handle("GET /api/search", h.requireSession(http.HandlerFunc(h.search)))
 
 	h.mux.Handle("GET /api/settings", h.requireSession(http.HandlerFunc(h.getSettings)))
 	h.mux.Handle("PUT /api/settings", h.requireSession(http.HandlerFunc(h.setSettings)))
