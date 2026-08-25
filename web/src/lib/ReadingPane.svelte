@@ -1,9 +1,9 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import { MediaQuery } from 'svelte/reactivity';
-	import { prefersReducedMotion } from 'svelte/motion';
+	import { Spring, prefersReducedMotion } from 'svelte/motion';
 	import { fly } from 'svelte/transition';
-	import { cubicOut } from 'svelte/easing';
+	import { expoOut } from 'svelte/easing';
 	import {
 		getArticle,
 		getOriginal,
@@ -62,13 +62,21 @@
 	// to. The enter is CSS gated by `max-lg:motion-safe:`; the exit needs the
 	// same two answers in JavaScript.
 	const overlay = new MediaQuery('width < 64rem');
-	// Exits are softer and shorter than enters: a small fixed slide back toward
-	// the list at half the enter's duration, and nothing at all where the pane
-	// was furniture rather than a place.
+	// Exits run 250ms against the entrance's 300ms — the reader should not wait
+	// on the way out — and travel the same 32px the entrance already uses,
+	// along expoOut: the JS equivalent of the entrance's own
+	// cubic-bezier(0.16, 1, 0.3, 1). Sampled across the curve expoOut deviates
+	// by 0.0056 (0.18px over 32px); cubicOut, the obvious default, deviates by
+	// 0.264 (8.5px) and would visibly change the entrance this exit mirrors.
+	// Only the overlay has somewhere to leave to; the third column never
+	// transitions. Reduced motion still cross-fades — gentler, not absent —
+	// just without the horizontal travel, and faster than the full exit.
 	const exit = $derived(
-		overlay.current && !prefersReducedMotion.current
-			? { x: 32, duration: 150, easing: cubicOut }
-			: { duration: 0 }
+		!overlay.current
+			? { duration: 0 }
+			: prefersReducedMotion.current
+				? { x: 0, duration: 100 }
+				: { x: 32, duration: 250, easing: expoOut }
 	);
 
 	// The Article views are fetched per Entry and per view, on demand: an Entry
@@ -107,6 +115,60 @@
 		{ id: 'reader', label: 'Reader View', icon: BookOpenIcon },
 		{ id: 'original', label: 'Original View', icon: GlobeIcon }
 	];
+
+	// The view switcher is the Entry List's filter Tabs' sibling in visual
+	// language, so its single lifted surface travels under the exact same
+	// physics as tabs-list.svelte's indicator: stiffness 0.25, damping 1,
+	// copied verbatim rather than retuned. It takes the corner radius of the
+	// buttons it stands in for, not the track's, because the two controls'
+	// cells differ.
+	let viewSwitcherRef = $state<HTMLElement | null>(null);
+	const viewIndicator = new Spring(
+		{ x: 0, y: 0, width: 0, height: 0 },
+		{ stiffness: 0.25, damping: 1 }
+	);
+	let viewIndicatorReady = $state(false);
+
+	function measureViewIndicator(instant: boolean) {
+		if (!viewSwitcherRef) return;
+		const active = viewSwitcherRef.querySelector<HTMLElement>('[aria-pressed="true"]');
+		if (!active) return;
+		const trackRect = viewSwitcherRef.getBoundingClientRect();
+		const activeRect = active.getBoundingClientRect();
+		viewIndicator.set(
+			{
+				x: activeRect.left - trackRect.left,
+				y: activeRect.top - trackRect.top,
+				width: activeRect.width,
+				height: activeRect.height
+			},
+			{ instant }
+		);
+		viewIndicatorReady = true;
+	}
+
+	$effect(() => {
+		if (!viewSwitcherRef) return;
+
+		measureViewIndicator(true);
+
+		const mutationObserver = new MutationObserver(() =>
+			measureViewIndicator(prefersReducedMotion.current)
+		);
+		mutationObserver.observe(viewSwitcherRef, {
+			attributes: true,
+			attributeFilter: ['aria-pressed'],
+			subtree: true
+		});
+
+		const resizeObserver = new ResizeObserver(() => measureViewIndicator(true));
+		resizeObserver.observe(viewSwitcherRef);
+
+		return () => {
+			mutationObserver.disconnect();
+			resizeObserver.disconnect();
+		};
+	});
 
 	// One effect owns everything that must happen when the Entry or the view
 	// changes, so a fetch can never outlive the selection that asked for it: the
@@ -280,7 +342,7 @@
 				<button
 					{...props}
 					type="button"
-					class="flex size-7 items-center justify-center rounded-[calc(var(--radius)*1.8_-_2px)] text-muted-foreground transition-[color,background-color,box-shadow,scale] hover:text-foreground active:scale-[0.96] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-50 aria-pressed:bg-background aria-pressed:text-foreground aria-pressed:shadow-xs max-lg:size-9"
+					class="relative flex size-7 items-center justify-center rounded-[calc(var(--radius)*1.8_-_2px)] text-muted-foreground transition-[color,scale] hover:text-foreground active:scale-[0.96] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-50 aria-pressed:text-foreground max-lg:size-9"
 					aria-label={label}
 					aria-pressed={view === id}
 					data-testid={`view-${id}`}
@@ -344,10 +406,19 @@
 			<div class="flex-1 lg:hidden"></div>
 
 			<div
-				class="flex shrink-0 items-center gap-0.5 rounded-2xl bg-muted p-0.5"
+				class="relative flex shrink-0 items-center gap-0.5 rounded-2xl bg-muted p-0.5"
 				role="group"
 				aria-label="View"
+				bind:this={viewSwitcherRef}
 			>
+				{#if viewIndicatorReady}
+					<div
+						class="pointer-events-none absolute rounded-[calc(var(--radius)*1.8_-_2px)] bg-background shadow-xs"
+						style:transform="translate({viewIndicator.current.x}px, {viewIndicator.current.y}px)"
+						style:width="{viewIndicator.current.width}px"
+						style:height="{viewIndicator.current.height}px"
+					></div>
+				{/if}
 				{#each views as choice (choice.id)}
 					{@render viewControl(choice.id, choice.label, choice.icon)}
 				{/each}
