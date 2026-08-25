@@ -53,6 +53,19 @@ func nextChangeSeq(ctx context.Context, tx *sql.Tx) (int64, error) {
 	return seq, nil
 }
 
+// nextChangeSeqRange reserves n consecutive values in the changed-since
+// feed's total order and returns the first one, so a batch write can give
+// every row it touches its own distinct position instead of one shared
+// value a paged delta read could drop. n must be positive.
+func nextChangeSeqRange(ctx context.Context, tx *sql.Tx, n int) (int64, error) {
+	var last int64
+	if err := tx.QueryRowContext(ctx,
+		`UPDATE change_sequence SET next = next + ? WHERE id = 1 RETURNING next`, n).Scan(&last); err != nil {
+		return 0, fmt.Errorf("allocate change sequence range: %w", err)
+	}
+	return last - int64(n) + 1, nil
+}
+
 // Open creates the data directory and database file if they do not exist,
 // applies every pending migration, and returns a ready store.
 func Open(ctx context.Context, dataDir string) (*Store, error) {

@@ -154,37 +154,59 @@ func (s *Store) CleanupExpiredEntries(ctx context.Context, maxAge time.Duration,
 		return 0, tx.Commit()
 	}
 
-	seq, err := nextChangeSeq(ctx, tx)
+	start, err := nextChangeSeqRange(ctx, tx, len(ids))
 	if err != nil {
 		return 0, fmt.Errorf("cleanup expired entries: %w", err)
 	}
 
-	placeholders, args := placeholderList(ids)
-	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO entry_tombstones (entry_id, deleted_at, change_seq)
-		 SELECT id, ?, ? FROM entries WHERE id IN (`+placeholders+`)
-		 ON CONFLICT (entry_id) DO UPDATE SET deleted_at = excluded.deleted_at, change_seq = excluded.change_seq`,
-		append([]any{now.Unix(), seq}, args...)...); err != nil {
-		return 0, fmt.Errorf("cleanup expired entries: %w", err)
-	}
-	if _, err := tx.ExecContext(ctx,
-		`DELETE FROM entries_fts WHERE rowid IN (`+placeholders+`)`, args...); err != nil {
-		return 0, fmt.Errorf("cleanup expired entries: %w", err)
-	}
-	if _, err := tx.ExecContext(ctx,
-		`DELETE FROM entries WHERE id IN (`+placeholders+`)`, args...); err != nil {
-		return 0, fmt.Errorf("cleanup expired entries: %w", err)
+	// sqlChunkSize keeps every statement well under SQLite's bound-parameter
+	// limit even for a retention run that expires many thousands of rows at
+	// once, such as the first run against a database seeded by OPML import.
+	const sqlChunkSize = 500
+	for offset := 0; offset < len(ids); offset += sqlChunkSize {
+		end := min(offset+sqlChunkSize, len(ids))
+		batch := ids[offset:end]
+
+		values := make([]byte, 0, len(batch)*8)
+		args := make([]any, 0, len(batch)*3)
+		for i, id := range batch {
+			if i > 0 {
+				values = append(values, ',', ' ')
+			}
+			values = append(values, "(?, ?, ?)"...)
+			args = append(args, id, now.Unix(), start+int64(offset+i))
+		}
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO entry_tombstones (entry_id, deleted_at, change_seq)
+			 VALUES `+string(values)+`
+			 ON CONFLICT (entry_id) DO UPDATE SET deleted_at = excluded.deleted_at, change_seq = excluded.change_seq`,
+			args...); err != nil {
+			return 0, fmt.Errorf("cleanup expired entries: %w", err)
+		}
+
+		placeholders, idArgs := placeholderList(batch)
+		if _, err := tx.ExecContext(ctx,
+			`DELETE FROM entries_fts WHERE rowid IN (`+placeholders+`)`, idArgs...); err != nil {
+			return 0, fmt.Errorf("cleanup expired entries: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx,
+			`DELETE FROM entries WHERE id IN (`+placeholders+`)`, idArgs...); err != nil {
+			return 0, fmt.Errorf("cleanup expired entries: %w", err)
+		}
 	}
 
 	urlList := make([]string, 0, len(urls))
 	for url := range urls {
 		urlList = append(urlList, url)
 	}
-	urlPlaceholders, urlArgs := placeholderList(urlList)
-	if _, err := tx.ExecContext(ctx,
-		`DELETE FROM articles WHERE url IN (`+urlPlaceholders+`)
-		 AND url NOT IN (SELECT DISTINCT url FROM entries)`, urlArgs...); err != nil {
-		return 0, fmt.Errorf("cleanup expired entries: %w", err)
+	for offset := 0; offset < len(urlList); offset += sqlChunkSize {
+		end := min(offset+sqlChunkSize, len(urlList))
+		urlPlaceholders, urlArgs := placeholderList(urlList[offset:end])
+		if _, err := tx.ExecContext(ctx,
+			`DELETE FROM articles WHERE url IN (`+urlPlaceholders+`)
+			 AND url NOT IN (SELECT DISTINCT url FROM entries)`, urlArgs...); err != nil {
+			return 0, fmt.Errorf("cleanup expired entries: %w", err)
+		}
 	}
 
 	if err := tx.Commit(); err != nil {

@@ -617,6 +617,8 @@ func (s *Store) SetEntryState(ctx context.Context, id int64, state EntryState, n
 // MarkEntriesRead marks every Entry in selection Read. It uses the same
 // selection as Entries and updates only unread rows, so a replay has no
 // additional effect and Archived can never be made unread through this path.
+// Each row draws its own change_seq — sharing one across the batch would let
+// a paged delta read that stops mid-batch skip every row still to come.
 func (s *Store) MarkEntriesRead(ctx context.Context, selection EntrySelection, now time.Time) error {
 	where, selectionArgs := entryWhere(selection)
 
@@ -626,20 +628,60 @@ func (s *Store) MarkEntriesRead(ctx context.Context, selection EntrySelection, n
 	}
 	defer tx.Rollback()
 
-	seq, err := nextChangeSeq(ctx, tx)
+	idRows, err := tx.QueryContext(ctx,
+		`SELECT e.id FROM entries e JOIN feeds f ON f.id = e.feed_id
+		 WHERE `+strings.Join(where, " AND ")+" AND e.read = 0",
+		selectionArgs...)
 	if err != nil {
 		return fmt.Errorf("mark Entries read: %w", err)
 	}
-	args := make([]any, 0, len(selectionArgs)+2)
-	args = append(args, now.Unix(), seq)
-	args = append(args, selectionArgs...)
-	query := `UPDATE entries SET read = 1, updated_at = ?, change_seq = ?
-		 WHERE id IN (
-			 SELECT e.id FROM entries e JOIN feeds f ON f.id = e.feed_id
-			 WHERE ` + strings.Join(where, " AND ") +
-		") AND read = 0"
-	if _, err := tx.ExecContext(ctx, query, args...); err != nil {
+	var ids []int64
+	for idRows.Next() {
+		var id int64
+		if err := idRows.Scan(&id); err != nil {
+			idRows.Close()
+			return fmt.Errorf("mark Entries read: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	if err := idRows.Err(); err != nil {
 		return fmt.Errorf("mark Entries read: %w", err)
+	}
+	idRows.Close()
+
+	if len(ids) == 0 {
+		return tx.Commit()
+	}
+
+	start, err := nextChangeSeqRange(ctx, tx, len(ids))
+	if err != nil {
+		return fmt.Errorf("mark Entries read: %w", err)
+	}
+
+	// sqlChunkSize keeps every statement well under SQLite's bound-parameter
+	// limit even when mark-all-read fires over a large backlog.
+	const sqlChunkSize = 500
+	for offset := 0; offset < len(ids); offset += sqlChunkSize {
+		end := min(offset+sqlChunkSize, len(ids))
+		batch := ids[offset:end]
+
+		values := make([]byte, 0, len(batch)*24)
+		args := make([]any, 0, len(batch)*2+1)
+		args = append(args, now.Unix())
+		for i, id := range batch {
+			if i > 0 {
+				values = append(values, " UNION ALL "...)
+			}
+			values = append(values, "SELECT ? AS id, ? AS seq"...)
+			args = append(args, id, start+int64(offset+i))
+		}
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE entries SET read = 1, updated_at = ?, change_seq = v.seq
+			 FROM (`+string(values)+`) AS v
+			 WHERE entries.id = v.id`,
+			args...); err != nil {
+			return fmt.Errorf("mark Entries read: %w", err)
+		}
 	}
 	return tx.Commit()
 }

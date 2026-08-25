@@ -250,3 +250,120 @@ func TestDeltaFeedOrdersBySequenceNotByEntryIdOnATiedClock(t *testing.T) {
 		t.Errorf("delta read after both changes = %v, want the higher-id Entry %d present", page.Entries, highID)
 	}
 }
+
+// TestRetentionCleanupTombstonesEachGetADistinctChangeSeq proves the fix for
+// a real data-loss bug: cleanup used to stamp every tombstone in a batch
+// with one shared change_seq, so once a delta read's cursor reached that
+// value every remaining tombstone in the batch satisfied change_seq > cursor
+// as false and was permanently unreachable rather than merely paged later.
+func TestRetentionCleanupTombstonesEachGetADistinctChangeSeq(t *testing.T) {
+	h := loggedIn(t, apitest.RetentionAge(time.Hour), apitest.RetentionTick(10*time.Millisecond))
+
+	base := h.Clock.Now()
+	items := make([]apitest.Item, 0, 3)
+	for i := range 3 {
+		items = append(items, apitest.Item{
+			ID: "drop-" + strconv.Itoa(i), Title: "Drop " + strconv.Itoa(i),
+			Published: base.Add(time.Duration(i) * time.Second),
+		})
+	}
+	feedURL := h.Publisher.Serve("/feed.xml", apitest.RSS("The Publisher", "", items...))
+	subscribe(t, h, feedURL)
+
+	entries := listEntries(t, h, "").Entries
+	if len(entries) != 3 {
+		t.Fatalf("subscribing produced %d Entries, want 3", len(entries))
+	}
+	ids := make(map[int64]bool, 3)
+	for _, entry := range entries {
+		ids[entry.ID] = true
+	}
+
+	before := readSince(t, h, "")
+	if before.NextSince == "" {
+		t.Fatal("delta feed carried no cursor after the initial Entries, so a catch-up position is unreachable")
+	}
+
+	// Age all three Entries past retention in the same cleanup pass, so they
+	// share one cleanup batch the way a real first run against an existing
+	// database would.
+	h.Clock.Advance(2 * time.Hour)
+	waitForRemoval(t, h, entries[0].ID, 2*time.Second)
+	waitForRemoval(t, h, entries[1].ID, 2*time.Second)
+	waitForRemoval(t, h, entries[2].ID, 2*time.Second)
+
+	// A delta reader that pages with a limit smaller than the batch must
+	// still reach every tombstone across successive pages, not lose the
+	// remainder once the first page's cursor passes the shared seq.
+	seen := map[int64]bool{}
+	cursor := before.NextSince
+	for range 3 {
+		page := readSince(t, h, cursor+"&limit=1")
+		for _, id := range page.Tombstones {
+			seen[id] = true
+		}
+		if page.NextSince == "" || page.NextSince == cursor {
+			break
+		}
+		cursor = page.NextSince
+	}
+	for id := range ids {
+		if !seen[id] {
+			t.Errorf("tombstones paged from the delta feed = %v, want Entry %d among them", seen, id)
+		}
+	}
+}
+
+// TestMarkAllReadEachEntryGetsADistinctChangeSeq proves the fix for a real
+// data-loss bug: mark-all-read used to stamp every affected Entry with one
+// shared change_seq, so a delta reader paging with a limit smaller than the
+// batch would permanently lose every Entry past the first page rather than
+// merely see it later.
+func TestMarkAllReadEachEntryGetsADistinctChangeSeq(t *testing.T) {
+	h := loggedIn(t)
+
+	base := h.Clock.Now()
+	items := make([]apitest.Item, 0, 3)
+	for i := range 3 {
+		items = append(items, apitest.Item{
+			ID: "item-" + strconv.Itoa(i), Title: "Item " + strconv.Itoa(i),
+			Published: base.Add(time.Duration(i) * time.Second),
+		})
+	}
+	feedURL := h.Publisher.Serve("/feed.xml", apitest.RSS("The Publisher", "", items...))
+	subscribe(t, h, feedURL)
+
+	entries := listEntries(t, h, "").Entries
+	if len(entries) != 3 {
+		t.Fatalf("subscribing produced %d Entries, want 3", len(entries))
+	}
+	ids := make(map[int64]bool, 3)
+	for _, entry := range entries {
+		ids[entry.ID] = true
+	}
+
+	before := readSince(t, h, "")
+	if before.NextSince == "" {
+		t.Fatal("delta feed carried no cursor after the initial Entries, so a catch-up position is unreachable")
+	}
+
+	h.Do(http.MethodPut, "/api/entries/state", map[string]bool{"read": true}).ExpectStatus(http.StatusNoContent)
+
+	seen := map[int64]bool{}
+	cursor := before.NextSince
+	for range 3 {
+		page := readSince(t, h, cursor+"&limit=1")
+		for _, entry := range page.Entries {
+			seen[entry.ID] = true
+		}
+		if page.NextSince == "" || page.NextSince == cursor {
+			break
+		}
+		cursor = page.NextSince
+	}
+	for id := range ids {
+		if !seen[id] {
+			t.Errorf("Entries paged from the delta feed = %v, want Entry %d among them", seen, id)
+		}
+	}
+}
