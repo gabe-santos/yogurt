@@ -11,7 +11,8 @@ export type Action =
   | 'close'
   | 'toggleRead'
   | 'help'
-  | 'search';
+  | 'search'
+  | 'addFeed';
 
 /** Binding is one keyboard shortcut: the key a reader presses, what it does. */
 export interface Binding {
@@ -27,6 +28,7 @@ export const bindings: Binding[] = [
   { key: 'Escape', description: 'Back to the Entry List', action: 'close' },
   { key: 'm', description: 'Toggle Read / unread', action: 'toggleRead' },
   { key: '/', description: 'Search', action: 'search' },
+  { key: 'a', description: 'Add a Feed', action: 'addFeed' },
   { key: '?', description: 'Show this help', action: 'help' },
 ];
 

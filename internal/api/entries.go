@@ -68,14 +68,6 @@ func (h *Handler) parseEntrySelection(w http.ResponseWriter, r *http.Request) (s
 		}
 		selection.FeedID = feedID
 	}
-	if raw := query.Get("group"); raw != "" {
-		groupID, err := strconv.ParseInt(raw, 10, 64)
-		if err != nil {
-			h.writeError(w, r, http.StatusBadRequest, "group must be a Group id")
-			return store.EntrySelection{}, false
-		}
-		selection.GroupID = groupID
-	}
 	if raw := query.Get("unread"); raw != "" {
 		unread, err := strconv.ParseBool(raw)
 		if err != nil {
@@ -194,7 +186,7 @@ func (h *Handler) parseLimit(w http.ResponseWriter, r *http.Request) (int, bool)
 // changed-since feed refuses, rather than silently ignoring: it always reads
 // the whole collection, so a caller believing it scoped a sync would
 // otherwise get every Entry with no signal that the scope was dropped.
-var sinceScopeParams = []string{"feed", "group", "unread", "starred", "archived", "order", "around", "cursor"}
+var sinceScopeParams = []string{"feed", "unread", "starred", "archived", "order", "around", "cursor"}
 
 // listEntriesSince is the changed-since feed: every Entry changed, and every
 // Entry retention removed, after the since cursor, oldest first, over the

@@ -72,14 +72,6 @@ func New(db *store.Store, client *fetch.Client, now clock.Clock, logger *slog.Lo
 // title, once trimmed, becomes the Feed's stored title; an empty or
 // all-whitespace title falls back to the publisher's own title.
 func (s *Service) Subscribe(ctx context.Context, rawURL string, title string) (store.Feed, error) {
-	return s.SubscribeInGroup(ctx, rawURL, 0, title)
-}
-
-// SubscribeInGroup is Subscribe, saving the Feed directly into groupID
-// rather than the default Group. It exists for OPML import, which resolves a
-// Feed's Group before the Feed itself is subscribed. A zero groupID behaves
-// exactly like Subscribe.
-func (s *Service) SubscribeInGroup(ctx context.Context, rawURL string, groupID int64, title string) (store.Feed, error) {
 	target, err := fetch.ParseURL(strings.TrimSpace(rawURL))
 	if err != nil {
 		return store.Feed{}, err
@@ -117,7 +109,6 @@ func (s *Service) SubscribeInGroup(ctx context.Context, rawURL string, groupID i
 		URL:     feedURL,
 		Title:   resolvedTitle,
 		SiteURL: document.SiteURL,
-		GroupID: groupID,
 	}, now)
 	if err != nil {
 		return store.Feed{}, err
@@ -134,39 +125,32 @@ func (s *Service) SubscribeInGroup(ctx context.Context, rawURL string, groupID i
 	return saved, nil
 }
 
-// SubscribeRequest is one address OPML import wants to subscribe to, and the
-// Group it belongs to.
-type SubscribeRequest struct {
-	URL     string
-	GroupID int64
-}
-
-// SubscribeOutcome is what came of one SubscribeRequest: the Feed on success,
-// or the error SubscribeInGroup returned.
+// SubscribeOutcome is what came of one address OPML import asked to
+// subscribe to: the Feed on success, or the error Subscribe returned.
 type SubscribeOutcome struct {
 	Feed store.Feed
 	Err  error
 }
 
 // SubscribeMany subscribes to a set of addresses concurrently, bounded by
-// concurrency, and returns one SubscribeOutcome per request in the same
+// concurrency, and returns one SubscribeOutcome per address in the same
 // order — so a slow or dead publisher among hundreds an OPML import names
 // does not hold the whole import open, the way refreshMany already bounds
 // refreshing many Feeds at once.
-func (s *Service) SubscribeMany(ctx context.Context, requests []SubscribeRequest) []SubscribeOutcome {
-	results := make([]SubscribeOutcome, len(requests))
+func (s *Service) SubscribeMany(ctx context.Context, urls []string) []SubscribeOutcome {
+	results := make([]SubscribeOutcome, len(urls))
 	var wait sync.WaitGroup
 	slots := make(chan struct{}, concurrency)
-	for i, request := range requests {
+	for i, url := range urls {
 		wait.Add(1)
-		go func(i int, request SubscribeRequest) {
+		go func(i int, url string) {
 			defer wait.Done()
 			slots <- struct{}{}
 			defer func() { <-slots }()
 
-			feed, err := s.SubscribeInGroup(ctx, request.URL, request.GroupID, "")
+			feed, err := s.Subscribe(ctx, url, "")
 			results[i] = SubscribeOutcome{Feed: feed, Err: err}
-		}(i, request)
+		}(i, url)
 	}
 	wait.Wait()
 	return results

@@ -2,7 +2,7 @@
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
-  import * as Alert from "$lib/components/ui/alert";
+  import AddFeedDialog from "$lib/AddFeedDialog.svelte";
   import * as Sidebar from "$lib/components/ui/sidebar";
   import * as Select from "$lib/components/ui/select";
   import * as Tabs from "$lib/components/ui/tabs";
@@ -21,7 +21,6 @@
   import { goto, invalidateAll, replaceState } from "$app/navigation";
   import {
     ApiError,
-    addFeed,
     deleteFeed,
     feedIconUrl,
     getSettings,
@@ -156,9 +155,7 @@
   let manuallyUnread = $state<Set<number>>(new Set());
   let pendingEntryIDs = $state<Set<number>>(new Set());
 
-  let address = $state("");
-  let subscribing = $state(false);
-  let subscribeError = $state("");
+  let addFeedOpen = $state(false);
   let notice = $state("");
   let busy = $state(false);
   // busy blocks every list-changing action; refreshing is narrower, so only
@@ -295,25 +292,15 @@
     feeds = await listFeeds();
   }
 
-  async function subscribe(event: SubmitEvent) {
-    event.preventDefault();
-    subscribeError = "";
-    notice = "";
-    subscribing = true;
+  async function handleFeedSubscribed(feed: Feed) {
+    addFeedOpen = false;
     try {
-      const feed = await addFeed(address);
-      address = "";
       await refreshCounts();
       scope = { type: "feed", id: feed.id };
       await reload();
       notice = `Subscribed to ${feed.title}.`;
     } catch (cause) {
-      subscribeError =
-        cause instanceof ApiError
-          ? cause.message
-          : "Could not reach the server";
-    } finally {
-      subscribing = false;
+      reportError(cause);
     }
   }
 
@@ -779,6 +766,8 @@
       helpOpen = false;
     } else if (deviceTokensOpen) {
       deviceTokensOpen = false;
+    } else if (addFeedOpen) {
+      addFeedOpen = false;
     } else if (removal) {
       removal = undefined;
     } else {
@@ -796,6 +785,7 @@
     toggleRead: toggleReadCurrent,
     help: () => (helpOpen = true),
     search: () => (searchOpen = true),
+    addFeed: () => (addFeedOpen = true),
   };
 
   function isTypingTarget(target: EventTarget | null): boolean {
@@ -818,7 +808,7 @@
         continue;
       }
       if (
-        (helpOpen || searchOpen || deviceTokensOpen || removal) &&
+        (helpOpen || searchOpen || deviceTokensOpen || addFeedOpen || removal) &&
         binding.action !== "close"
       ) {
         return;
@@ -878,51 +868,14 @@
           <Button variant="ghost" size="sm" onclick={signOut}>Sign out</Button>
         </div>
       </div>
-
-      <!-- Adding a Feed is one line: a field and the act, at the size of every
-           other control. It used to be the loudest element in the app. -->
-      <form class="flex flex-col gap-1.5 px-2" onsubmit={subscribe}>
-        <Label for="address" class="text-xs font-normal text-muted-foreground">
-          Feed or site address
-        </Label>
-        <div class="flex items-center gap-1.5">
-          <Input
-            id="address"
-            name="address"
-            type="url"
-            required
-            class="min-w-0 flex-1"
-            placeholder="https://example.com"
-            bind:value={address}
-          />
-          <Button
-            type="submit"
-            variant="outline"
-            size="icon"
-            aria-label="Subscribe"
-            disabled={subscribing}
-          >
-            <IconSwap active={subscribing}>
-              {#snippet on()}
-                <LoaderCircleIcon class="animate-spin" />
-              {/snippet}
-              {#snippet off()}
-                <PlusIcon />
-              {/snippet}
-            </IconSwap>
-          </Button>
-        </div>
-        {#if subscribeError}
-          <Alert.Root variant="destructive" class="px-0 py-1">
-            <Alert.Description>{subscribeError}</Alert.Description>
-          </Alert.Root>
-        {/if}
-      </form>
     </Sidebar.Header>
 
     <Sidebar.Content>
       <Sidebar.Group>
         <Sidebar.GroupLabel>Feeds</Sidebar.GroupLabel>
+        <Sidebar.GroupAction aria-label="Add Feed" onclick={() => (addFeedOpen = true)}>
+          <PlusIcon />
+        </Sidebar.GroupAction>
         <Sidebar.GroupContent>
           <Sidebar.Menu>
             <Sidebar.MenuItem>
@@ -1250,6 +1203,13 @@
 
 {#if helpOpen}
   <HelpDialog onClose={() => (helpOpen = false)} />
+{/if}
+
+{#if addFeedOpen}
+  <AddFeedDialog
+    onClose={() => (addFeedOpen = false)}
+    onSubscribed={handleFeedSubscribed}
+  />
 {/if}
 
 {#if deviceTokensOpen}

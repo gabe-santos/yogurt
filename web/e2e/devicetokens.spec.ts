@@ -8,7 +8,7 @@ test('the reader creates, sees the last use of, and revokes a device token', asy
   await page.goto('/login');
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Sign in' }).click();
-  await expect(page.getByLabel('Feed or site address')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Add Feed' })).toBeVisible();
 
   await page.getByRole('button', { name: 'Device tokens' }).click();
   const dialog = page.getByTestId('device-tokens-dialog');
@@ -32,7 +32,7 @@ test('the reader creates, sees the last use of, and revokes a device token', asy
   // The token authenticates a request, and the dialog reflects that once
   // reopened.
   const authenticated = await page.evaluate(async (token) => {
-    const response = await fetch('/api/groups', {
+    const response = await fetch('/api/feeds', {
       headers: { Authorization: `Bearer ${token}` },
     });
     return response.status;
@@ -51,7 +51,7 @@ test('the reader creates, sees the last use of, and revokes a device token', asy
   await expect(dialog.getByText('No device tokens yet.')).toBeVisible();
 
   const revokedStatus = await page.evaluate(async (token) => {
-    const response = await fetch('/api/groups', {
+    const response = await fetch('/api/feeds', {
       headers: { Authorization: `Bearer ${token}` },
     });
     return response.status;

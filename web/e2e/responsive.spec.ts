@@ -15,15 +15,17 @@ test('on a phone-sized viewport the sidebar is a sheet and reading still works',
   await page.getByRole('button', { name: 'Sign in' }).click();
   await expect(page.getByTestId('entry')).toHaveCount(2);
 
-  // The Feed/Group sidebar starts as a sheet, not a fixed column: its
-  // contents are absent until the trigger opens it.
+  // The Feed sidebar starts as a sheet, not a fixed column: its contents are
+  // absent until the trigger opens it.
   const sidebarSheet = page.getByRole('dialog', { name: 'Sidebar' });
   await expect(sidebarSheet).toBeHidden();
-  await expect(page.getByLabel('Feed or site address')).toBeHidden();
+  await expect(page.getByRole('button', { name: 'Add Feed' })).toBeHidden();
 
   await page.getByRole('button', { name: 'Toggle Sidebar' }).click();
   await expect(sidebarSheet).toBeVisible();
-  await expect(sidebarSheet.getByLabel('Feed or site address')).toBeVisible();
+  await expect(
+    sidebarSheet.getByRole('button', { name: 'Add Feed' }),
+  ).toBeVisible();
   await expect(
     sidebarSheet.getByRole('button', { name: 'All Feeds' }),
   ).toBeVisible();

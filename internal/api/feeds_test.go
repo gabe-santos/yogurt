@@ -18,7 +18,6 @@ type feedView struct {
 	URL           string     `json:"url"`
 	Title         string     `json:"title"`
 	SiteURL       string     `json:"site_url"`
-	GroupID       int64      `json:"group_id"`
 	UnreadCount   int        `json:"unread_count"`
 	IconStoredAt  *time.Time `json:"icon_stored_at"`
 	IconCheckedAt *time.Time `json:"icon_checked_at"`
@@ -447,4 +446,61 @@ func equalStrings(got, want []string) bool {
 		}
 	}
 	return true
+}
+
+func TestAFeedCanBeRenamed(t *testing.T) {
+	h := loggedIn(t)
+	feedURL := h.Publisher.Serve("/feed.xml", apitest.RSS("The Publisher", "",
+		apitest.Item{ID: "one", Title: "First post", Published: published}))
+	feed := subscribe(t, h, feedURL)
+
+	var renamed struct {
+		Feed feedView `json:"feed"`
+	}
+	h.Do(http.MethodPut, "/api/feeds/"+strconv.FormatInt(feed.ID, 10),
+		map[string]any{"title": "My Feed"}).
+		ExpectStatus(http.StatusOK).
+		JSON(&renamed)
+	if renamed.Feed.Title != "My Feed" {
+		t.Errorf("renamed feed title = %q, want My Feed", renamed.Feed.Title)
+	}
+}
+
+func TestDeletingAFeedRemovesItsEntries(t *testing.T) {
+	h := loggedIn(t)
+	feedURL := h.Publisher.Serve("/feed.xml", apitest.RSS("The Publisher", "",
+		apitest.Item{ID: "one", Title: "First post", Published: published}))
+	feed := subscribe(t, h, feedURL)
+
+	h.Do(http.MethodDelete, "/api/feeds/"+strconv.FormatInt(feed.ID, 10), nil).
+		ExpectStatus(http.StatusNoContent)
+
+	page := listEntries(t, h, feedQuery(feed))
+	if len(page.Entries) != 0 {
+		t.Fatalf("entries after deleting the Feed = %d, want none", len(page.Entries))
+	}
+
+	h.Do(http.MethodDelete, "/api/feeds/9999", nil).ExpectStatus(http.StatusNotFound)
+}
+
+func TestUnreadCountPerFeedStaysCorrectAsEntriesAreRead(t *testing.T) {
+	h := loggedIn(t)
+	feedURL := h.Publisher.Serve("/feed.xml", apitest.RSS("The Publisher", "",
+		apitest.Item{ID: "one", Title: "First post", Published: published},
+		apitest.Item{ID: "two", Title: "Second post", Published: published.Add(time.Hour)},
+	))
+	feed := subscribe(t, h, feedURL)
+
+	feeds := listFeeds(t, h)
+	if feeds[0].UnreadCount != 2 {
+		t.Fatalf("unread count before reading = %d, want 2", feeds[0].UnreadCount)
+	}
+
+	page := listEntries(t, h, feedQuery(feed))
+	setEntryState(t, h, page.Entries[0].ID, entryState{Read: true})
+
+	feeds = listFeeds(t, h)
+	if feeds[0].UnreadCount != 1 {
+		t.Errorf("unread count after reading one = %d, want 1", feeds[0].UnreadCount)
+	}
 }

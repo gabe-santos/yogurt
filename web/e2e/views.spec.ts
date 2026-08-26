@@ -3,18 +3,15 @@ import { expect, test } from '@playwright/test';
 import { password, publisherURL } from './env';
 
 // Runs after reading.spec.ts: the suite shares one database and one worker, in
-// file-name order, and this journey opens Entries — which would clear the
-// unread state that journey asserts on.
+// file-name order, and this journey reuses the Feed and Entries that journey
+// already subscribed to rather than subscribing again, which the app would
+// refuse.
 test('the reader switches views, keeps the choice, and is offered a tab when a publisher refuses the frame', async ({
   page,
 }) => {
   await page.goto('/login');
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Sign in' }).click();
-  await expect(page.getByLabel('Feed or site address')).toBeVisible();
-
-  await page.getByLabel('Feed or site address').fill(publisherURL);
-  await page.getByRole('button', { name: 'Subscribe' }).click();
   await expect(page.getByTestId('entry')).toHaveCount(2);
 
   // Newest first: Wheels, which forbids framing, then Fire, which allows it.

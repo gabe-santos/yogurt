@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 import { password, publisherURL } from './env';
+import { subscribeToFeed } from './actions';
 
 test('the reader opens an Entry, reads it, and triages by keyboard', async ({
   page,
@@ -8,10 +9,9 @@ test('the reader opens an Entry, reads it, and triages by keyboard', async ({
   await page.goto('/login');
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Sign in' }).click();
-  await expect(page.getByLabel('Feed or site address')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Add Feed' })).toBeVisible();
 
-  await page.getByLabel('Feed or site address').fill(publisherURL);
-  await page.getByRole('button', { name: 'Subscribe' }).click();
+  await subscribeToFeed(page, publisherURL);
   await expect(page.getByTestId('entry')).toHaveCount(2);
 
   // The Feed Icon slot renders the publisher's real, stored icon —
@@ -183,6 +183,7 @@ test('the reader opens an Entry, reads it, and triages by keyboard', async ({
   const help = page.getByTestId('help-dialog');
   await expect(help).toBeVisible();
   await expect(help).toContainText('Next Entry');
+  await expect(help).toContainText('Add a Feed');
   await page.keyboard.press('Escape');
   await expect(help).toBeHidden();
 

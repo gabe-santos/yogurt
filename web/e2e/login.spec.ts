@@ -14,11 +14,11 @@ test('the reader signs in, stays signed in across a reload, and signs out', asyn
 
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Sign in' }).click();
-  await expect(page.getByLabel('Feed or site address')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Add Feed' })).toBeVisible();
 
   // The session cookie outlives the page, which is the point of it.
   await page.reload();
-  await expect(page.getByLabel('Feed or site address')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Add Feed' })).toBeVisible();
 
   await page.getByRole('button', { name: 'Sign out' }).click();
   await expect(page).toHaveURL(/\/login$/);

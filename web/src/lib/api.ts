@@ -22,7 +22,6 @@ export interface Feed {
   url: string;
   title: string;
   site_url: string;
-  group_id: number;
   unread_count: number;
   created_at: string;
   last_checked_at: string | null;
@@ -179,11 +178,14 @@ export async function listFeeds(): Promise<Feed[]> {
 
 /**
  * addFeed subscribes to a Feed. The address may be the Feed itself or a page
- * that advertises one; the server discovers which.
+ * that advertises one; the server discovers which. title, once trimmed,
+ * becomes the Feed's stored name; omitted or blank falls back to the
+ * publisher's own title.
  */
-export async function addFeed(url: string): Promise<Feed> {
+export async function addFeed(url: string, title?: string): Promise<Feed> {
   const response = await send('POST', '/feeds', 'Could not add that Feed', {
     url,
+    title,
   });
   const body = (await response.json()) as { feed: Feed };
   return body.feed;

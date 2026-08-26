@@ -24,7 +24,6 @@ type Feed struct {
 	URL       string
 	Title     string
 	SiteURL   string
-	GroupID   int64
 	CreatedAt time.Time
 	UpdatedAt time.Time
 
@@ -98,9 +97,6 @@ func (c Cursor) IsZero() bool { return c.ID == 0 && c.PublishedAt.IsZero() }
 type EntrySelection struct {
 	// FeedID scopes the selection to one Feed; zero means every Feed.
 	FeedID int64
-	// GroupID scopes the selection to one Group; zero means every Group. Ignored
-	// when FeedID is set.
-	GroupID int64
 	// UnreadOnly and StarredOnly narrow the active reading list. ArchivedOnly
 	// selects the Archive instead; every other selection excludes Archived Entries.
 	UnreadOnly   bool
@@ -124,25 +120,15 @@ type EntryQuery struct {
 	Limit int
 }
 
-// CreateFeed stores a new subscription and returns it with its assigned id. A
-// zero GroupID is resolved to the default Group, so a Feed is never
-// unreachable. It returns ErrFeedExists when this Feed URL is already
-// subscribed.
+// CreateFeed stores a new subscription and returns it with its assigned id.
+// It returns ErrFeedExists when this Feed URL is already subscribed.
 func (s *Store) CreateFeed(ctx context.Context, feed Feed, now time.Time) (Feed, error) {
-	if feed.GroupID == 0 {
-		groupID, err := s.defaultGroupID(ctx)
-		if err != nil {
-			return Feed{}, fmt.Errorf("create feed %s: %w", feed.URL, err)
-		}
-		feed.GroupID = groupID
-	}
-
 	err := s.db.QueryRowContext(ctx,
-		`INSERT INTO feeds (url, title, site_url, group_id, created_at, updated_at)
-	 VALUES (?, ?, ?, ?, ?, ?)
+		`INSERT INTO feeds (url, title, site_url, created_at, updated_at)
+	 VALUES (?, ?, ?, ?, ?)
 	 ON CONFLICT (url) DO NOTHING
 	 RETURNING id`,
-		feed.URL, feed.Title, feed.SiteURL, feed.GroupID, now.Unix(), now.Unix()).Scan(&feed.ID)
+		feed.URL, feed.Title, feed.SiteURL, now.Unix(), now.Unix()).Scan(&feed.ID)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		return Feed{}, ErrFeedExists
@@ -154,7 +140,7 @@ func (s *Store) CreateFeed(ctx context.Context, feed Feed, now time.Time) (Feed,
 	return feed, nil
 }
 
-const feedColumns = `id, url, title, site_url, group_id, created_at, updated_at,
+const feedColumns = `id, url, title, site_url, created_at, updated_at,
 	etag, last_modified, next_check_at, last_checked_at, last_success_at, last_error, consecutive_failures,
 	icon_stored_at, icon_checked_at`
 
@@ -162,7 +148,7 @@ func scanFeed(row rowScanner) (Feed, error) {
 	var feed Feed
 	var createdAt, updatedAt, nextCheckAt, lastCheckedAt, lastSuccessAt int64
 	var iconStoredAt, iconCheckedAt int64
-	if err := row.Scan(&feed.ID, &feed.URL, &feed.Title, &feed.SiteURL, &feed.GroupID,
+	if err := row.Scan(&feed.ID, &feed.URL, &feed.Title, &feed.SiteURL,
 		&createdAt, &updatedAt,
 		&feed.ETag, &feed.LastModified, &nextCheckAt, &lastCheckedAt, &lastSuccessAt,
 		&feed.LastError, &feed.ConsecutiveFailures,
@@ -222,59 +208,27 @@ func (s *Store) Feeds(ctx context.Context) ([]Feed, error) {
 }
 
 // FeedPatch declares the fields of a Feed the reader wants to change; a nil
-// field is left as stored, so title and Group can be changed independently in
-// a single idempotent declaration.
+// field is left as stored.
 type FeedPatch struct {
-	Title   *string
-	GroupID *int64
+	Title *string
 }
 
-// UpdateFeed applies a FeedPatch to a Feed in one transaction, so a Group
-// that turns out not to exist changes nothing rather than leaving the Feed
-// half-updated. It returns ErrNoFeed when there is no such Feed, and
-// ErrNoGroup when GroupID names a Group that is not there.
+// UpdateFeed applies a FeedPatch to a Feed and returns it as stored. It
+// returns ErrNoFeed when there is no such Feed.
 func (s *Store) UpdateFeed(ctx context.Context, id int64, patch FeedPatch, now time.Time) (Feed, error) {
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return Feed{}, fmt.Errorf("update feed %d: %w", id, err)
-	}
-	defer tx.Rollback()
-
-	var exists int
-	err = tx.QueryRowContext(ctx, `SELECT 1 FROM feeds WHERE id = ?`, id).Scan(&exists)
-	switch {
-	case errors.Is(err, sql.ErrNoRows):
-		return Feed{}, ErrNoFeed
-	case err != nil:
-		return Feed{}, fmt.Errorf("update feed %d: %w", id, err)
-	}
-
-	if patch.GroupID != nil {
-		var groupExists int
-		err = tx.QueryRowContext(ctx, `SELECT 1 FROM groups WHERE id = ?`, *patch.GroupID).Scan(&groupExists)
-		switch {
-		case errors.Is(err, sql.ErrNoRows):
-			return Feed{}, ErrNoGroup
-		case err != nil:
-			return Feed{}, fmt.Errorf("update feed %d: %w", id, err)
-		}
-	}
-
 	if patch.Title != nil {
-		if _, err := tx.ExecContext(ctx,
-			`UPDATE feeds SET title = ?, updated_at = ? WHERE id = ?`, *patch.Title, now.Unix(), id); err != nil {
+		result, err := s.db.ExecContext(ctx,
+			`UPDATE feeds SET title = ?, updated_at = ? WHERE id = ?`, *patch.Title, now.Unix(), id)
+		if err != nil {
 			return Feed{}, fmt.Errorf("update feed %d: %w", id, err)
 		}
-	}
-	if patch.GroupID != nil {
-		if _, err := tx.ExecContext(ctx,
-			`UPDATE feeds SET group_id = ?, updated_at = ? WHERE id = ?`, *patch.GroupID, now.Unix(), id); err != nil {
+		affected, err := result.RowsAffected()
+		if err != nil {
 			return Feed{}, fmt.Errorf("update feed %d: %w", id, err)
 		}
-	}
-
-	if err := tx.Commit(); err != nil {
-		return Feed{}, fmt.Errorf("update feed %d: %w", id, err)
+		if affected == 0 {
+			return Feed{}, ErrNoFeed
+		}
 	}
 	return s.Feed(ctx, id)
 }
@@ -538,14 +492,11 @@ func (s *Store) SaveEntries(ctx context.Context, feedID int64, entries []Entry, 
 // entryWhere renders the one filter-and-scope definition used by both listing
 // and bulk state declarations, so mark-all-read cannot select more than the UI.
 func entryWhere(selection EntrySelection) ([]string, []any) {
-	where := make([]string, 0, 5)
-	args := make([]any, 0, 2)
+	where := make([]string, 0, 4)
+	args := make([]any, 0, 1)
 	if selection.FeedID != 0 {
 		where = append(where, "e.feed_id = ?")
 		args = append(args, selection.FeedID)
-	} else if selection.GroupID != 0 {
-		where = append(where, "f.group_id = ?")
-		args = append(args, selection.GroupID)
 	}
 	if selection.ArchivedOnly {
 		where = append(where, "e.archived = 1")
@@ -709,7 +660,7 @@ func (s *Store) MarkEntriesRead(ctx context.Context, selection EntrySelection, n
 	defer tx.Rollback()
 
 	idRows, err := tx.QueryContext(ctx,
-		`SELECT e.id FROM entries e JOIN feeds f ON f.id = e.feed_id
+		`SELECT e.id FROM entries e
 		 WHERE `+strings.Join(where, " AND ")+" AND e.read = 0",
 		selectionArgs...)
 	if err != nil {

@@ -30,6 +30,25 @@ const feed = `<?xml version="1.0" encoding="UTF-8"?>
 </rss>
 `;
 
+// A second, minimal Feed under its own publisher title — separate from The
+// Daily Cave so a journey can subscribe to it without the "already
+// subscribed" refusal reading.spec.ts's subscription would otherwise cause.
+const secondFeed = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Second Publisher</title>
+    <link>${publisherURL}/second/</link>
+    <item>
+      <title>Only post</title>
+      <link>${publisherURL}/second/one</link>
+      <guid isPermaLink="false">one</guid>
+      <pubDate>Sat, 03 Jan 2026 10:00:00 +0000</pubDate>
+      <description>The only post.</description>
+    </item>
+  </channel>
+</rss>
+`;
+
 const page = `<!doctype html>
 <html>
   <head>
@@ -82,6 +101,7 @@ const article = (title) => `<!doctype html>
 
 const documents = {
   '/feed.xml': { type: 'application/rss+xml; charset=utf-8', body: feed },
+  '/second.xml': { type: 'application/rss+xml; charset=utf-8', body: secondFeed },
   '/': { type: 'text/html; charset=utf-8', body: page },
   '/icon.svg': { type: 'image/svg+xml', body: icon },
   // Fire allows being framed: Original View embeds it.

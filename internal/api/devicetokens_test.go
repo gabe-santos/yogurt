@@ -63,7 +63,7 @@ func TestADeviceTokenAuthenticatesRequestsAndRecordsItsLastUse(t *testing.T) {
 	_, raw := createDeviceToken(t, h, "desktop shell")
 
 	// A fresh client presenting only the token, no session cookie.
-	h.DoBearer(http.MethodGet, "/api/groups", raw, nil).ExpectStatus(http.StatusOK)
+	h.DoBearer(http.MethodGet, "/api/feeds", raw, nil).ExpectStatus(http.StatusOK)
 
 	tokens := listDeviceTokens(t, h)
 	if tokens[0].LastUsedAt == nil {
@@ -75,15 +75,15 @@ func TestARevokedDeviceTokenStopsAuthenticatingImmediately(t *testing.T) {
 	h := loggedIn(t)
 	token, raw := createDeviceToken(t, h, "desktop shell")
 
-	h.DoBearer(http.MethodGet, "/api/groups", raw, nil).ExpectStatus(http.StatusOK)
+	h.DoBearer(http.MethodGet, "/api/feeds", raw, nil).ExpectStatus(http.StatusOK)
 	h.Do(http.MethodDelete, "/api/device-tokens/"+strconv.FormatInt(token.ID, 10), nil).ExpectStatus(http.StatusNoContent)
 
-	h.DoBearer(http.MethodGet, "/api/groups", raw, nil).ExpectStatus(http.StatusUnauthorized)
+	h.DoBearer(http.MethodGet, "/api/feeds", raw, nil).ExpectStatus(http.StatusUnauthorized)
 }
 
 func TestAnInvalidBearerTokenIsRejected(t *testing.T) {
 	h := loggedIn(t)
-	h.DoBearer(http.MethodGet, "/api/groups", "not-a-real-token", nil).ExpectStatus(http.StatusUnauthorized)
+	h.DoBearer(http.MethodGet, "/api/feeds", "not-a-real-token", nil).ExpectStatus(http.StatusUnauthorized)
 }
 
 func TestCreatingADeviceTokenWithABlankNameIsRejected(t *testing.T) {

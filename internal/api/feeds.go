@@ -24,7 +24,6 @@ type feedView struct {
 	URL                 string     `json:"url"`
 	Title               string     `json:"title"`
 	SiteURL             string     `json:"site_url"`
-	GroupID             int64      `json:"group_id"`
 	UnreadCount         int        `json:"unread_count"`
 	CreatedAt           time.Time  `json:"created_at"`
 	LastCheckedAt       *time.Time `json:"last_checked_at"`
@@ -44,7 +43,6 @@ func viewFeed(feed store.Feed, unreadCounts map[int64]int) feedView {
 		URL:                 feed.URL,
 		Title:               feed.Title,
 		SiteURL:             feed.SiteURL,
-		GroupID:             feed.GroupID,
 		UnreadCount:         unreadCounts[feed.ID],
 		CreatedAt:           feed.CreatedAt,
 		LastCheckedAt:       zeroToNil(feed.LastCheckedAt),
@@ -154,17 +152,14 @@ func (h *Handler) refreshFeed(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// updateFeedRequest declares the fields of a Feed the reader wants to change;
-// an absent field is left as stored, so title and Group can be changed
-// independently of one another.
+// updateFeedRequest declares the fields of a Feed the reader wants to
+// change; an absent field is left as stored.
 type updateFeedRequest struct {
-	Title   *string `json:"title"`
-	GroupID *int64  `json:"group_id"`
+	Title *string `json:"title"`
 }
 
-// updateFeed changes a Feed's title and/or Group in one transaction so a Group
-// that turns out not to exist changes nothing. Only fields present in the
-// request are changed.
+// updateFeed changes a Feed's title. Only fields present in the request are
+// changed.
 func (h *Handler) updateFeed(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
@@ -174,24 +169,20 @@ func (h *Handler) updateFeed(w http.ResponseWriter, r *http.Request) {
 
 	var body updateFeedRequest
 	if err := json.NewDecoder(io.LimitReader(r.Body, maxFeedBody)).Decode(&body); err != nil {
-		h.writeError(w, r, http.StatusBadRequest, "expected a JSON object with title and/or group_id")
+		h.writeError(w, r, http.StatusBadRequest, "expected a JSON object with a title")
 		return
 	}
-	if body.Title == nil && body.GroupID == nil {
-		h.writeError(w, r, http.StatusBadRequest, "expected at least one of title or group_id")
+	if body.Title == nil {
+		h.writeError(w, r, http.StatusBadRequest, "expected a title")
 		return
 	}
 
 	feed, err := h.deps.Store.UpdateFeed(r.Context(), id, store.FeedPatch{
-		Title:   body.Title,
-		GroupID: body.GroupID,
+		Title: body.Title,
 	}, h.deps.Clock.Now())
 	switch {
 	case errors.Is(err, store.ErrNoFeed):
 		h.writeError(w, r, http.StatusNotFound, "no such Feed")
-		return
-	case errors.Is(err, store.ErrNoGroup):
-		h.writeError(w, r, http.StatusUnprocessableEntity, "no such Group")
 		return
 	case err != nil:
 		h.serverError(w, r, err)

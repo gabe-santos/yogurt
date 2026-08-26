@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 import { password, publisherURL } from './env';
+import { subscribeToFeed } from './actions';
 
 test('the reader subscribes to a site and reads what it published', async ({
   page,
@@ -8,11 +9,21 @@ test('the reader subscribes to a site and reads what it published', async ({
   await page.goto('/login');
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Sign in' }).click();
-  await expect(page.getByLabel('Feed or site address')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Add Feed' })).toBeVisible();
 
-  // The site's own address, not its Feed: the app finds the Feed itself.
-  await page.getByLabel('Feed or site address').fill(publisherURL);
-  await page.getByRole('button', { name: 'Subscribe' }).click();
+  // The suite shares one database, and reading.spec.ts already subscribed to
+  // this publisher: subscribing again — by the site's own address, not its
+  // Feed — is refused, with the reason beside the field that caused it, and
+  // the address stays put so it can be corrected. The dialog stays open.
+  const dialog = page.getByTestId('add-feed-dialog');
+  await subscribeToFeed(page, publisherURL);
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole('alert')).toContainText('already subscribed');
+  await expect(dialog.getByLabel('Feed or site address')).toHaveValue(
+    publisherURL,
+  );
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
 
   await expect(page.getByTestId('feed')).toHaveText('The Daily Cave');
   // The sidebar's Feed Icon was discovered at subscribe time, not just
@@ -26,12 +37,13 @@ test('the reader subscribes to a site and reads what it published', async ({
     'Wheels: a review',
   );
 
-  // Subscribing again is refused, with a reason.
-  await page
-    .getByLabel('Feed or site address')
-    .fill(`${publisherURL}/feed.xml`);
-  await page.getByRole('button', { name: 'Subscribe' }).click();
-  await expect(page.getByRole('alert')).toContainText('already subscribed');
+  // Subscribing to the Feed's own address, rather than the site, is refused
+  // the same way.
+  await subscribeToFeed(page, `${publisherURL}/feed.xml`);
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole('alert')).toContainText('already subscribed');
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
   await expect(page.getByTestId('feed')).toHaveCount(1);
 
   // A refresh on demand changes nothing when the publisher has published
@@ -61,15 +73,51 @@ test('the reader subscribes to a site and reads what it published', async ({
   await expect(page.getByTestId('entry')).toHaveCount(2);
 });
 
+test('the reader names a Feed while subscribing', async ({ page }) => {
+  await page.goto('/login');
+  await page.getByLabel('Password').fill(password);
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByRole('button', { name: 'Add Feed' })).toBeVisible();
+
+  // `a` opens the dialog exactly like the "+" action does.
+  await page.keyboard.press('a');
+  const dialog = page.getByTestId('add-feed-dialog');
+  await expect(dialog).toBeVisible();
+  await dialog.getByLabel('Feed or site address').fill(`${publisherURL}/second.xml`);
+  await dialog.getByLabel('Name').fill('My Second Feed');
+  await dialog.getByRole('button', { name: 'Subscribe' }).click();
+  await expect(dialog).toBeHidden();
+
+  const feed = page.getByTestId('feed').filter({ hasText: 'My Second Feed' });
+  await expect(feed).toBeVisible();
+  await expect(page.getByTestId('scope')).toHaveText('My Second Feed');
+  await expect(page.getByTestId('notice')).toHaveText(
+    'Subscribed to My Second Feed.',
+  );
+
+  // The suite shares one database; remove the Feed so the journeys after
+  // this one keep seeing only the Feed reading.spec.ts subscribed to.
+  const deleted = await page.evaluate(async () => {
+    const response = await fetch('/api/feeds');
+    const body = (await response.json()) as {
+      feeds: { id: number; title: string }[];
+    };
+    const named = body.feeds.find((f) => f.title === 'My Second Feed');
+    if (!named) return false;
+    const result = await fetch(`/api/feeds/${named.id}`, {
+      method: 'DELETE',
+    });
+    return result.ok;
+  });
+  expect(deleted).toBe(true);
+});
+
 test('the reader manages a Feed from its right-click menu', async ({
   page,
 }) => {
   await page.goto('/login');
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Sign in' }).click();
-
-  await page.getByLabel('Feed or site address').fill(publisherURL);
-  await page.getByRole('button', { name: 'Subscribe' }).click();
 
   const feed = page.getByTestId('feed');
   const feedMenu = page.getByTestId('feed-context-menu');
@@ -125,9 +173,6 @@ test('the "…" menu button opens the same menu as right-click, reporting Feed h
   await page.goto('/login');
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Sign in' }).click();
-
-  await page.getByLabel('Feed or site address').fill(publisherURL);
-  await page.getByRole('button', { name: 'Subscribe' }).click();
 
   const feed = page.getByTestId('feed');
   const feedMenu = page.getByTestId('feed-menu');
