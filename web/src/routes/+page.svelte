@@ -16,25 +16,20 @@
   import LoaderCircleIcon from "@lucide/svelte/icons/loader-circle";
   import PlusIcon from "@lucide/svelte/icons/plus";
   import SearchIcon from "@lucide/svelte/icons/search";
-  import Settings2Icon from "@lucide/svelte/icons/settings-2";
   import XIcon from "@lucide/svelte/icons/x";
   import { onMount } from "svelte";
   import { goto, invalidateAll, replaceState } from "$app/navigation";
   import {
     ApiError,
     addFeed,
-    createGroup,
     deleteFeed,
-    deleteGroup,
     feedIconUrl,
     getSettings,
     listEntries,
     listFeeds,
-    listGroups,
     logOut,
     markEntriesRead,
     refreshFeeds,
-    renameGroup,
     setEntryState,
     setSettings,
     updateFeed,
@@ -45,7 +40,6 @@
     EntrySelectionOptions,
     EntryView,
     Feed,
-    Group,
     SearchEntry,
     Settings,
   } from "$lib/api";
@@ -57,17 +51,15 @@
   import ConfirmDialog from "$lib/ConfirmDialog.svelte";
   import EntryRow from "$lib/EntryRow.svelte";
   import FeedRow from "$lib/FeedRow.svelte";
-  import GroupRow from "$lib/GroupRow.svelte";
-  import { formatPublished } from "$lib/format";
   import DeviceTokensDialog from "$lib/DeviceTokensDialog.svelte";
   import HelpDialog from "$lib/HelpDialog.svelte";
   import SearchDialog from "$lib/SearchDialog.svelte";
   import { bindings, matches } from "$lib/keys";
   import type { Action } from "$lib/keys";
 
-  /** Scope is what the reading list is narrowed to: a single Feed, a single
-   * Group, or (when undefined) every Feed. */
-  type Scope = { type: "feed"; id: number } | { type: "group"; id: number };
+  /** Scope is what the reading list is narrowed to: a single Feed, or (when
+   * undefined) every Feed. */
+  type Scope = { type: "feed"; id: number };
   type Filter = "all" | "unread" | "starred" | "archive";
   type FilterDefinition = {
     query: EntrySelectionOptions;
@@ -114,7 +106,6 @@
   // The reading list is the server's, and this page mutates it as the reader
   // works, so it owns the copy rather than deriving one from a load function.
   let feeds = $state<Feed[]>([]);
-  let groups = $state<Group[]>([]);
   let entries = $state<Entry[]>([]);
   let cursor = $state("");
   let scope = $state<Scope | undefined>(undefined);
@@ -174,28 +165,15 @@
   // the control the reader actually pressed reports that it is working.
   let refreshing = $state(false);
 
-  let newGroupName = $state("");
-  let creatingGroup = $state(false);
-  let editingGroup = $state<number | undefined>(undefined);
-  let groupNameDraft = $state("");
   let editingFeed = $state<number | undefined>(undefined);
   let feedTitleDraft = $state("");
-  // Renaming is reached from a Feed's or Group's own context menu, so the
-  // field it opens takes focus and selects the current name: the menu closed
-  // over it, and nothing else would put a cursor there.
-  let groupNameInput = $state<HTMLInputElement | null>(null);
+  // Renaming is reached from a Feed's own context menu, so the field it opens
+  // takes focus and selects the current name: the menu closed over it, and
+  // nothing else would put a cursor there.
   let feedTitleInput = $state<HTMLInputElement | null>(null);
-  $effect(() => {
-    groupNameInput?.select();
-  });
   $effect(() => {
     feedTitleInput?.select();
   });
-  // Managing the collection — renaming, moving, and deleting — is rare next
-  // to reading it, so the Feed List is navigation at rest and reveals its
-  // controls only when the reader asks for them. Without this, every Feed cost
-  // four rows of chrome and the list stopped being scannable.
-  let managing = $state(false);
   /** Removal is the one act this app cannot undo, so it is asked in the app's
    * own dialog rather than the browser's, and the consequence is named. */
   type Removal = {
@@ -212,28 +190,18 @@
       ? feeds.find((f) => f.id === current.id)
       : undefined;
   });
-  const scopedGroup = $derived.by(() => {
-    const current = scope;
-    return current && current.type === "group"
-      ? groups.find((g) => g.id === current.id)
-      : undefined;
-  });
-  const scopeTitle = $derived(
-    scopedFeed?.title ?? scopedGroup?.name ?? "All Feeds",
-  );
+  const scopeTitle = $derived(scopedFeed?.title ?? "All Feeds");
   const selectedEntry = $derived(
     selectedIndex !== undefined ? entries[selectedIndex] : undefined,
   );
   const overlayUp = $derived(narrow.current && selectedEntry !== undefined);
-  const feedsByGroup = $derived.by(() => {
-    const map = new Map<number, Feed[]>();
-    for (const feed of feeds) {
-      const list = map.get(feed.group_id) ?? [];
-      list.push(feed);
-      map.set(feed.group_id, list);
-    }
-    return map;
-  });
+  // The Feed List is a flat, title-sorted list of every Feed: this stays in
+  // step with a rename without a separate resort step.
+  const sortedFeeds = $derived(
+    [...feeds].sort((a, b) =>
+      a.title.localeCompare(b.title, undefined, { sensitivity: "base" }),
+    ),
+  );
 
   onMount(async () => {
     // An Entry named in the address bar is restored in place: the list loads
@@ -243,21 +211,19 @@
       new URL(window.location.href).searchParams.get("entry") ?? "",
     );
     try {
-      const [subscribed, page, settings, subscribedGroups] = await Promise.all([
+      const [subscribed, page, settings] = await Promise.all([
         listFeeds(),
         listEntries({
           ...(deepLink > 0 ? { around: deepLink } : {}),
           order: entryOrder,
         }),
         getSettings(),
-        listGroups(),
       ]);
       feeds = subscribed;
       entries = page.entries;
       cursor = page.next_cursor;
       markOnOpen = settings.mark_on_open;
       entryView = settings.entry_view;
-      groups = subscribedGroups;
       if (deepLink > 0) {
         const index = entries.findIndex((entry) => entry.id === deepLink);
         if (index >= 0) {
@@ -302,7 +268,6 @@
   ): EntrySelectionOptions {
     return {
       feed: currentScope?.type === "feed" ? currentScope.id : undefined,
-      group: currentScope?.type === "group" ? currentScope.id : undefined,
       ...filterDefinitions[currentFilter].query,
     };
   }
@@ -324,15 +289,10 @@
     manuallyUnread = new Set();
   }
 
-  /** refreshCounts re-reads Feeds and Groups so their unread counts stay
-   * correct after an Entry's Read state, or the collection itself, changes. */
+  /** refreshCounts re-reads Feeds so their unread counts stay correct after
+   * an Entry's Read state, or the collection itself, changes. */
   async function refreshCounts() {
-    const [nextFeeds, nextGroups] = await Promise.all([
-      listFeeds(),
-      listGroups(),
-    ]);
-    feeds = nextFeeds;
-    groups = nextGroups;
+    feeds = await listFeeds();
   }
 
   async function subscribe(event: SubmitEvent) {
@@ -761,73 +721,6 @@
     void savePreferences({ ...previous, entry_view: view }, previous);
   }
 
-  /** sortGroups matches the server's own order (default first, then by
-   * name), so a create or rename never leaves the sidebar out of step with
-   * what the next listGroups() would return. */
-  function sortGroups(list: Group[]): Group[] {
-    return [...list].sort((a, b) => {
-      if (a.is_default !== b.is_default) {
-        return a.is_default ? -1 : 1;
-      }
-      return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
-    });
-  }
-
-  async function submitNewGroup(event: SubmitEvent) {
-    event.preventDefault();
-    const name = newGroupName.trim();
-    if (!name) {
-      return;
-    }
-    creatingGroup = true;
-    try {
-      const group = await createGroup(name);
-      groups = sortGroups([...groups, group]);
-      newGroupName = "";
-    } catch (cause) {
-      reportError(cause);
-    } finally {
-      creatingGroup = false;
-    }
-  }
-
-  function startEditGroup(group: Group) {
-    editingGroup = group.id;
-    groupNameDraft = group.name;
-  }
-
-  async function saveGroupName(id: number) {
-    const name = groupNameDraft.trim();
-    editingGroup = undefined;
-    const current = groups.find((g) => g.id === id);
-    if (!name || current?.name === name) {
-      return;
-    }
-    try {
-      const updated = await renameGroup(id, name);
-      groups = sortGroups(groups.map((g) => (g.id === id ? updated : g)));
-    } catch (cause) {
-      reportError(cause);
-    }
-  }
-
-  function removeGroup(group: Group) {
-    removal = {
-      title: `Delete the Group "${group.name}"?`,
-      description:
-        "Its Feeds move to the default Group and keep their Entries. The Group itself is gone for good.",
-      confirmLabel: "Delete Group",
-      run: async () => {
-        await deleteGroup(group.id);
-        if (scope?.type === "group" && scope.id === group.id) {
-          scope = undefined;
-        }
-        await refreshCounts();
-        await reload();
-      },
-    };
-  }
-
   function startEditFeed(feed: Feed) {
     editingFeed = feed.id;
     feedTitleDraft = feed.title;
@@ -847,17 +740,6 @@
       reportError(cause);
     }
   }
-
-  async function moveFeed(feed: Feed, groupID: number) {
-    try {
-      const updated = await updateFeed(feed.id, { group_id: groupID });
-      feeds = feeds.map((f) => (f.id === feed.id ? updated : f));
-      await refreshCounts();
-    } catch (cause) {
-      reportError(cause);
-    }
-  }
-
 
   function removeFeed(feed: Feed) {
     removal = {
@@ -1041,15 +923,6 @@
     <Sidebar.Content>
       <Sidebar.Group>
         <Sidebar.GroupLabel>Feeds</Sidebar.GroupLabel>
-        <Sidebar.GroupAction
-          aria-label={managing ? "Done managing Feeds" : "Manage Feeds"}
-          aria-pressed={managing}
-          data-testid="manage-feeds"
-          class="aria-pressed:bg-sidebar-accent aria-pressed:text-sidebar-accent-foreground"
-          onclick={() => (managing = !managing)}
-        >
-          <Settings2Icon />
-        </Sidebar.GroupAction>
         <Sidebar.GroupContent>
           <Sidebar.Menu>
             <Sidebar.MenuItem>
@@ -1062,170 +935,32 @@
               </Sidebar.MenuButton>
             </Sidebar.MenuItem>
 
-            {#each groups as group (group.id)}
+            {#each sortedFeeds as feed (feed.id)}
               <Sidebar.MenuItem>
-                {#if editingGroup === group.id}
+                {#if editingFeed === feed.id}
                   <Input
-                    bind:ref={groupNameInput}
+                    bind:ref={feedTitleInput}
                     class="h-8 text-sm"
-                    aria-label={`Rename the Group ${group.name}`}
-                    bind:value={groupNameDraft}
-                    onblur={() => saveGroupName(group.id)}
+                    aria-label={`Rename the Feed ${feed.title}`}
+                    bind:value={feedTitleDraft}
+                    onblur={() => saveFeedTitle(feed.id)}
                     onkeydown={(event) => {
-                      if (event.key === "Enter") saveGroupName(group.id);
-                      if (event.key === "Escape") editingGroup = undefined;
+                      if (event.key === "Enter") saveFeedTitle(feed.id);
+                      if (event.key === "Escape") editingFeed = undefined;
                     }}
                   />
                 {:else}
-                  <GroupRow
-                    {group}
-                    isActive={scope?.type === "group" && scope.id === group.id}
-                    onSelect={() => scopeTo({ type: "group", id: group.id })}
-                    onRename={() => startEditGroup(group)}
-                    onDelete={() => removeGroup(group)}
+                  <FeedRow
+                    {feed}
+                    isActive={scope?.type === "feed" && scope.id === feed.id}
+                    onSelect={() => scopeTo({ type: "feed", id: feed.id })}
+                    onRename={() => startEditFeed(feed)}
+                    onDelete={() => removeFeed(feed)}
                   />
                 {/if}
               </Sidebar.MenuItem>
-
-              {#if managing && editingGroup !== group.id}
-                <div class="flex items-center gap-1.5 px-2 py-1.5">
-                  <Button
-                    variant="outline"
-                    size="xs"
-                    onclick={() => startEditGroup(group)}
-                  >
-                    Rename
-                  </Button>
-                  {#if !group.is_default}
-                    <Button
-                      variant="destructive"
-                      size="xs"
-                      onclick={() => removeGroup(group)}
-                    >
-                      Delete
-                    </Button>
-                  {/if}
-                </div>
-              {/if}
-
-              <Sidebar.MenuSub>
-                {#each feedsByGroup.get(group.id) ?? [] as feed (feed.id)}
-                  <Sidebar.MenuSubItem>
-                    {#if editingFeed === feed.id}
-                      <Input
-                        bind:ref={feedTitleInput}
-                        class="h-8 text-sm"
-                        aria-label={`Rename the Feed ${feed.title}`}
-                        bind:value={feedTitleDraft}
-                        onblur={() => saveFeedTitle(feed.id)}
-                        onkeydown={(event) => {
-                          if (event.key === "Enter") saveFeedTitle(feed.id);
-                          if (event.key === "Escape") editingFeed = undefined;
-                        }}
-                      />
-                    {:else}
-                      <FeedRow
-                        {feed}
-                        {groups}
-                        isActive={scope?.type === "feed" &&
-                          scope.id === feed.id}
-                        onSelect={() => scopeTo({ type: "feed", id: feed.id })}
-                        onRename={() => startEditFeed(feed)}
-                        onMove={(groupID) => moveFeed(feed, groupID)}
-                        onDelete={() => removeFeed(feed)}
-                      />
-
-                      {#if managing}
-                        <div
-                          class="mt-1 mb-1.5 flex flex-col gap-2 rounded-[calc(var(--radius)*1.8_+_8px)] bg-sidebar-accent/60 px-2 py-2 text-xs text-muted-foreground"
-                        >
-                          <!-- Rename is reversible; deletion stays on its own
-                               line below, where it cannot be hit by mistake. -->
-                          <div class="flex">
-                            <Button
-                              variant="outline"
-                              size="xs"
-                              onclick={() => startEditFeed(feed)}
-                            >
-                              Rename
-                            </Button>
-                          </div>
-                          <label class="sr-only" for={`move-feed-${feed.id}`}>
-                            Move {feed.title} to a Group
-                          </label>
-                          <select
-                            id={`move-feed-${feed.id}`}
-                            class="h-7 w-full min-w-0 rounded-2xl border border-transparent bg-input/50 px-2 text-xs text-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
-                            value={feed.group_id}
-                            onchange={(event) =>
-                              moveFeed(
-                                feed,
-                                Number(
-                                  (event.target as HTMLSelectElement).value,
-                                ),
-                              )}
-                          >
-                            {#each groups as option (option.id)}
-                              <option value={option.id}>{option.name}</option>
-                            {/each}
-                          </select>
-                          <!-- Silence and breakage read alike in a Feed List, so
-                               the last check is stated rather than inferred. -->
-                          <p
-                            class={feed.last_error
-                              ? "text-destructive"
-                              : ""}
-                            title={feed.last_checked_at
-                              ? `Last checked ${formatPublished(feed.last_checked_at)}`
-                              : "Not checked yet"}
-                          >
-                            {#if feed.last_error}
-                              Failing: {feed.last_error}
-                            {:else if feed.last_success_at}
-                              Checked {formatPublished(feed.last_success_at)}
-                            {:else}
-                              Not checked yet
-                            {/if}
-                          </p>
-                          <Button
-                            variant="destructive"
-                            size="xs"
-                            class="w-full"
-                            onclick={() => removeFeed(feed)}
-                          >
-                            Delete
-                          </Button>
-                        </div>
-                      {/if}
-                    {/if}
-                  </Sidebar.MenuSubItem>
-                {/each}
-              </Sidebar.MenuSub>
             {/each}
           </Sidebar.Menu>
-
-          {#if managing}
-            <form
-              class="mt-2 flex items-center gap-1.5 px-2"
-              onsubmit={submitNewGroup}
-            >
-              <Label for="new-group" class="sr-only">New Group</Label>
-              <Input
-                id="new-group"
-                class="h-7 min-w-0 flex-1 text-xs"
-                placeholder="New Group"
-                bind:value={newGroupName}
-              />
-              <Button
-                type="submit"
-                size="xs"
-                variant="outline"
-                disabled={creatingGroup}
-              >
-                Add
-              </Button>
-            </form>
-          {/if}
         </Sidebar.GroupContent>
       </Sidebar.Group>
     </Sidebar.Content>

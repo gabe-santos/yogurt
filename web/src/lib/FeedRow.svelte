@@ -1,6 +1,6 @@
 <script lang="ts">
   import { feedIconUrl } from '$lib/api';
-  import type { Feed, Group } from '$lib/api';
+  import type { Feed } from '$lib/api';
   import * as ContextMenu from '$lib/components/ui/context-menu';
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
   import * as Sidebar from '$lib/components/ui/sidebar';
@@ -8,33 +8,19 @@
   import { formatPublished } from '$lib/format';
   import FeedIcon from '$lib/FeedIcon.svelte';
   import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
-  import FolderIcon from '@lucide/svelte/icons/folder';
   import PencilIcon from '@lucide/svelte/icons/pencil';
   import Trash2Icon from '@lucide/svelte/icons/trash-2';
   import TriangleAlertIcon from '@lucide/svelte/icons/triangle-alert';
 
   interface Props {
     feed: Feed;
-    /** groups is every Group this Feed could be moved to, the one it is
-     * already in included: the menu states where the Feed is as much as it
-     * offers to move it. */
-    groups: Group[];
     isActive: boolean;
     onSelect: () => void;
     onRename: () => void;
-    onMove: (groupID: number) => void;
     onDelete: () => void;
   }
 
-  const {
-    feed,
-    groups,
-    isActive,
-    onSelect,
-    onRename,
-    onMove,
-    onDelete,
-  }: Props = $props();
+  const { feed, isActive, onSelect, onRename, onDelete }: Props = $props();
 
   // Right-click and the "…" button open the identical menu, so its body is
   // written once and rendered inside both ContextMenu.Content and
@@ -65,29 +51,6 @@
       <PencilIcon strokeWidth={1.5} />
       Rename
     </M.Item>
-    <M.Sub>
-      <M.SubTrigger class="gap-2">
-        <FolderIcon strokeWidth={1.5} />
-        Move to Group
-      </M.SubTrigger>
-      <M.SubContent>
-        <!-- A Feed belongs to exactly one Group, so the Group it is in is
-             the checked choice rather than a separate line of text. -->
-        <M.RadioGroup
-          value={String(feed.group_id)}
-          onValueChange={(value: string) => {
-            const groupID = Number(value);
-            if (groupID !== feed.group_id) onMove(groupID);
-          }}
-        >
-          {#each groups as group (group.id)}
-            <M.RadioItem value={String(group.id)}>
-              {group.name}
-            </M.RadioItem>
-          {/each}
-        </M.RadioGroup>
-      </M.SubContent>
-    </M.Sub>
   </M.Group>
   <M.Separator />
   <M.Group>
@@ -105,7 +68,7 @@
     {#snippet child({ props })}
       <!-- The unread count is absolutely positioned chrome, so the name has to
            be told to stop before it. -->
-      <Sidebar.MenuSubButton
+      <Sidebar.MenuButton
         {...props}
         data-testid="feed"
         class={cn(
@@ -128,7 +91,7 @@
         <span class="truncate">
           {feed.title}
         </span>
-      </Sidebar.MenuSubButton>
+      </Sidebar.MenuButton>
     {/snippet}
   </ContextMenu.Trigger>
   <ContextMenu.Content data-testid="feed-context-menu">

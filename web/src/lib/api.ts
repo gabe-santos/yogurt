@@ -41,16 +41,6 @@ export function feedIconUrl(feed: Feed): string | undefined {
   return `/api/feeds/${feed.id}/icon?v=${encodeURIComponent(feed.icon_stored_at)}`;
 }
 
-/** Group is a named set of Feeds, used to scope reading to one part of the
- * collection. */
-export interface Group {
-  id: number;
-  name: string;
-  is_default: boolean;
-  unread_count: number;
-  created_at: string;
-}
-
 /** Entry is one item a Feed carried. */
 export interface Entry {
   id: number;
@@ -200,12 +190,12 @@ export async function addFeed(url: string): Promise<Feed> {
 }
 
 /**
- * updateFeed changes a Feed's title and/or Group. Only the fields given are
- * changed, and returns the Feed as stored.
+ * updateFeed changes a Feed's title. Only the fields given are changed, and
+ * returns the Feed as stored.
  */
 export async function updateFeed(
   id: number,
-  changes: { title?: string; group_id?: number },
+  changes: { title?: string },
 ): Promise<Feed> {
   const response = await send(
     'PUT',
@@ -220,42 +210,6 @@ export async function updateFeed(
 /** deleteFeed removes a Feed and every Entry it carried. */
 export async function deleteFeed(id: number): Promise<void> {
   await send('DELETE', `/feeds/${id}`, 'Could not delete that Feed');
-}
-
-/** listGroups is the reader's whole set of Groups, by name. */
-export async function listGroups(): Promise<Group[]> {
-  const response = await send('GET', '/groups', 'Could not load your Groups');
-  const body = (await response.json()) as { groups: Group[] | null };
-  return body.groups ?? [];
-}
-
-/** createGroup adds a new Group. */
-export async function createGroup(name: string): Promise<Group> {
-  const response = await send(
-    'POST',
-    '/groups',
-    'Could not create that Group',
-    { name },
-  );
-  const body = (await response.json()) as { group: Group };
-  return body.group;
-}
-
-/** renameGroup sets a Group's name and returns it as stored. */
-export async function renameGroup(id: number, name: string): Promise<Group> {
-  const response = await send(
-    'PUT',
-    `/groups/${id}`,
-    'Could not rename that Group',
-    { name },
-  );
-  const body = (await response.json()) as { group: Group };
-  return body.group;
-}
-
-/** deleteGroup removes a Group, moving its Feeds to the default Group. */
-export async function deleteGroup(id: number): Promise<void> {
-  await send('DELETE', `/groups/${id}`, 'Could not delete that Group');
 }
 
 /** refreshFeeds re-reads every Feed now, and reports the ones that failed. */
@@ -275,7 +229,6 @@ export async function refreshFeeds(): Promise<
 
 export interface EntrySelectionOptions {
   feed?: number;
-  group?: number;
   unread?: boolean;
   starred?: boolean;
   archived?: boolean;
@@ -287,7 +240,6 @@ function entrySelectionQuery(options: EntrySelectionOptions): URLSearchParams {
   const query = new URLSearchParams();
   for (const key of [
     'feed',
-    'group',
     'unread',
     'starred',
     'archived',
