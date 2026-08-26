@@ -44,11 +44,11 @@ Planned order of later phases, each parked rather than in flight: an Electron de
 
 ## Capabilities and Constraints
 
-Vocabulary is fixed and load-bearing. `CONTEXT.md` is the authority: Feed, Group, Feed Icon, Entry, Article, Preview Image, Excerpt, Snippet, Feed View, Reader View, Original View, Feed List, Entry List, Reading Pane, Read, Starred, Archived. It also lists, per term, the words to avoid — "sidebar", "drawer", "thumbnail", "bookmark", "folder", "item" and the rest. Copy, labels, component names and tests use the domain word.
+Vocabulary is fixed and load-bearing. `CONTEXT.md` is the authority: Feed, Feed Icon, Entry, Article, Preview Image, Excerpt, Snippet, Feed View, Reader View, Original View, Feed List, Entry List, Reading Pane, Read, Starred, Archived. It also lists, per term, the words to avoid — "sidebar", "drawer", "thumbnail", "bookmark", "folder", "item" and the rest. Copy, labels, component names and tests use the domain word.
 
 Confirmed behaviour, in the reader's terms:
 
-- Feeds are discovered from a site address or added by Feed URL, validated before saving, renameable, suspendable, deletable, and importable/exportable as OPML. A Feed belongs to exactly one flat Group; Groups do not nest.
+- Feeds are discovered from a site address or added by Feed URL, validated before saving, renameable, deletable, and importable/exportable as OPML.
 - Polling is scheduled, conditional, and politely backed off per publisher hints; a Feed's last check, last success and last error are visible so that silence is distinguishable from breakage.
 - The Entry List is newest-first, filterable to All / Unread / Starred, scopeable to a Feed or Group, with per-Feed and per-Group unread counts and cursor pagination.
 - Three states only: Read, Starred, Archived. Starring *is* keeping — there is no separate read-later, and Starred Entries plus their extracted Articles are exempt from cleanup. Archiving implies Read and removes the Entry from every view except the archive.
@@ -72,7 +72,7 @@ No logo, wordmark, brand voice or identity constraint has been established.
 
 ## Evidence on Hand
 
-- **Real product truth, written down and unusually complete:** `CONTEXT.md` (domain language), `docs/prd/0001-reader-mvp.md` (82 user stories plus implementation and testing decisions), `docs/adr/0001`–`0010`.
+- **Real product truth, written down and unusually complete:** `CONTEXT.md` (domain language), `docs/prd/0001-reader-mvp.md` (82 user stories plus implementation and testing decisions), `docs/adr/0001`–`0012`.
 - **A running instance with real but small data:** `data/reader.db` currently holds 6 Feeds in 1 Group ("Unsorted"), 244 Entries, 86 unread, 0 Starred. The "few hundred sites" in the PRD is the intended scale, not the present state — so any layout claim about large collections, deep Group trees, or heavy Starred use is untested against real data and must not be presented as observed.
 - **Tests as behavioural evidence:** Go API tests (`internal/apitest`), a pure pull-policy suite, and thin Playwright journeys in `web/e2e/` (`reading`, `responsive`, `views`, `unread`) against the real binary with a fake publisher.
 - **Absent, and not to be fabricated:** no users besides the owner, no usage analytics, no testimonials, no press, no benchmarks, no pricing, no public deployment, no logo or brand assets, and no hosted service.

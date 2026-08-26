@@ -10,10 +10,6 @@ A self-hosted reader for one person, which collects the feeds they follow into o
 The document at a URL that a publisher updates with new items, in RSS, Atom, or JSON Feed form, together with the reader's own name for it. There is exactly one Feed per URL.
 _Avoid_: Channel, source, stream, subscription
 
-**Group**:
-A named set of Feeds, used to scope reading to one part of the collection. A Feed belongs to exactly one Group, and Groups do not nest.
-_Avoid_: Folder, category, tag, collection
-
 **Feed Icon**:
 The small square image that identifies a Feed, shown beside the publisher's name on every Entry from that Feed. One per Feed, independent of any Entry's contents.
 _Avoid_: Favicon, avatar, logo, feed image
@@ -55,7 +51,7 @@ _Avoid_: Web view, browser mode, in-app browser
 ### Layout
 
 **Feed List**:
-The leftmost column, holding every Group and Feed, from which the reader chooses what to read.
+The leftmost column, holding every Feed, from which the reader chooses what to read.
 _Avoid_: Sidebar, nav, feed tree, collections
 
 **Entry List**:
