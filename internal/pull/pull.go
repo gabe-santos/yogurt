@@ -183,7 +183,7 @@ func (s *Service) Refresh(ctx context.Context, feedID int64) error {
 
 // RefreshAll re-reads every Feed, a bounded number at a time, and returns the
 // ones that failed. A Feed that fails does not stop the others. It reads every
-// Feed regardless of suspension or schedule, because "refresh" means refresh.
+// Feed regardless of schedule, because "refresh" means refresh.
 func (s *Service) RefreshAll(ctx context.Context) (map[int64]error, error) {
 	feeds, err := s.store.Feeds(ctx)
 	if err != nil {
@@ -192,10 +192,9 @@ func (s *Service) RefreshAll(ctx context.Context) (map[int64]error, error) {
 	return s.refreshMany(ctx, feeds), nil
 }
 
-// PollDue re-reads every Feed whose schedule says it is due, skipping
-// suspended Feeds entirely. This is what the background schedule calls;
-// RefreshAll is what a reader's own "refresh everything" asks for, and does
-// not wait for the schedule.
+// PollDue re-reads every Feed whose schedule says it is due. This is what the
+// background schedule calls; RefreshAll is what a reader's own "refresh
+// everything" asks for, and does not wait for the schedule.
 func (s *Service) PollDue(ctx context.Context) (map[int64]error, error) {
 	due, err := s.store.DueFeeds(ctx, s.clock.Now())
 	if err != nil {

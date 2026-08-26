@@ -13,7 +13,6 @@ import (
 // fields feedView (in feeds_test.go) does not need.
 type feedStatusView struct {
 	ID                  int64      `json:"id"`
-	Suspended           bool       `json:"suspended"`
 	LastCheckedAt       *time.Time `json:"last_checked_at"`
 	LastSuccessAt       *time.Time `json:"last_success_at"`
 	LastError           string     `json:"last_error"`
@@ -136,55 +135,32 @@ func TestAFailingFeedBacksOffProgressivelyAndReportsWhy(t *testing.T) {
 	}
 }
 
-func TestManualRefreshChecksASuspendedFeedRegardless(t *testing.T) {
-	h := loggedIn(t)
-	feedURL := h.Publisher.Serve("/feed.xml", apitest.RSS("The Publisher", "",
-		apitest.Item{ID: "one", Title: "First post", Published: published},
-	))
-	feed := subscribe(t, h, feedURL)
-
-	h.Do(http.MethodPut, fmt.Sprintf("/api/feeds/%d", feed.ID), map[string]any{"suspended": true}).
-		ExpectStatus(http.StatusOK)
-
-	h.Do(http.MethodPost, fmt.Sprintf("/api/feeds/%d/refresh", feed.ID), nil).
-		ExpectStatus(http.StatusNoContent)
-
-	if got := h.Publisher.Hits("/feed.xml"); got != 2 {
-		t.Errorf("publisher hits = %d, want manual refresh to check a suspended Feed anyway", got)
-	}
-}
-
-func TestTheScheduleChecksDueFeedsWithoutManualActionAndSkipsSuspendedOnes(t *testing.T) {
+func TestTheScheduleChecksEveryDueFeedWithoutManualAction(t *testing.T) {
 	h := loggedIn(t, apitest.PollInterval(2*time.Second), apitest.PollTick(20*time.Millisecond))
 
-	activeURL := h.Publisher.Serve("/active.xml", apitest.RSS("Active", "",
+	firstURL := h.Publisher.Serve("/first.xml", apitest.RSS("First", "",
 		apitest.Item{ID: "one", Title: "One", Published: published}))
-	suspendedURL := h.Publisher.Serve("/suspended.xml", apitest.RSS("Suspended", "",
+	secondURL := h.Publisher.Serve("/second.xml", apitest.RSS("Second", "",
 		apitest.Item{ID: "one", Title: "One", Published: published}))
 
-	subscribe(t, h, activeURL)
-	suspended := subscribe(t, h, suspendedURL)
-	h.Do(http.MethodPut, fmt.Sprintf("/api/feeds/%d", suspended.ID), map[string]any{"suspended": true}).
-		ExpectStatus(http.StatusOK)
+	subscribe(t, h, firstURL)
+	subscribe(t, h, secondURL)
 
-	// The schedule is already ticking every 5ms in real time, but the fake
-	// clock has not moved past either Feed's next check time yet.
+	// The schedule is already ticking, but the fake clock has not moved past
+	// either Feed's next check time yet.
 	time.Sleep(50 * time.Millisecond)
-	if got := h.Publisher.Hits("/active.xml"); got != 1 {
-		t.Fatalf("active feed hits = %d, want only its initial subscribe fetch before it is due", got)
+	if got := h.Publisher.Hits("/first.xml"); got != 1 {
+		t.Fatalf("first Feed hits = %d, want only its initial subscribe fetch before it is due", got)
+	}
+	if got := h.Publisher.Hits("/second.xml"); got != 1 {
+		t.Fatalf("second Feed hits = %d, want only its initial subscribe fetch before it is due", got)
 	}
 
 	// Cross every Feed's next check time without the reader doing anything.
 	h.Clock.Advance(time.Hour)
 
-	waitForHits(t, h.Publisher, "/active.xml", 2, 2*time.Second)
-
-	// Give the schedule a few more ticks it could wrongly spend on the
-	// suspended Feed.
-	time.Sleep(50 * time.Millisecond)
-	if got := h.Publisher.Hits("/suspended.xml"); got != 1 {
-		t.Errorf("suspended feed hits = %d, want only its initial subscribe fetch", got)
-	}
+	waitForHits(t, h.Publisher, "/first.xml", 2, 2*time.Second)
+	waitForHits(t, h.Publisher, "/second.xml", 2, 2*time.Second)
 }
 
 // waitForHits polls the fake publisher until a path has received at least

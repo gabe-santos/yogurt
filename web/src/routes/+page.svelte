@@ -191,8 +191,8 @@
   $effect(() => {
     feedTitleInput?.select();
   });
-  // Managing the collection — renaming, moving, suspending, deleting — is rare
-  // next to reading it, so the Feed List is navigation at rest and reveals its
+  // Managing the collection — renaming, moving, and deleting — is rare next
+  // to reading it, so the Feed List is navigation at rest and reveals its
   // controls only when the reader asks for them. Without this, every Feed cost
   // four rows of chrome and the list stopped being scannable.
   let managing = $state(false);
@@ -858,20 +858,12 @@
     }
   }
 
-  async function toggleSuspend(feed: Feed) {
-    try {
-      const updated = await updateFeed(feed.id, { suspended: !feed.suspended });
-      feeds = feeds.map((f) => (f.id === feed.id ? updated : f));
-    } catch (cause) {
-      reportError(cause);
-    }
-  }
 
   function removeFeed(feed: Feed) {
     removal = {
       title: `Delete "${feed.title}"?`,
       description:
-        "Every Entry it carried is deleted with it, Starred ones included. Suspend the Feed instead to stop checking it and keep what you have.",
+        "Every Entry it carried is deleted with it, Starred ones included. Re-subscribing starts the Feed from scratch.",
       confirmLabel: "Delete Feed",
       run: async () => {
         await deleteFeed(feed.id);
@@ -1139,7 +1131,6 @@
                           scope.id === feed.id}
                         onSelect={() => scopeTo({ type: "feed", id: feed.id })}
                         onRename={() => startEditFeed(feed)}
-                        onToggleSuspend={() => toggleSuspend(feed)}
                         onMove={(groupID) => moveFeed(feed, groupID)}
                         onDelete={() => removeFeed(feed)}
                       />
@@ -1148,23 +1139,15 @@
                         <div
                           class="mt-1 mb-1.5 flex flex-col gap-2 rounded-[calc(var(--radius)*1.8_+_8px)] bg-sidebar-accent/60 px-2 py-2 text-xs text-muted-foreground"
                         >
-                          <!-- Two reversible acts side by side; the one that
-                               cannot be undone sits alone at the bottom, where
-                               nothing is next to it to be hit by mistake. -->
-                          <div class="grid grid-cols-2 gap-1.5">
+                          <!-- Rename is reversible; deletion stays on its own
+                               line below, where it cannot be hit by mistake. -->
+                          <div class="flex">
                             <Button
                               variant="outline"
                               size="xs"
                               onclick={() => startEditFeed(feed)}
                             >
                               Rename
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="xs"
-                              onclick={() => toggleSuspend(feed)}
-                            >
-                              {feed.suspended ? "Resume" : "Suspend"}
                             </Button>
                           </div>
                           <label class="sr-only" for={`move-feed-${feed.id}`}>

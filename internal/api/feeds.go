@@ -25,7 +25,6 @@ type feedView struct {
 	Title               string     `json:"title"`
 	SiteURL             string     `json:"site_url"`
 	GroupID             int64      `json:"group_id"`
-	Suspended           bool       `json:"suspended"`
 	UnreadCount         int        `json:"unread_count"`
 	CreatedAt           time.Time  `json:"created_at"`
 	LastCheckedAt       *time.Time `json:"last_checked_at"`
@@ -46,7 +45,6 @@ func viewFeed(feed store.Feed, unreadCounts map[int64]int) feedView {
 		Title:               feed.Title,
 		SiteURL:             feed.SiteURL,
 		GroupID:             feed.GroupID,
-		Suspended:           feed.Suspended,
 		UnreadCount:         unreadCounts[feed.ID],
 		CreatedAt:           feed.CreatedAt,
 		LastCheckedAt:       zeroToNil(feed.LastCheckedAt),
@@ -157,17 +155,16 @@ func (h *Handler) refreshFeed(w http.ResponseWriter, r *http.Request) {
 }
 
 // updateFeedRequest declares the fields of a Feed the reader wants to change;
-// an absent field is left as stored, so title, Group and suspension can be
-// changed independently of one another.
+// an absent field is left as stored, so title and Group can be changed
+// independently of one another.
 type updateFeedRequest struct {
-	Title     *string `json:"title"`
-	GroupID   *int64  `json:"group_id"`
-	Suspended *bool   `json:"suspended"`
+	Title   *string `json:"title"`
+	GroupID *int64  `json:"group_id"`
 }
 
-// updateFeed changes a Feed's title, Group, and/or suspended state, applying
-// every change in one transaction so a Group that turns out not to exist
-// changes nothing. Only the fields present in the request are changed.
+// updateFeed changes a Feed's title and/or Group in one transaction so a Group
+// that turns out not to exist changes nothing. Only fields present in the
+// request are changed.
 func (h *Handler) updateFeed(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
@@ -177,18 +174,17 @@ func (h *Handler) updateFeed(w http.ResponseWriter, r *http.Request) {
 
 	var body updateFeedRequest
 	if err := json.NewDecoder(io.LimitReader(r.Body, maxFeedBody)).Decode(&body); err != nil {
-		h.writeError(w, r, http.StatusBadRequest, "expected a JSON object with title, group_id, and/or suspended")
+		h.writeError(w, r, http.StatusBadRequest, "expected a JSON object with title and/or group_id")
 		return
 	}
-	if body.Title == nil && body.GroupID == nil && body.Suspended == nil {
-		h.writeError(w, r, http.StatusBadRequest, "expected at least one of title, group_id, or suspended")
+	if body.Title == nil && body.GroupID == nil {
+		h.writeError(w, r, http.StatusBadRequest, "expected at least one of title or group_id")
 		return
 	}
 
 	feed, err := h.deps.Store.UpdateFeed(r.Context(), id, store.FeedPatch{
-		Title:     body.Title,
-		GroupID:   body.GroupID,
-		Suspended: body.Suspended,
+		Title:   body.Title,
+		GroupID: body.GroupID,
 	}, h.deps.Clock.Now())
 	switch {
 	case errors.Is(err, store.ErrNoFeed):

@@ -68,6 +68,9 @@ test('the reader manages a Feed and a Group from their right-click menus', async
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Sign in' }).click();
 
+  await page.getByLabel('Feed or site address').fill(publisherURL);
+  await page.getByRole('button', { name: 'Subscribe' }).click();
+
   const feed = page.getByTestId('feed');
   const feedMenu = page.getByTestId('feed-context-menu');
   const groupMenu = page.getByTestId('group-context-menu');
@@ -83,9 +86,6 @@ test('the reader manages a Feed and a Group from their right-click menus', async
   await feed.click({ button: 'right' });
   await expect(
     feedMenu.getByRole('menuitem', { name: 'Rename' }),
-  ).toBeVisible();
-  await expect(
-    feedMenu.getByRole('menuitem', { name: 'Suspend' }),
   ).toBeVisible();
   await expect(
     feedMenu.getByRole('menuitem', { name: 'Move to Group' }),
@@ -104,20 +104,6 @@ test('the reader manages a Feed and a Group from their right-click menus', async
   await saved;
   await expect(feed).toHaveText('Cave Chronicle');
 
-  // Suspending is reversible from the same place, and the menu says which way
-  // it goes rather than offering both.
-  await feed.click({ button: 'right' });
-  saved = feedSaved();
-  await feedMenu.getByRole('menuitem', { name: 'Suspend' }).click();
-  await saved;
-  await feed.click({ button: 'right' });
-  await expect(feedMenu.getByRole('menuitem', { name: 'Suspend' })).toHaveCount(
-    0,
-  );
-  saved = feedSaved();
-  await feedMenu.getByRole('menuitem', { name: 'Resume' }).click();
-  await saved;
-
   // A second Group to move the Feed into.
   await page.getByTestId('manage-feeds').click();
   await page.getByLabel('New Group').fill('Deep Reads');
@@ -125,9 +111,7 @@ test('the reader manages a Feed and a Group from their right-click menus', async
   await expect(page.getByTestId('group')).toHaveCount(2);
   await page.getByTestId('manage-feeds').click();
 
-  const deepReads = page
-    .getByTestId('group')
-    .filter({ hasText: 'Deep Reads' });
+  const deepReads = page.getByTestId('group').filter({ hasText: 'Deep Reads' });
   await feed.click({ button: 'right' });
   await feedMenu.getByRole('menuitem', { name: 'Move to Group' }).hover();
   saved = feedSaved();
@@ -143,9 +127,7 @@ test('the reader manages a Feed and a Group from their right-click menus', async
   await expect(page.getByLabel('Rename the Group Deep Reads')).toBeFocused();
   await page.keyboard.type('Long Reads');
   await page.keyboard.press('Enter');
-  const longReads = page
-    .getByTestId('group')
-    .filter({ hasText: 'Long Reads' });
+  const longReads = page.getByTestId('group').filter({ hasText: 'Long Reads' });
   await expect(longReads).toHaveCount(1);
 
   // The default Group is where an unsorted Feed lives, so its menu offers no
@@ -180,6 +162,9 @@ test('the reader manages a Feed and a Group from their right-click menus', async
   await expect(page.getByTestId('confirm-dialog')).toContainText(
     'Every Entry it carried is deleted with it',
   );
+  await expect(page.getByTestId('confirm-dialog')).toContainText(
+    'Re-subscribing starts the Feed from scratch.',
+  );
   await page.getByRole('button', { name: 'Cancel' }).click();
   await expect(feed).toHaveCount(1);
 
@@ -209,15 +194,10 @@ test('the "…" menu button opens the same menu as right-click, reporting Feed h
 
   // The action button is named after the Feed, not left generic, and opens
   // the identical menu right-click already opens.
-  await page
-    .getByRole('button', { name: 'The Daily Cave menu' })
-    .click();
+  await page.getByRole('button', { name: 'The Daily Cave menu' }).click();
   await expect(feedMenu).toBeVisible();
   await expect(
     feedMenu.getByRole('menuitem', { name: 'Rename' }),
-  ).toBeVisible();
-  await expect(
-    feedMenu.getByRole('menuitem', { name: 'Suspend' }),
   ).toBeVisible();
   await expect(
     feedMenu.getByRole('menuitem', { name: 'Move to Group' }),

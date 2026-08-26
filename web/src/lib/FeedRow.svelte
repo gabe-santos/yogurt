@@ -7,8 +7,6 @@
   import { cn } from '$lib/utils';
   import { formatPublished } from '$lib/format';
   import FeedIcon from '$lib/FeedIcon.svelte';
-  import CirclePauseIcon from '@lucide/svelte/icons/circle-pause';
-  import CirclePlayIcon from '@lucide/svelte/icons/circle-play';
   import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
   import FolderIcon from '@lucide/svelte/icons/folder';
   import PencilIcon from '@lucide/svelte/icons/pencil';
@@ -24,7 +22,6 @@
     isActive: boolean;
     onSelect: () => void;
     onRename: () => void;
-    onToggleSuspend: () => void;
     onMove: (groupID: number) => void;
     onDelete: () => void;
   }
@@ -35,7 +32,6 @@
     isActive,
     onSelect,
     onRename,
-    onToggleSuspend,
     onMove,
     onDelete,
   }: Props = $props();
@@ -68,15 +64,6 @@
     <M.Item onclick={onRename}>
       <PencilIcon strokeWidth={1.5} />
       Rename
-    </M.Item>
-    <M.Item onclick={onToggleSuspend}>
-      {#if feed.suspended}
-        <CirclePlayIcon strokeWidth={1.5} />
-        Resume
-      {:else}
-        <CirclePauseIcon strokeWidth={1.5} />
-        Suspend
-      {/if}
     </M.Item>
     <M.Sub>
       <M.SubTrigger class="gap-2">
@@ -138,11 +125,7 @@
             aria-label="This Feed is failing"
           />
         {/if}
-        <span
-          class="truncate {feed.suspended
-            ? 'text-muted-foreground italic'
-            : ''}"
-        >
+        <span class="truncate">
           {feed.title}
         </span>
       </Sidebar.MenuSubButton>

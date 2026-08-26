@@ -25,7 +25,6 @@ type Feed struct {
 	Title     string
 	SiteURL   string
 	GroupID   int64
-	Suspended bool
 	CreatedAt time.Time
 	UpdatedAt time.Time
 
@@ -139,11 +138,11 @@ func (s *Store) CreateFeed(ctx context.Context, feed Feed, now time.Time) (Feed,
 	}
 
 	err := s.db.QueryRowContext(ctx,
-		`INSERT INTO feeds (url, title, site_url, group_id, suspended, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?)
-		 ON CONFLICT (url) DO NOTHING
-		 RETURNING id`,
-		feed.URL, feed.Title, feed.SiteURL, feed.GroupID, boolToInt(feed.Suspended), now.Unix(), now.Unix()).Scan(&feed.ID)
+		`INSERT INTO feeds (url, title, site_url, group_id, created_at, updated_at)
+	 VALUES (?, ?, ?, ?, ?, ?)
+	 ON CONFLICT (url) DO NOTHING
+	 RETURNING id`,
+		feed.URL, feed.Title, feed.SiteURL, feed.GroupID, now.Unix(), now.Unix()).Scan(&feed.ID)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		return Feed{}, ErrFeedExists
@@ -155,23 +154,21 @@ func (s *Store) CreateFeed(ctx context.Context, feed Feed, now time.Time) (Feed,
 	return feed, nil
 }
 
-const feedColumns = `id, url, title, site_url, group_id, suspended, created_at, updated_at,
+const feedColumns = `id, url, title, site_url, group_id, created_at, updated_at,
 	etag, last_modified, next_check_at, last_checked_at, last_success_at, last_error, consecutive_failures,
 	icon_stored_at, icon_checked_at`
 
 func scanFeed(row rowScanner) (Feed, error) {
 	var feed Feed
-	var suspended int64
 	var createdAt, updatedAt, nextCheckAt, lastCheckedAt, lastSuccessAt int64
 	var iconStoredAt, iconCheckedAt int64
 	if err := row.Scan(&feed.ID, &feed.URL, &feed.Title, &feed.SiteURL, &feed.GroupID,
-		&suspended, &createdAt, &updatedAt,
+		&createdAt, &updatedAt,
 		&feed.ETag, &feed.LastModified, &nextCheckAt, &lastCheckedAt, &lastSuccessAt,
 		&feed.LastError, &feed.ConsecutiveFailures,
 		&iconStoredAt, &iconCheckedAt); err != nil {
 		return Feed{}, err
 	}
-	feed.Suspended = suspended != 0
 	feed.CreatedAt = time.Unix(createdAt, 0).UTC()
 	feed.UpdatedAt = time.Unix(updatedAt, 0).UTC()
 	feed.NextCheckAt = unixOrZero(nextCheckAt)
@@ -225,12 +222,11 @@ func (s *Store) Feeds(ctx context.Context) ([]Feed, error) {
 }
 
 // FeedPatch declares the fields of a Feed the reader wants to change; a nil
-// field is left as stored, so title, Group, and suspension can be changed
-// independently of one another in a single idempotent declaration.
+// field is left as stored, so title and Group can be changed independently in
+// a single idempotent declaration.
 type FeedPatch struct {
-	Title     *string
-	GroupID   *int64
-	Suspended *bool
+	Title   *string
+	GroupID *int64
 }
 
 // UpdateFeed applies a FeedPatch to a Feed in one transaction, so a Group
@@ -273,13 +269,6 @@ func (s *Store) UpdateFeed(ctx context.Context, id int64, patch FeedPatch, now t
 	if patch.GroupID != nil {
 		if _, err := tx.ExecContext(ctx,
 			`UPDATE feeds SET group_id = ?, updated_at = ? WHERE id = ?`, *patch.GroupID, now.Unix(), id); err != nil {
-			return Feed{}, fmt.Errorf("update feed %d: %w", id, err)
-		}
-	}
-	if patch.Suspended != nil {
-		if _, err := tx.ExecContext(ctx,
-			`UPDATE feeds SET suspended = ?, updated_at = ? WHERE id = ?`,
-			boolToInt(*patch.Suspended), now.Unix(), id); err != nil {
 			return Feed{}, fmt.Errorf("update feed %d: %w", id, err)
 		}
 	}
@@ -441,10 +430,9 @@ func (s *Store) MarkFeedIconChecked(ctx context.Context, id int64, now time.Time
 	return nil
 }
 
-// DueFeeds reads every non-suspended Feed whose schedule says it should be
-// checked by now, soonest-due first. This is what the background scheduler
-// polls; a manual refresh reads every Feed instead, regardless of schedule or
-// suspension.
+// DueFeeds reads every Feed whose schedule says it should be checked by now,
+// soonest-due first. The suspended = 0 predicate remains so the query keeps
+// matching the existing feeds_due partial index without a schema migration.
 func (s *Store) DueFeeds(ctx context.Context, now time.Time) ([]Feed, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT `+feedColumns+` FROM feeds WHERE suspended = 0 AND next_check_at <= ? ORDER BY next_check_at`,

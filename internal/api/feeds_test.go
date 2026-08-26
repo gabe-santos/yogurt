@@ -19,7 +19,6 @@ type feedView struct {
 	Title         string     `json:"title"`
 	SiteURL       string     `json:"site_url"`
 	GroupID       int64      `json:"group_id"`
-	Suspended     bool       `json:"suspended"`
 	UnreadCount   int        `json:"unread_count"`
 	IconStoredAt  *time.Time `json:"icon_stored_at"`
 	IconCheckedAt *time.Time `json:"icon_checked_at"`
@@ -71,6 +70,25 @@ func listFeeds(t *testing.T, h *apitest.Harness) []feedView {
 	}
 	h.Do(http.MethodGet, "/api/feeds", nil).ExpectStatus(http.StatusOK).JSON(&body)
 	return body.Feeds
+}
+func TestSuspensionIsNotAFeedPatchOrResponseField(t *testing.T) {
+	h := loggedIn(t)
+	feedURL := h.Publisher.Serve("/feed.xml", apitest.RSS("The Publisher", "",
+		apitest.Item{ID: "one", Title: "First post", Published: published}))
+	feed := subscribe(t, h, feedURL)
+
+	resp := h.Do(http.MethodPut, "/api/feeds/"+strconv.FormatInt(feed.ID, 10),
+		map[string]any{"suspended": true}).
+		ExpectStatus(http.StatusBadRequest)
+	expectErrorMentions(t, resp, "title")
+
+	var body struct {
+		Feeds []map[string]any `json:"feeds"`
+	}
+	h.Do(http.MethodGet, "/api/feeds", nil).ExpectStatus(http.StatusOK).JSON(&body)
+	if _, found := body.Feeds[0]["suspended"]; found {
+		t.Error("feed response unexpectedly exposes suspended")
+	}
 }
 
 // listEntries reads one page of Entries, query being everything after "?".

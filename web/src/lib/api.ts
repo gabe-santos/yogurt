@@ -23,7 +23,6 @@ export interface Feed {
   title: string;
   site_url: string;
   group_id: number;
-  suspended: boolean;
   unread_count: number;
   created_at: string;
   last_checked_at: string | null;
@@ -201,12 +200,12 @@ export async function addFeed(url: string): Promise<Feed> {
 }
 
 /**
- * updateFeed changes a Feed's title, Group, and/or suspended state. Only the
- * fields given are changed, and returns the Feed as stored.
+ * updateFeed changes a Feed's title and/or Group. Only the fields given are
+ * changed, and returns the Feed as stored.
  */
 export async function updateFeed(
   id: number,
-  changes: { title?: string; group_id?: number; suspended?: boolean },
+  changes: { title?: string; group_id?: number },
 ): Promise<Feed> {
   const response = await send(
     'PUT',

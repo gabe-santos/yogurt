@@ -128,7 +128,7 @@ func TestDeletingAGroupReparentsItsFeedsToTheDefault(t *testing.T) {
 	}
 }
 
-func TestAFeedCanBeRenamedMovedAndSuspendedIndependently(t *testing.T) {
+func TestAFeedCanBeRenamedAndMovedIndependently(t *testing.T) {
 	h := loggedIn(t)
 	group := createGroup(t, h, "Tech")
 	feedURL := h.Publisher.Serve("/feed.xml", apitest.RSS("The Publisher", "",
@@ -144,9 +144,6 @@ func TestAFeedCanBeRenamedMovedAndSuspendedIndependently(t *testing.T) {
 		JSON(&renamed)
 	if renamed.Feed.Title != "My Feed" {
 		t.Errorf("renamed feed title = %q, want My Feed", renamed.Feed.Title)
-	}
-	if renamed.Feed.Suspended {
-		t.Errorf("renaming must not disturb suspension")
 	}
 	defaultGroupID := listGroups(t, h)[0].ID
 	if renamed.Feed.GroupID != defaultGroupID {
@@ -166,20 +163,6 @@ func TestAFeedCanBeRenamedMovedAndSuspendedIndependently(t *testing.T) {
 	if moved.Feed.Title != "My Feed" {
 		t.Errorf("moving to a Group must not disturb the title")
 	}
-
-	var suspended struct {
-		Feed feedView `json:"feed"`
-	}
-	h.Do(http.MethodPut, "/api/feeds/"+strconv.FormatInt(feed.ID, 10),
-		map[string]any{"suspended": true}).
-		ExpectStatus(http.StatusOK).
-		JSON(&suspended)
-	if !suspended.Feed.Suspended {
-		t.Errorf("feed was not suspended")
-	}
-	if suspended.Feed.GroupID != group.ID {
-		t.Errorf("suspending must not disturb the Group")
-	}
 }
 
 func TestMovingAFeedToAMissingGroupIsRefused(t *testing.T) {
@@ -194,49 +177,21 @@ func TestMovingAFeedToAMissingGroupIsRefused(t *testing.T) {
 	expectErrorMentions(t, resp, "Group")
 }
 
-func TestDeletingAFeedRemovesItsEntriesButSuspendingDoesNot(t *testing.T) {
+func TestDeletingAFeedRemovesItsEntries(t *testing.T) {
 	h := loggedIn(t)
 	feedURL := h.Publisher.Serve("/feed.xml", apitest.RSS("The Publisher", "",
 		apitest.Item{ID: "one", Title: "First post", Published: published}))
 	feed := subscribe(t, h, feedURL)
 
-	h.Do(http.MethodPut, "/api/feeds/"+strconv.FormatInt(feed.ID, 10),
-		map[string]any{"suspended": true}).
-		ExpectStatus(http.StatusOK)
-	page := listEntries(t, h, feedQuery(feed))
-	if len(page.Entries) != 1 {
-		t.Fatalf("entries after suspending = %d, want the Entry still there", len(page.Entries))
-	}
-
 	h.Do(http.MethodDelete, "/api/feeds/"+strconv.FormatInt(feed.ID, 10), nil).
 		ExpectStatus(http.StatusNoContent)
 
-	page = listEntries(t, h, feedQuery(feed))
+	page := listEntries(t, h, feedQuery(feed))
 	if len(page.Entries) != 0 {
 		t.Fatalf("entries after deleting the Feed = %d, want none", len(page.Entries))
 	}
 
 	h.Do(http.MethodDelete, "/api/feeds/9999", nil).ExpectStatus(http.StatusNotFound)
-}
-
-func TestManualRefreshDoesNotSkipSuspendedFeeds(t *testing.T) {
-	h := loggedIn(t)
-	first := apitest.Item{ID: "one", Title: "First post", Published: published}
-	feedURL := h.Publisher.Serve("/feed.xml", apitest.RSS("The Publisher", "", first))
-	feed := subscribe(t, h, feedURL)
-
-	h.Do(http.MethodPut, "/api/feeds/"+strconv.FormatInt(feed.ID, 10),
-		map[string]any{"suspended": true}).
-		ExpectStatus(http.StatusOK)
-
-	later := apitest.Item{ID: "two", Title: "Later post", Published: published}
-	h.Publisher.Serve("/feed.xml", apitest.RSS("The Publisher", "", first, later))
-
-	h.Do(http.MethodPost, "/api/feeds/refresh", nil).ExpectStatus(http.StatusOK)
-
-	if got := h.Publisher.Hits("/feed.xml"); got != 2 {
-		t.Errorf("suspended feed hits = %d, want manual refresh to bypass suspension too", got)
-	}
 }
 
 func TestUpdatingAFeedWithAMissingGroupChangesNothing(t *testing.T) {
