@@ -180,6 +180,45 @@ func TestSubscribingToASiteURLDiscoversItsFeed(t *testing.T) {
 	}
 }
 
+func TestSubscribingWithATitleStoresTheSuppliedTitle(t *testing.T) {
+	h := loggedIn(t)
+	feedURL := h.Publisher.Serve("/feed.xml", apitest.RSS("The Publisher", h.Publisher.URL("/"),
+		apitest.Item{ID: "one", Title: "First post", Published: published},
+	))
+
+	var body struct {
+		Feed feedView `json:"feed"`
+	}
+	h.Do(http.MethodPost, "/api/feeds", map[string]string{"url": feedURL, "title": "  My Feed  "}).
+		ExpectStatus(http.StatusCreated).
+		JSON(&body)
+	if body.Feed.Title != "My Feed" {
+		t.Errorf("feed title = %q, want the supplied title, trimmed", body.Feed.Title)
+	}
+
+	feeds := listFeeds(t, h)
+	if len(feeds) != 1 || feeds[0].Title != "My Feed" {
+		t.Errorf("stored feeds = %+v, want one Feed titled %q", feeds, "My Feed")
+	}
+}
+
+func TestSubscribingWithAWhitespaceOnlyTitleUsesThePublishersTitle(t *testing.T) {
+	h := loggedIn(t)
+	feedURL := h.Publisher.Serve("/feed.xml", apitest.RSS("The Publisher", h.Publisher.URL("/"),
+		apitest.Item{ID: "one", Title: "First post", Published: published},
+	))
+
+	var body struct {
+		Feed feedView `json:"feed"`
+	}
+	h.Do(http.MethodPost, "/api/feeds", map[string]string{"url": feedURL, "title": "   "}).
+		ExpectStatus(http.StatusCreated).
+		JSON(&body)
+	if body.Feed.Title != "The Publisher" {
+		t.Errorf("feed title = %q, want the publisher's own title when the supplied title is blank", body.Feed.Title)
+	}
+}
+
 func TestSubscribingToSomethingThatIsNotAFeedIsRefused(t *testing.T) {
 	h := loggedIn(t)
 

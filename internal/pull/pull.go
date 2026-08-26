@@ -69,15 +69,17 @@ func New(db *store.Store, client *fetch.Client, now clock.Clock, logger *slog.Lo
 
 // Subscribe validates an address, discovering the Feed on it when the address is
 // a web page rather than a Feed, saves the Feed, and stores what it carries.
-func (s *Service) Subscribe(ctx context.Context, rawURL string) (store.Feed, error) {
-	return s.SubscribeInGroup(ctx, rawURL, 0)
+// title, once trimmed, becomes the Feed's stored title; an empty or
+// all-whitespace title falls back to the publisher's own title.
+func (s *Service) Subscribe(ctx context.Context, rawURL string, title string) (store.Feed, error) {
+	return s.SubscribeInGroup(ctx, rawURL, 0, title)
 }
 
 // SubscribeInGroup is Subscribe, saving the Feed directly into groupID
 // rather than the default Group. It exists for OPML import, which resolves a
 // Feed's Group before the Feed itself is subscribed. A zero groupID behaves
 // exactly like Subscribe.
-func (s *Service) SubscribeInGroup(ctx context.Context, rawURL string, groupID int64) (store.Feed, error) {
+func (s *Service) SubscribeInGroup(ctx context.Context, rawURL string, groupID int64, title string) (store.Feed, error) {
 	target, err := fetch.ParseURL(strings.TrimSpace(rawURL))
 	if err != nil {
 		return store.Feed{}, err
@@ -107,9 +109,13 @@ func (s *Service) SubscribeInGroup(ctx context.Context, rawURL string, groupID i
 	}
 
 	now := s.clock.Now()
+	resolvedTitle := strings.TrimSpace(title)
+	if resolvedTitle == "" {
+		resolvedTitle = feedTitle(document, feedURL)
+	}
 	saved, err := s.store.CreateFeed(ctx, store.Feed{
 		URL:     feedURL,
-		Title:   feedTitle(document, feedURL),
+		Title:   resolvedTitle,
 		SiteURL: document.SiteURL,
 		GroupID: groupID,
 	}, now)
@@ -158,7 +164,7 @@ func (s *Service) SubscribeMany(ctx context.Context, requests []SubscribeRequest
 			slots <- struct{}{}
 			defer func() { <-slots }()
 
-			feed, err := s.SubscribeInGroup(ctx, request.URL, request.GroupID)
+			feed, err := s.SubscribeInGroup(ctx, request.URL, request.GroupID, "")
 			results[i] = SubscribeOutcome{Feed: feed, Err: err}
 		}(i, request)
 	}

@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gabe-santos/rss-reader/internal/pull"
@@ -67,7 +68,8 @@ func zeroToNil(t time.Time) *time.Time {
 }
 
 type createFeedRequest struct {
-	URL string `json:"url"`
+	URL   string `json:"url"`
+	Title string `json:"title"`
 }
 
 // createFeed subscribes to a Feed: the address is validated, a Feed is
@@ -80,7 +82,7 @@ func (h *Handler) createFeed(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	feed, err := h.deps.Pull.Subscribe(r.Context(), body.URL)
+	feed, err := h.deps.Pull.Subscribe(r.Context(), body.URL, strings.TrimSpace(body.Title))
 	switch {
 	case errors.Is(err, pull.ErrInvalidURL):
 		h.writeError(w, r, http.StatusBadRequest, "that url is not a web address")

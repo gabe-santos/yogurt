@@ -2,11 +2,14 @@
   import { feedIconUrl } from '$lib/api';
   import type { Feed, Group } from '$lib/api';
   import * as ContextMenu from '$lib/components/ui/context-menu';
+  import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
   import * as Sidebar from '$lib/components/ui/sidebar';
   import { cn } from '$lib/utils';
+  import { formatPublished } from '$lib/format';
   import FeedIcon from '$lib/FeedIcon.svelte';
   import CirclePauseIcon from '@lucide/svelte/icons/circle-pause';
   import CirclePlayIcon from '@lucide/svelte/icons/circle-play';
+  import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
   import FolderIcon from '@lucide/svelte/icons/folder';
   import PencilIcon from '@lucide/svelte/icons/pencil';
   import Trash2Icon from '@lucide/svelte/icons/trash-2';
@@ -36,7 +39,79 @@
     onMove,
     onDelete,
   }: Props = $props();
+
+  // Right-click and the "…" button open the identical menu, so its body is
+  // written once and rendered inside both ContextMenu.Content and
+  // DropdownMenu.Content: the two component families share the same prop
+  // shape for every member used here.
+  type MenuNamespace = typeof ContextMenu | typeof DropdownMenu;
 </script>
+
+{#snippet feedMenuBody(M: MenuNamespace)}
+  <!-- Silence and breakage read alike in a Feed List, so the last check is
+       stated rather than inferred. A stack-trace-shaped failure reason is
+       clamped so it cannot blow up the menu. -->
+  <div class="px-2 pt-1.5 pb-2 text-xs text-muted-foreground">
+    <p>
+      {#if feed.last_success_at}
+        Checked {formatPublished(feed.last_success_at)}
+      {:else}
+        Not checked yet
+      {/if}
+    </p>
+    {#if feed.last_error}
+      <p class="mt-1 line-clamp-2 text-destructive">{feed.last_error}</p>
+    {/if}
+  </div>
+  <M.Separator />
+  <M.Group>
+    <M.Item onclick={onRename}>
+      <PencilIcon strokeWidth={1.5} />
+      Rename
+    </M.Item>
+    <M.Item onclick={onToggleSuspend}>
+      {#if feed.suspended}
+        <CirclePlayIcon strokeWidth={1.5} />
+        Resume
+      {:else}
+        <CirclePauseIcon strokeWidth={1.5} />
+        Suspend
+      {/if}
+    </M.Item>
+    <M.Sub>
+      <M.SubTrigger class="gap-2">
+        <FolderIcon strokeWidth={1.5} />
+        Move to Group
+      </M.SubTrigger>
+      <M.SubContent>
+        <!-- A Feed belongs to exactly one Group, so the Group it is in is
+             the checked choice rather than a separate line of text. -->
+        <M.RadioGroup
+          value={String(feed.group_id)}
+          onValueChange={(value: string) => {
+            const groupID = Number(value);
+            if (groupID !== feed.group_id) onMove(groupID);
+          }}
+        >
+          {#each groups as group (group.id)}
+            <M.RadioItem value={String(group.id)}>
+              {group.name}
+            </M.RadioItem>
+          {/each}
+        </M.RadioGroup>
+      </M.SubContent>
+    </M.Sub>
+  </M.Group>
+  <M.Separator />
+  <M.Group>
+    <!-- The one act here that cannot be undone is separated from the
+         reversible ones, and says what it deletes when it is confirmed. -->
+    <M.Item onclick={onDelete}>
+      <Trash2Icon strokeWidth={1.5} />
+      Delete Feed
+    </M.Item>
+  </M.Group>
+{/snippet}
 
 <ContextMenu.Root>
   <ContextMenu.Trigger>
@@ -59,6 +134,7 @@
           <TriangleAlertIcon
             strokeWidth={1.5}
             class="size-3 shrink-0 text-destructive"
+            role="img"
             aria-label="This Feed is failing"
           />
         {/if}
@@ -73,57 +149,35 @@
     {/snippet}
   </ContextMenu.Trigger>
   <ContextMenu.Content data-testid="feed-context-menu">
-    <ContextMenu.Group>
-      <ContextMenu.Item onclick={onRename}>
-        <PencilIcon strokeWidth={1.5} />
-        Rename
-      </ContextMenu.Item>
-      <ContextMenu.Item onclick={onToggleSuspend}>
-        {#if feed.suspended}
-          <CirclePlayIcon strokeWidth={1.5} />
-          Resume
-        {:else}
-          <CirclePauseIcon strokeWidth={1.5} />
-          Suspend
-        {/if}
-      </ContextMenu.Item>
-      <ContextMenu.Sub>
-        <ContextMenu.SubTrigger class="gap-2">
-          <FolderIcon strokeWidth={1.5} />
-          Move to Group
-        </ContextMenu.SubTrigger>
-        <ContextMenu.SubContent>
-          <!-- A Feed belongs to exactly one Group, so the Group it is in is
-               the checked choice rather than a separate line of text. -->
-          <ContextMenu.RadioGroup
-            value={String(feed.group_id)}
-            onValueChange={(value) => {
-              const groupID = Number(value);
-              if (groupID !== feed.group_id) onMove(groupID);
-            }}
-          >
-            {#each groups as group (group.id)}
-              <ContextMenu.RadioItem value={String(group.id)}>
-                {group.name}
-              </ContextMenu.RadioItem>
-            {/each}
-          </ContextMenu.RadioGroup>
-        </ContextMenu.SubContent>
-      </ContextMenu.Sub>
-    </ContextMenu.Group>
-    <ContextMenu.Separator />
-    <ContextMenu.Group>
-      <!-- The one act here that cannot be undone is separated from the
-           reversible ones, and says what it deletes when it is confirmed. -->
-      <ContextMenu.Item onclick={onDelete}>
-        <Trash2Icon strokeWidth={1.5} />
-        Delete Feed
-      </ContextMenu.Item>
-    </ContextMenu.Group>
+    {@render feedMenuBody(ContextMenu)}
   </ContextMenu.Content>
 </ContextMenu.Root>
+
+<DropdownMenu.Root>
+  <DropdownMenu.Trigger>
+    {#snippet child({ props })}
+      <Sidebar.MenuAction
+        {...props}
+        data-testid="feed-menu-button"
+        showOnHover
+        aria-label={`${feed.title} menu`}
+      >
+        <EllipsisIcon strokeWidth={1.5} />
+      </Sidebar.MenuAction>
+    {/snippet}
+  </DropdownMenu.Trigger>
+  <DropdownMenu.Content data-testid="feed-menu" align="start">
+    {@render feedMenuBody(DropdownMenu)}
+  </DropdownMenu.Content>
+</DropdownMenu.Root>
 {#if feed.unread_count > 0}
-  <Sidebar.MenuBadge class="top-1 tabular-nums">
+  <!-- The badge and the "…" action share one slot (top-1.5 right-1): on
+       touch the action is always shown there, and on desktop it takes the
+       slot back on hover/focus, so the badge steps aside rather than
+       crowding beside it. -->
+  <Sidebar.MenuBadge
+    class="top-1 tabular-nums hidden md:flex md:group-hover/menu-item:hidden md:group-focus-within/menu-item:hidden"
+  >
     {feed.unread_count}
   </Sidebar.MenuBadge>
 {/if}

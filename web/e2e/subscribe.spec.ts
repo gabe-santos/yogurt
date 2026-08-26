@@ -192,3 +192,42 @@ test('the reader manages a Feed and a Group from their right-click menus', async
   await saved;
   await expect(feed).toHaveText('The Daily Cave');
 });
+
+test('the "…" menu button opens the same menu as right-click, reporting Feed health', async ({
+  page,
+}) => {
+  await page.goto('/login');
+  await page.getByLabel('Password').fill(password);
+  await page.getByRole('button', { name: 'Sign in' }).click();
+
+  await page.getByLabel('Feed or site address').fill(publisherURL);
+  await page.getByRole('button', { name: 'Subscribe' }).click();
+
+  const feed = page.getByTestId('feed');
+  const feedMenu = page.getByTestId('feed-menu');
+  await expect(feed).toHaveText('The Daily Cave');
+
+  // The action button is named after the Feed, not left generic, and opens
+  // the identical menu right-click already opens.
+  await page
+    .getByRole('button', { name: 'The Daily Cave menu' })
+    .click();
+  await expect(feedMenu).toBeVisible();
+  await expect(
+    feedMenu.getByRole('menuitem', { name: 'Rename' }),
+  ).toBeVisible();
+  await expect(
+    feedMenu.getByRole('menuitem', { name: 'Suspend' }),
+  ).toBeVisible();
+  await expect(
+    feedMenu.getByRole('menuitem', { name: 'Move to Group' }),
+  ).toBeVisible();
+  await expect(
+    feedMenu.getByRole('menuitem', { name: 'Delete Feed' }),
+  ).toBeVisible();
+
+  // Subscribing fetches the Feed once, so its health line already states
+  // that rather than "Not checked yet".
+  await expect(feedMenu).toContainText(/^Checked /);
+  await page.keyboard.press('Escape');
+});
