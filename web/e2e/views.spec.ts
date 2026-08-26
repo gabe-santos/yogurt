@@ -25,8 +25,31 @@ test('the reader switches views, keeps the choice, and is offered a tab when a p
     'Keeping a fire alive overnight.',
   );
 
-  // Reader View is the publisher's own text, not the summary the Feed carried.
+  // The travelling surface remains an immediate state marker when readers ask
+  // for reduced motion; its geometry is already that of the chosen cell when
+  // the click completes.
+  await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.getByTestId('view-reader').click();
+  await expect(page.getByTestId('view-reader')).toHaveAttribute('data-state', 'active');
+  const reducedMotionIndicatorIsAligned = await page
+    .getByRole('tablist', { name: 'View' })
+    .evaluate((list) => {
+      const indicator = list.parentElement?.firstElementChild;
+      const active = list.querySelector<HTMLElement>('[data-state="active"]');
+      if (!indicator || !active) return false;
+
+      const indicatorRect = indicator.getBoundingClientRect();
+      const activeRect = active.getBoundingClientRect();
+      return (
+        Math.abs(indicatorRect.left - activeRect.left) < 0.01 &&
+        Math.abs(indicatorRect.top - activeRect.top) < 0.01 &&
+        Math.abs(indicatorRect.width - activeRect.width) < 0.01 &&
+        Math.abs(indicatorRect.height - activeRect.height) < 0.01
+      );
+    });
+  expect(reducedMotionIndicatorIsAligned).toBe(true);
+
+  // Reader View is the publisher's own text, not the summary the Feed carried.
   await expect(page.getByTestId('entry-content')).toContainText(
     "The publisher's own paragraph about fire, and how to keep it",
   );

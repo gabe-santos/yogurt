@@ -19,7 +19,7 @@
 
 <script lang="ts">
 	import { Tabs as TabsPrimitive } from "bits-ui";
-	import { Spring } from "svelte/motion";
+	import { prefersReducedMotion, Spring } from "svelte/motion";
 	import { cn } from "$lib/utils.js";
 
 	let {
@@ -57,7 +57,7 @@
 				width: activeRect.width,
 				height: activeRect.height,
 			},
-			{ instant },
+			{ instant: instant || prefersReducedMotion.current },
 		);
 		indicatorReady = true;
 	}
@@ -84,7 +84,7 @@
 	});
 </script>
 
-<div class={cn("relative inline-flex", className)}>
+<div class={cn("relative inline-flex")}>
 	{#if variant === "default" && indicatorReady}
 		<div
 			class="pointer-events-none absolute rounded-[calc(var(--radius)*1.8_-_3px)] border border-transparent bg-background group-data-vertical/tabs:rounded-[calc(var(--radius)*1.8_-_4px)] dark:border-input dark:bg-input/30"
