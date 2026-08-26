@@ -12,3 +12,6 @@
 /web/playwright-report/
 # Impeccable runtime artifacts
 /.impeccable/
+# Local agent tooling
+/.agents/
+/.claude/

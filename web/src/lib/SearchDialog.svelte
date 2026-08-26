@@ -34,6 +34,15 @@
     ...entries.map((entry): Result => ({ kind: 'entry', entry })),
   ]);
 
+  /** resultId is the id a result's row carries and the input's
+   * aria-activedescendant points at, so the combobox pattern can say which
+   * option is active without ever moving real DOM focus off the input. */
+  function resultId(result: Result): string {
+    return result.kind === 'feed'
+      ? `search-option-feed-${result.feed.id}`
+      : `search-option-entry-${result.entry.id}`;
+  }
+
   $effect(() => {
     input?.focus();
   });
@@ -99,6 +108,12 @@
       bind:this={input}
       data-testid="search-input"
       type="text"
+      role="combobox"
+      aria-label="Search Entries and Feeds"
+      aria-autocomplete="list"
+      aria-expanded={results.length > 0}
+      aria-controls="search-results-listbox"
+      aria-activedescendant={results[activeIndex] ? resultId(results[activeIndex]) : undefined}
       placeholder="Search Entries and Feeds…"
       class="w-full border-b border-border bg-transparent pb-2 text-base outline-none placeholder:text-muted-foreground"
       value={query}
@@ -113,20 +128,33 @@
     {:else if query.trim() !== '' && results.length === 0}
       <p class="text-sm text-muted-foreground">No matches.</p>
     {:else if results.length > 0}
-      <ul class="flex max-h-96 flex-col overflow-y-auto" data-testid="search-results">
+      <ul
+        id="search-results-listbox"
+        role="listbox"
+        aria-label="Search results"
+        class="flex max-h-96 flex-col overflow-y-auto"
+        data-testid="search-results"
+      >
         {#if feeds.length > 0}
-          <li class="px-1 pb-1 text-xs font-medium text-muted-foreground">Feeds</li>
+          <li role="presentation" class="px-1 pb-1 text-xs font-medium text-muted-foreground">
+            Feeds
+          </li>
         {/if}
         {#each results as result, index (result.kind + ':' + (result.kind === 'feed' ? result.feed.id : result.entry.id))}
           {#if result.kind === 'entry' && index === feeds.length && feeds.length > 0}
-            <li class="px-1 pt-2 pb-1 text-xs font-medium text-muted-foreground">Entries</li>
+            <li role="presentation" class="px-1 pt-2 pb-1 text-xs font-medium text-muted-foreground">
+              Entries
+            </li>
           {/if}
-          <li>
+          <li role="presentation">
             <button
+              id={resultId(result)}
               type="button"
+              role="option"
+              tabindex="-1"
+              aria-selected={index === activeIndex}
               data-testid="search-result"
-              aria-current={index === activeIndex}
-              class="flex w-full flex-col gap-0.5 rounded-md px-2 py-2 text-left hover:bg-accent aria-[current=true]:bg-accent"
+              class="flex w-full flex-col gap-0.5 rounded-md px-2 py-2 text-left hover:bg-accent aria-selected:bg-accent"
               onmouseenter={() => (activeIndex = index)}
               onclick={() => select(result)}
             >

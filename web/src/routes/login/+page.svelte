@@ -9,6 +9,7 @@
 	let password = $state('');
 	let error = $state('');
 	let signingIn = $state(false);
+	let passwordInput = $state<HTMLInputElement | null>(null);
 
 	async function submit(event: SubmitEvent) {
 		event.preventDefault();
@@ -21,6 +22,7 @@
 			await goto('/');
 		} catch (cause) {
 			error = cause instanceof ApiError ? cause.message : 'Could not reach the server';
+			passwordInput?.focus();
 		} finally {
 			signingIn = false;
 		}
@@ -41,6 +43,9 @@
 						type="password"
 						autocomplete="current-password"
 						required
+						aria-invalid={error !== ''}
+						aria-describedby={error !== '' ? 'login-error' : undefined}
+						bind:ref={passwordInput}
 						bind:value={password}
 					/>
 				</Field.Field>
@@ -53,7 +58,7 @@
 
 		{#if error}
 			<Alert.Root variant="destructive">
-				<Alert.Description>{error}</Alert.Description>
+				<Alert.Description id="login-error">{error}</Alert.Description>
 			</Alert.Root>
 		{/if}
 	</form>

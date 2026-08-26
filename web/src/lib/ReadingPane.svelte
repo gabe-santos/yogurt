@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { untrack } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { MediaQuery } from 'svelte/reactivity';
 	import { prefersReducedMotion } from 'svelte/motion';
 	import { fly } from 'svelte/transition';
@@ -98,6 +98,20 @@
 
 	let scroller = $state<HTMLElement | null>(null);
 	let titleAnchor = $state<HTMLElement | null>(null);
+	// backButton is where focus lands when this component mounts as the
+	// narrow-screen overlay: opening it makes the Entry List behind it inert,
+	// which blurs whatever was focused there, so something inside the overlay
+	// has to claim focus or it is lost to the document body entirely.
+	let backButton = $state<HTMLButtonElement | null>(null);
+
+	// This component mounts once per "opening" of the overlay — clearSelection
+	// unmounts it, so a later selection is a fresh mount — which is exactly
+	// when focus needs to move in. Selecting a different Entry while the pane
+	// stays open must not keep re-stealing focus, so this never re-runs for
+	// that; onMount alone gives the once-per-open timing for free.
+	onMount(() => {
+		if (overlay.current) backButton?.focus({ preventScroll: true });
+	});
 	// titleScrolledAway drives the sticky bar's copy of the title: the title
 	// itself lives in the scrolling body, so once it leaves the pane the bar has
 	// to say what is being read.
@@ -324,6 +338,7 @@
 					{#snippet child({ props })}
 						<Button
 							{...props}
+							bind:ref={backButton}
 							variant="ghost"
 							size="icon-sm"
 							class="lg:hidden max-lg:size-9"
