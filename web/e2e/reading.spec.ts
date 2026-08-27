@@ -15,6 +15,7 @@ test('the reader opens an Entry, reads it, and triages by keyboard', async ({
   // narrowed by a filter. The Collection's own name is still the page's
   // single h1, and there is no h2 since no Entry can be open.
   await expect(page.locator('h1')).toHaveCount(1);
+  await expect(page.locator('h1')).toHaveAttribute('data-testid', 'collection');
   await expect(page.locator('h2')).toHaveCount(0);
 
   await addFeed(page, publisherURL);

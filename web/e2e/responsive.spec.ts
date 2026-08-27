@@ -87,6 +87,7 @@ test('holds a single h1 at 320px, where the Reading Pane is an overlay', async (
   // No Entry open: the Collection's own name is the page's only h1, and
   // there is no h2.
   await expect(page.locator('h1')).toHaveCount(1);
+  await expect(page.locator('h1')).toHaveAttribute('data-testid', 'collection');
   await expect(page.locator('h2')).toHaveCount(0);
 
   // The open Entry's title becomes the page's only h2, nested under the same

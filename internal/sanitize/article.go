@@ -25,12 +25,13 @@ func newArticlePolicy() *bluemonday.Policy {
 // Article cleans HTML this application extracted from a publisher's page
 // before it is stored and rendered: dangerous markup is stripped, one-pixel
 // tracking images are removed, every remaining image carries a no-referrer
-// policy, an insecure image source is upgraded to https or, when that is not
-// possible, dropped, and every heading is demoted one level — all in one
-// pass over the parsed tree. Reader View nests an Article beneath the page's
-// own h1 (the Collection) and h2 (the Entry title); left alone, a
-// publisher's own <h1> inside the Article body would read as a second h1 on
-// the page.
+// policy, an insecure image source is upgraded to https or, when that is
+// not possible, dropped, and every heading is demoted one level — all in
+// one parse and one render, rather than the two round trips running each
+// step as its own pass would cost. Reader View nests an Article beneath the
+// page's own h1 (the Collection) and h2 (the Entry title); left alone, a
+// publisher's own <h1> inside the Article body would read as a second h1
+// on the page.
 func Article(raw string) string {
 	rewritten := rewriteFragment(raw, func(n *html.Node) {
 		cleanImages(n)
