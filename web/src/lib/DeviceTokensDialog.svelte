@@ -5,8 +5,8 @@
 	import * as Field from '$lib/components/ui/field';
 	import { formatPublished } from '$lib/format';
 	import {
-		ApiError,
 		createDeviceToken,
+		describeError,
 		listDeviceTokens,
 		revokeDeviceToken
 	} from '$lib/api';
@@ -45,7 +45,7 @@
 			revealed = token;
 			newName = '';
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : 'Could not create that device token.';
+			error = describeError(err, 'Could not create that device token.');
 		} finally {
 			creating = false;
 		}

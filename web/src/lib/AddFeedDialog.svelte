@@ -4,7 +4,7 @@
 	import { Input } from '$lib/components/ui/input';
 	import * as Field from '$lib/components/ui/field';
 	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
-	import { ApiError, addFeed } from '$lib/api';
+	import { addFeed, describeError } from '$lib/api';
 	import type { Feed } from '$lib/api';
 
 	interface Props {
@@ -34,7 +34,7 @@
 			const feed = await addFeed(address, name);
 			onFeedAdded(feed);
 		} catch (cause) {
-			error = cause instanceof ApiError ? cause.message : 'Could not reach the server';
+			error = describeError(cause, 'Could not reach the server');
 		} finally {
 			submitting = false;
 		}

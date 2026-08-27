@@ -12,6 +12,13 @@ export class ApiError extends Error {
   }
 }
 
+/** describeError derives a display message for a failure: an ApiError's own
+ * message, or the given fallback for anything else (a network failure, a
+ * body the server never sent). */
+export function describeError(cause: unknown, fallback: string): string {
+  return cause instanceof ApiError ? cause.message : fallback;
+}
+
 /** Feed is one subscription. last_checked_at and last_success_at are null
  * until the Feed's first check, so silence before any check is
  * distinguishable from a Feed that keeps failing. icon_stored_at is null

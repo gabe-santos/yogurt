@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { goto, invalidateAll } from '$app/navigation';
-	import { ApiError, logIn } from '$lib/api';
+	import { describeError, logIn } from '$lib/api';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import * as Field from '$lib/components/ui/field';
@@ -21,7 +21,7 @@
 			await invalidateAll();
 			await goto('/');
 		} catch (cause) {
-			error = cause instanceof ApiError ? cause.message : 'Could not reach the server';
+			error = describeError(cause, 'Could not reach the server');
 			passwordInput?.focus();
 		} finally {
 			signingIn = false;

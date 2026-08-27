@@ -1,6 +1,6 @@
 <script lang="ts">
   import * as Dialog from '$lib/components/ui/dialog';
-  import { ApiError, search as runSearch } from '$lib/api';
+  import { describeError, search as runSearch } from '$lib/api';
   import type { Feed, SearchEntry } from '$lib/api';
   import FeedIcon from '$lib/FeedIcon.svelte';
   import { formatPublished } from '$lib/format';
@@ -72,7 +72,7 @@
       error = '';
     } catch (cause) {
       if (id !== requestID) return;
-      error = cause instanceof ApiError ? cause.message : 'Could not reach the server';
+      error = describeError(cause, 'Could not reach the server');
     } finally {
       if (id === requestID) searching = false;
     }

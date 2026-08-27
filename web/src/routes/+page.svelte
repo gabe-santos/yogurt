@@ -24,8 +24,8 @@
   import { onMount } from "svelte";
   import { goto, invalidateAll, replaceState } from "$app/navigation";
   import {
-    ApiError,
     deleteFeed,
+    describeError,
     feedIconUrl,
     getSettings,
     listEntries,
@@ -355,8 +355,7 @@
   /** reportError shows an ApiError's own message, or a generic one for
    * anything else (a network failure, a body the server never sent). */
   function reportError(cause: unknown) {
-    notice =
-      cause instanceof ApiError ? cause.message : "Could not reach the server";
+    notice = describeError(cause, "Could not reach the server");
   }
 
   /** reload replaces the list with the first page of the current Collection,
