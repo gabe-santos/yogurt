@@ -12,11 +12,12 @@ export class ApiError extends Error {
   }
 }
 
-/** describeError derives a display message for a failure: an ApiError's own
- * message, or the given fallback for anything else (a network failure, a
- * body the server never sent). */
+/** describeError preserves an ApiError's own display message, or adds a
+ * recovery step to a fallback for a network failure or absent response body. */
 export function describeError(cause: unknown, fallback: string): string {
-  return cause instanceof ApiError ? cause.message : fallback;
+  return cause instanceof ApiError
+    ? cause.message
+    : `${fallback}. Check your connection and try again.`;
 }
 
 /** Feed is one subscription. last_checked_at and last_success_at are null

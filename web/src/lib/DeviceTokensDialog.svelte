@@ -28,8 +28,8 @@
 	onMount(async () => {
 		try {
 			tokens = await listDeviceTokens();
-		} catch {
-			error = 'Could not load your device tokens.';
+		} catch (cause) {
+			error = describeError(cause, 'Could not load your device tokens');
 		}
 	});
 
@@ -44,8 +44,8 @@
 			tokens = [...tokens, device_token];
 			revealed = token;
 			newName = '';
-		} catch (err) {
-			error = describeError(err, 'Could not create that device token.');
+		} catch (cause) {
+			error = describeError(cause, 'Could not create that device token');
 		} finally {
 			creating = false;
 		}
@@ -56,9 +56,9 @@
 		tokens = tokens.filter((t) => t.id !== id);
 		try {
 			await revokeDeviceToken(id);
-		} catch {
+		} catch (cause) {
 			tokens = previous;
-			error = 'Could not revoke that device token.';
+			error = describeError(cause, 'Could not revoke that device token');
 		}
 	}
 </script>
