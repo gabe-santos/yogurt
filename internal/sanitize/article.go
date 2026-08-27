@@ -26,12 +26,43 @@ func newArticlePolicy() *bluemonday.Policy {
 // before it is stored and rendered: dangerous markup is stripped, one-pixel
 // tracking images are removed, every remaining image carries a no-referrer
 // policy, an insecure image source is upgraded to https or, when that is not
-// possible, dropped, and every heading is demoted one level. Reader View
-// nests an Article beneath the page's own h1 (the Collection) and h2 (the
-// Entry title); left alone, a publisher's own <h1> inside the Article body
-// would read as a second h1 on the page.
+// possible, dropped, and every heading is demoted one level — all in one
+// pass over the parsed tree. Reader View nests an Article beneath the page's
+// own h1 (the Collection) and h2 (the Entry title); left alone, a
+// publisher's own <h1> inside the Article body would read as a second h1 on
+// the page.
 func Article(raw string) string {
-	return articlePolicy.Sanitize(demoteHeadings(rewriteImages(raw)))
+	rewritten := rewriteFragment(raw, func(n *html.Node) {
+		cleanImages(n)
+		lowerHeadings(n)
+	})
+	return articlePolicy.Sanitize(rewritten)
+}
+
+// rewriteFragment parses raw as an HTML fragment, runs walk over the parsed
+// tree, and renders the result back to a string. Malformed input is
+// returned unchanged, left for the allowlist sanitiser that follows to deal
+// with — it strips anything it cannot make sense of.
+func rewriteFragment(raw string, walk func(*html.Node)) string {
+	body := &html.Node{Type: html.ElementNode, Data: "body", DataAtom: atom.Body}
+	nodes, err := html.ParseFragment(strings.NewReader(raw), body)
+	if err != nil {
+		return raw
+	}
+	// ParseFragment does not itself attach the nodes it returns to the context
+	// node; doing so here gives every node, including a top-level image, a
+	// Parent to remove itself from.
+	for _, n := range nodes {
+		body.AppendChild(n)
+	}
+
+	walk(body)
+
+	var buf bytes.Buffer
+	for c := body.FirstChild; c != nil; c = c.NextSibling {
+		_ = html.Render(&buf, c)
+	}
+	return buf.String()
 }
 
 // headingLevel maps each heading atom to its numeric level.
@@ -55,28 +86,12 @@ var demotedHeading = map[int]atom.Atom{
 	6: atom.H6,
 }
 
-// demoteHeadings walks the parsed document, rewriting every h1-h6 to the tag
-// one level lower. It runs before the allowlist sanitiser, alongside
-// rewriteImages.
+// demoteHeadings demotes every heading in raw by one level: Feed View, like
+// Reader View, nests a publisher's own markup beneath the page's own h1 (the
+// Collection) and h2 (the Entry title), so neither may carry a heading of
+// its own that outranks them.
 func demoteHeadings(raw string) string {
-	body := &html.Node{Type: html.ElementNode, Data: "body", DataAtom: atom.Body}
-	nodes, err := html.ParseFragment(strings.NewReader(raw), body)
-	if err != nil {
-		// Malformed input is left for the allowlist sanitiser to deal with; it
-		// strips anything it cannot make sense of.
-		return raw
-	}
-	for _, n := range nodes {
-		body.AppendChild(n)
-	}
-
-	lowerHeadings(body)
-
-	var buf bytes.Buffer
-	for c := body.FirstChild; c != nil; c = c.NextSibling {
-		_ = html.Render(&buf, c)
-	}
-	return buf.String()
+	return rewriteFragment(raw, lowerHeadings)
 }
 
 // lowerHeadings walks n and its descendants, demoting every heading it finds
@@ -95,34 +110,6 @@ func lowerHeadings(n *html.Node) {
 	demoted := demotedHeading[level]
 	n.DataAtom = demoted
 	n.Data = demoted.String()
-}
-
-// rewriteImages walks the parsed document, dropping tracking pixels and
-// fixing up the src and referrerpolicy of every image that remains. It runs
-// before the allowlist sanitiser so that the sanitiser has the final say on
-// what survives.
-func rewriteImages(raw string) string {
-	body := &html.Node{Type: html.ElementNode, Data: "body", DataAtom: atom.Body}
-	nodes, err := html.ParseFragment(strings.NewReader(raw), body)
-	if err != nil {
-		// Malformed input is left for the allowlist sanitiser to deal with; it
-		// strips anything it cannot make sense of.
-		return raw
-	}
-	// ParseFragment does not itself attach the nodes it returns to the context
-	// node; doing so here gives every node, including a top-level image, a
-	// Parent to remove itself from.
-	for _, n := range nodes {
-		body.AppendChild(n)
-	}
-
-	cleanImages(body)
-
-	var buf bytes.Buffer
-	for c := body.FirstChild; c != nil; c = c.NextSibling {
-		_ = html.Render(&buf, c)
-	}
-	return buf.String()
 }
 
 // cleanImages walks n and its descendants, removing tracking pixels and

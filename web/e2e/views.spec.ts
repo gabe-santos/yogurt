@@ -23,10 +23,15 @@ test('the reader switches views, keeps the choice, and is offered a tab when a p
   );
 
   // Feed View nests under the page's single h1 and the Entry's own h2 —
-  // never a second h1. See issue #37.
+  // never a second h1, even though this Feed's own description carries a
+  // heading of its own: it demotes to h3, so the page's outline stays
+  // exactly one h1 and one h2.
   await expect(page.locator('h1')).toHaveCount(1);
   await expect(page.locator('h2')).toHaveCount(1);
   await expect(page.locator('h2')).toContainText('Fire, and how to keep it');
+  await expect(page.getByTestId('entry-content').locator('h3')).toHaveText(
+    'Keeping the flame',
+  );
 
   // The travelling surface remains an immediate state marker when readers ask
   // for reduced motion; its geometry is already that of the chosen cell when

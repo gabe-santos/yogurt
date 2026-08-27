@@ -17,7 +17,7 @@ const feed = `<?xml version="1.0" encoding="UTF-8"?>
       <link>${publisherURL}/fire</link>
       <guid isPermaLink="false">fire</guid>
       <pubDate>Thu, 01 Jan 2026 10:00:00 +0000</pubDate>
-      <description>Keeping a fire alive overnight.</description>
+      <description>&lt;h2&gt;Keeping the flame&lt;/h2&gt;Keeping a fire alive overnight.</description>
     </item>
     <item>
       <title>Wheels: a review</title>
