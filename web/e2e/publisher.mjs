@@ -101,7 +101,10 @@ const article = (title) => `<!doctype html>
 
 const documents = {
   '/feed.xml': { type: 'application/rss+xml; charset=utf-8', body: feed },
-  '/second.xml': { type: 'application/rss+xml; charset=utf-8', body: secondFeed },
+  '/second.xml': {
+    type: 'application/rss+xml; charset=utf-8',
+    body: secondFeed,
+  },
   '/': { type: 'text/html; charset=utf-8', body: page },
   '/icon.svg': { type: 'image/svg+xml', body: icon },
   // Fire allows being framed: Original View embeds it.

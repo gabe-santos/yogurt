@@ -30,8 +30,8 @@
 </script>
 
 {#snippet feedMenuBody(M: MenuNamespace)}
-  <!-- Silence and breakage read alike in a Feed List, so the last check is
-       stated rather than inferred. A stack-trace-shaped failure reason is
+  <!-- Silence and breakage read alike in the Collection List, so the last check
+       is stated rather than inferred. A stack-trace-shaped failure reason is
        clamped so it cannot blow up the menu. -->
   <div class="px-2 pt-1.5 pb-2 text-xs text-muted-foreground">
     <p>

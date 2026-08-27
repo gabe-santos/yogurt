@@ -10,6 +10,7 @@ export type Action =
   | 'prev'
   | 'close'
   | 'toggleRead'
+  | 'toggleUnreadOnly'
   | 'help'
   | 'search'
   | 'addFeed';
@@ -27,6 +28,7 @@ export const bindings: Binding[] = [
   { key: 'k', description: 'Previous Entry', action: 'prev' },
   { key: 'Escape', description: 'Back to the Entry List', action: 'close' },
   { key: 'm', description: 'Toggle Read / unread', action: 'toggleRead' },
+  { key: 'u', description: 'Show unread only', action: 'toggleUnreadOnly' },
   { key: '/', description: 'Search', action: 'search' },
   { key: 'a', description: 'Add a Feed', action: 'addFeed' },
   { key: '?', description: 'Show this help', action: 'help' },

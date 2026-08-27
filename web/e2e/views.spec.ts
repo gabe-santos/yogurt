@@ -27,7 +27,10 @@ test('the reader switches views, keeps the choice, and is offered a tab when a p
   // the click completes.
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.getByTestId('view-reader').click();
-  await expect(page.getByTestId('view-reader')).toHaveAttribute('data-state', 'active');
+  await expect(page.getByTestId('view-reader')).toHaveAttribute(
+    'data-state',
+    'active',
+  );
   const reducedMotionIndicatorIsAligned = await page
     .getByRole('tablist', { name: 'View' })
     .evaluate((list) => {

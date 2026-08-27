@@ -43,12 +43,10 @@
   /* Depth for cards and bordered buttons. A solid border cannot adapt to what
      sits under it; these layers can. Dividers stay borders. */
   --border-shadow:
-    0px 0px 0px 1px oklch(0 0 0 / 0.06),
-    0px 1px 2px -1px oklch(0 0 0 / 0.06),
+    0px 0px 0px 1px oklch(0 0 0 / 0.06), 0px 1px 2px -1px oklch(0 0 0 / 0.06),
     0px 2px 4px 0px oklch(0 0 0 / 0.04);
   --border-shadow-hover:
-    0px 0px 0px 1px oklch(0 0 0 / 0.08),
-    0px 1px 2px -1px oklch(0 0 0 / 0.08),
+    0px 0px 0px 1px oklch(0 0 0 / 0.08), 0px 1px 2px -1px oklch(0 0 0 / 0.08),
     0px 2px 4px 0px oklch(0 0 0 / 0.06);
 }
 

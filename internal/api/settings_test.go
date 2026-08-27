@@ -19,7 +19,8 @@ func TestTheMarkOnOpenSettingPersists(t *testing.T) {
 		t.Fatal("mark-on-open is not on by default")
 	}
 
-	h.Do(http.MethodPut, "/api/settings", map[string]any{"mark_on_open": false, "entry_view": "feed"}).
+	h.Do(http.MethodPut, "/api/settings",
+		map[string]any{"mark_on_open": false, "entry_view": "feed", "unread_only": false}).
 		ExpectStatus(http.StatusOK).JSON(&body)
 	if body.Settings.MarkOnOpen {
 		t.Fatal("turning mark-on-open off was not reflected in the response")
@@ -48,7 +49,8 @@ func TestTheEntryViewPreferencePersists(t *testing.T) {
 		t.Fatalf("entry view default = %q, want an Entry to open showing what the Feed supplied", body.Settings.EntryView)
 	}
 
-	h.Do(http.MethodPut, "/api/settings", map[string]any{"mark_on_open": true, "entry_view": "original"}).
+	h.Do(http.MethodPut, "/api/settings",
+		map[string]any{"mark_on_open": true, "entry_view": "original", "unread_only": false}).
 		ExpectStatus(http.StatusOK).JSON(&body)
 	if body.Settings.EntryView != "original" {
 		t.Fatalf("entry view = %q, want the chosen original", body.Settings.EntryView)
@@ -60,6 +62,52 @@ func TestTheEntryViewPreferencePersists(t *testing.T) {
 	}
 	if !body.Settings.MarkOnOpen {
 		t.Error("declaring the entry view clobbered mark-on-open")
+	}
+}
+
+// Unread Only narrows whichever Collection the reader chose rather than being a
+// Collection of its own, so it is a preference that outlives the reload: a
+// reader who reads unread-first should not have to say so every morning.
+func TestTheUnreadOnlyPreferencePersists(t *testing.T) {
+	h := loggedIn(t)
+
+	var body struct {
+		Settings struct {
+			MarkOnOpen bool   `json:"mark_on_open"`
+			EntryView  string `json:"entry_view"`
+			UnreadOnly bool   `json:"unread_only"`
+		} `json:"settings"`
+	}
+	h.Do(http.MethodGet, "/api/settings", nil).ExpectStatus(http.StatusOK).JSON(&body)
+	if body.Settings.UnreadOnly {
+		t.Fatal("unread-only is on by default, want a Collection to open showing everything it holds")
+	}
+
+	h.Do(http.MethodPut, "/api/settings",
+		map[string]any{"mark_on_open": true, "entry_view": "feed", "unread_only": true}).
+		ExpectStatus(http.StatusOK).JSON(&body)
+	if !body.Settings.UnreadOnly {
+		t.Fatal("turning unread-only on was not reflected in the response")
+	}
+
+	h.Do(http.MethodGet, "/api/settings", nil).ExpectStatus(http.StatusOK).JSON(&body)
+	if !body.Settings.UnreadOnly {
+		t.Fatal("unread-only did not persist as on")
+	}
+
+	if !body.Settings.MarkOnOpen || body.Settings.EntryView != "feed" {
+		t.Error("declaring unread-only clobbered the other preferences")
+	}
+
+	// Preferences are declared whole: a field the request leaves out is not
+	// preserved, it is declared false. The client's typed Settings makes sending
+	// a partial body impossible, and this is what the server does if one gets
+	// through anyway.
+	h.Do(http.MethodPut, "/api/settings",
+		map[string]any{"mark_on_open": true, "entry_view": "feed"}).
+		ExpectStatus(http.StatusOK).JSON(&body)
+	if body.Settings.UnreadOnly {
+		t.Fatal("an omitted unread_only was preserved, want a whole declaration")
 	}
 }
 

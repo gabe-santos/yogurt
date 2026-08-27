@@ -103,6 +103,9 @@ export interface Settings {
   mark_on_open: boolean;
   /** entry_view is the view an Entry opens in, remembered across Entries. */
   entry_view: EntryView;
+  /** unread_only narrows the Entry List to unread Entries, whichever
+   * Collection the reader chose. Off by default. */
+  unread_only: boolean;
 }
 
 async function request(
@@ -240,12 +243,7 @@ export type EntryOrder = 'newest' | 'oldest';
 
 function entrySelectionQuery(options: EntrySelectionOptions): URLSearchParams {
   const query = new URLSearchParams();
-  for (const key of [
-    'feed',
-    'unread',
-    'starred',
-    'archived',
-  ] as const) {
+  for (const key of ['feed', 'unread', 'starred', 'archived'] as const) {
     const value = options[key];
     if (value !== undefined) {
       query.set(key, String(value));

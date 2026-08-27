@@ -116,10 +116,11 @@ test('the reader opens an Entry, reads it, and triages by keyboard', async ({
   });
   await entries.nth(1).click({ button: 'right' });
   await entryMenu.getByRole('menuitem', { name: 'Archive' }).click();
-  await expect(entries).toHaveCount(1);
+  await expect(entries.nth(1)).toContainText('Archived');
   await expect(page.getByTestId('notice')).toContainText(
     'Context Archive rejected',
   );
+  await expect(entries.nth(1)).not.toContainText('Archived');
   await expect(entries).toHaveCount(2);
   await page.unroute('**/api/entries/*/state');
   // Reload clears the session-only manual-unread override exercised above,
@@ -164,10 +165,13 @@ test('the reader opens an Entry, reads it, and triages by keyboard', async ({
   await page.keyboard.press('Escape');
   await expect(pane).toBeVisible();
 
-  // The Unread filter scopes the list to what mark-on-open left unread.
-  await page.getByTestId('filter-unread').click();
+  // Unread Only narrows the list to what mark-on-open left unread, from the
+  // Entry List's own header rather than from a tab that owns the whole list.
+  const unreadOnly = page.getByTestId('unread-only');
+  await unreadOnly.click();
+  await expect(unreadOnly).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByTestId('entry')).toHaveCount(1);
-  // Changing the filter reloads the list, which empties the Reading Pane.
+  // Narrowing rebuilds the list, which empties the Reading Pane.
   await expect(pane).toBeHidden();
   await expect(page.getByTestId('reading-pane-empty')).toBeVisible();
   await expect(page.getByTestId('entry').first()).toContainText(
@@ -175,7 +179,9 @@ test('the reader opens an Entry, reads it, and triages by keyboard', async ({
   );
   await expect(page.getByTestId('feed-icon').first()).toBeVisible();
 
-  await page.getByTestId('filter-all').click();
+  // u is the same act from the keyboard.
+  await page.keyboard.press('u');
+  await expect(unreadOnly).toHaveAttribute('aria-pressed', 'false');
   await expect(page.getByTestId('entry')).toHaveCount(2);
 
   // The `?` help dialog lists every binding from the one table.
@@ -189,11 +195,11 @@ test('the reader opens an Entry, reads it, and triages by keyboard', async ({
 
   // Enter is no longer a binding of its own — selecting an Entry is opening it
   // — so Enter on a focused control is plain native activation.
-  await page.getByTestId('filter-unread').focus();
+  await unreadOnly.focus();
   await page.keyboard.press('Enter');
-  await expect(pane).toBeHidden();
   await expect(page.getByTestId('entry')).toHaveCount(1);
-  await page.getByTestId('filter-all').click();
+  await page.keyboard.press('u');
+  await expect(page.getByTestId('entry')).toHaveCount(2);
 
   // Star is optimistic and gives the Entry a dedicated view.
   await page.getByTestId('entry').first().click();
@@ -203,9 +209,9 @@ test('the reader opens an Entry, reads it, and triages by keyboard', async ({
   ).toBeVisible();
   await expect(page.getByTestId('entry').first()).toContainText('Starred');
 
-  // A rejected Archive removes the Entry immediately and moves the reader on to
-  // the next one, then restores it without hijacking the Entry the Reading Pane
-  // has moved to.
+  // A rejected Archive is declared on the row it happened to and taken back
+  // there. Nothing is removed, so nothing has to be put back in order, and the
+  // Reading Pane is never handed an Entry the reader did not move to.
   await page.route('**/api/entries/*/state', async (route) => {
     const delayed = Promise.withResolvers<void>();
     setTimeout(delayed.resolve, 250);
@@ -216,21 +222,18 @@ test('the reader opens an Entry, reads it, and triages by keyboard', async ({
       body: JSON.stringify({ error: 'State rejected' }),
     });
   });
-  await page.getByRole('button', { name: 'Archive', exact: true }).click();
-  await expect(page.getByTestId('entry')).toHaveCount(1);
-  await expect(page.getByTestId('entry-content')).toContainText(
-    'Keeping a fire alive overnight.',
-  );
+  await page.getByTestId('entry-archive').click();
+  await expect(page.getByTestId('entry').first()).toContainText('Archived');
   await expect(page.getByTestId('notice')).toContainText('State rejected');
+  await expect(page.getByTestId('entry').first()).not.toContainText('Archived');
+  await expect(page.getByTestId('entry').first()).toContainText('Starred');
   await expect(page.getByTestId('entry')).toHaveCount(2);
-  await expect(page.getByTestId('entry-content')).toContainText(
-    'Keeping a fire alive overnight.',
-  );
+  await expect(pane).toBeVisible();
   await page.unroute('**/api/entries/*/state');
 
-  // Archive disappears from Starred immediately, then appears only in Archive
-  // with Read implied by the server-owned invariant.
-  await page.getByTestId('filter-starred').click();
+  // Starred is a Collection in the Collection List, not a tab over the list.
+  await page.getByTestId('collection-starred').click();
+  await expect(page.getByTestId('collection')).toHaveText('Starred');
   await expect(page.getByTestId('entry')).toHaveCount(1);
   await expect(page.getByTestId('feed-icon').first()).toBeVisible();
   await page.getByTestId('entry').click();
@@ -240,12 +243,18 @@ test('the reader opens an Entry, reads it, and triages by keyboard', async ({
       response.url().endsWith('/state') &&
       response.request().method() === 'PUT',
   );
-  await page.getByRole('button', { name: 'Archive', exact: true }).click();
-  // Archiving the last Entry of a view leaves nothing to move on to.
-  await expect(pane).toBeHidden();
-  await expect(page.getByTestId('entry')).toHaveCount(0);
+  await page.getByTestId('entry-archive').click();
+  // Archiving the last Entry of a Collection does not empty it under the
+  // reader: the row stays and says Archived.
+  await expect(page.getByTestId('entry')).toContainText('Archived');
+  await expect(pane).toBeVisible();
+  await expect(page.getByTestId('entry')).toHaveCount(1);
   await archived;
-  await page.getByTestId('filter-archive').click();
+
+  // The archive is the one Collection Unread Only is not offered in, because an
+  // Archived Entry is always Read.
+  await page.getByTestId('collection-archive').click();
+  await expect(page.getByTestId('unread-only')).toBeHidden();
   await expect(page.getByTestId('entry')).toHaveCount(1);
   await expect(page.getByTestId('entry')).toContainText('Archived');
   await expect(page.getByTestId('entry')).not.toContainText('unread');
@@ -255,16 +264,21 @@ test('the reader opens an Entry, reads it, and triages by keyboard', async ({
     page.getByRole('button', { name: 'Unstar', exact: true }),
   ).toBeVisible();
 
-  // Mark-all-read uses the current Unread filter and clears it optimistically.
-  await page.getByTestId('filter-all').click();
+  // Mark-all-read declares the whole Collection Read without shortening it.
+  await page.getByTestId('collection-all').click();
+  await expect(page.getByTestId('unread-only')).toBeVisible();
+  await expect(page.getByTestId('entry')).toHaveCount(1);
   await page.getByTestId('entry').click();
   await page.getByRole('button', { name: 'Mark unread', exact: true }).click();
-  await page.getByTestId('filter-unread').click();
-  await expect(page.getByTestId('entry')).toHaveCount(1);
+  await expect(page.getByTestId('entry')).toContainText('unread');
   await page
     .getByRole('button', { name: 'Mark all read', exact: true })
     .click();
-  await expect(page.getByTestId('entry')).toHaveCount(0);
+  await expect(page.getByTestId('entry')).not.toContainText('unread');
+  await expect(page.getByTestId('entry')).toHaveCount(1);
+  await expect(page.getByTestId('notice')).toContainText(
+    'Marked everything here Read.',
+  );
 
   // The browser suite shares one real database; restore the Archived Entry so
   // the subscription journey that follows still observes the publisher's two.

@@ -489,8 +489,9 @@ func (s *Store) SaveEntries(ctx context.Context, feedID int64, entries []Entry, 
 	return tx.Commit()
 }
 
-// entryWhere renders the one filter-and-scope definition used by both listing
-// and bulk state declarations, so mark-all-read cannot select more than the UI.
+// entryWhere renders the one Collection-and-Unread-Only definition used by both
+// listing and bulk state declarations, so mark-all-read cannot select more than
+// the UI.
 func entryWhere(selection EntrySelection) ([]string, []any) {
 	where := make([]string, 0, 4)
 	args := make([]any, 0, 1)

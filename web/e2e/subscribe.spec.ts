@@ -83,14 +83,16 @@ test('the reader names a Feed while subscribing', async ({ page }) => {
   await page.keyboard.press('a');
   const dialog = page.getByTestId('add-feed-dialog');
   await expect(dialog).toBeVisible();
-  await dialog.getByLabel('Feed or site address').fill(`${publisherURL}/second.xml`);
+  await dialog
+    .getByLabel('Feed or site address')
+    .fill(`${publisherURL}/second.xml`);
   await dialog.getByLabel('Name').fill('My Second Feed');
   await dialog.getByRole('button', { name: 'Subscribe' }).click();
   await expect(dialog).toBeHidden();
 
   const feed = page.getByTestId('feed').filter({ hasText: 'My Second Feed' });
   await expect(feed).toBeVisible();
-  await expect(page.getByTestId('scope')).toHaveText('My Second Feed');
+  await expect(page.getByTestId('collection')).toHaveText('My Second Feed');
   await expect(page.getByTestId('notice')).toHaveText(
     'Subscribed to My Second Feed.',
   );
@@ -126,7 +128,7 @@ test('the reader manages a Feed from its right-click menu', async ({
     response.request().method() === 'PUT';
   await expect(feed).toHaveText('The Daily Cave');
 
-  // Every act the Feed List offers is on the Feed's own menu.
+  // Every act the Collection List offers is on the Feed's own menu.
   await feed.click({ button: 'right' });
   await expect(
     feedMenu.getByRole('menuitem', { name: 'Rename' }),

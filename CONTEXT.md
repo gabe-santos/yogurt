@@ -50,12 +50,20 @@ _Avoid_: Web view, browser mode, in-app browser
 
 ### Layout
 
-**Feed List**:
-The leftmost column, holding every Feed, from which the reader chooses what to read.
-_Avoid_: Sidebar, nav, feed tree, collections
+**Collection**:
+One thing the Collection List selects, and so what the Entry List is showing: every Feed, one Feed, everything Starred, or the archive. A Collection is a place Entries are found, never a state they are in.
+_Avoid_: Filter, view, tab, smart folder
+
+**Collection List**:
+The leftmost column, holding every Collection: All Feeds, Starred, the archive, and each Feed by name.
+_Avoid_: Sidebar, nav, feed tree, feed list
+
+**Unread Only**:
+A setting that narrows the Entry List to the Entries in the chosen Collection that are not Read. It is a way of looking at a Collection rather than a Collection of its own, so it applies to whichever one the reader chose, and belongs to the reader rather than to any single Collection.
+_Avoid_: Unread filter, unread view, inbox, unread tab
 
 **Entry List**:
-The middle column, holding the Entries of whatever the Feed List is scoped to.
+The middle column, holding the Entries of the chosen Collection as they stood when it was last built.
 _Avoid_: Sidebar, inbox, article list, list pane
 
 **Reading Pane**:
@@ -73,5 +81,5 @@ Marks an Entry the reader wants to keep and return to. Starring is how something
 _Avoid_: Bookmark, favourite, saved, read-later
 
 **Archived**:
-Marks an Entry the reader is finished with and does not want to encounter again. An Archived Entry is Read, and appears in no view except the archive.
+Marks an Entry the reader is finished with and does not want to encounter again. An Archived Entry is Read, and is found in no Collection but the archive.
 _Avoid_: Dismissed, hidden, trashed, done
