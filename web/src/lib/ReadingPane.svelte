@@ -453,9 +453,9 @@
 				: 'mx-auto flex max-w-2xl flex-col gap-5 px-6 py-8'}
 		>
 			<div bind:this={titleAnchor} class="flex flex-col gap-2">
-				<h1 class="text-2xl leading-tight font-semibold break-words text-balance">
+				<h2 class="text-2xl leading-tight font-semibold break-words text-balance">
 					{entry.title || entry.url}
-				</h1>
+				</h2>
 				<p class="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
 					<FeedIcon feedTitle={entry.feed_title} {iconUrl} />
 					<span class="min-w-0 truncate">{entry.feed_title}</span>
@@ -466,7 +466,7 @@
 
 			<div
 				dir="auto"
-				class="max-w-none flex-1 text-base leading-relaxed break-words text-foreground [&_a]:underline [&_a]:decoration-from-font [&_a]:[text-underline-position:from-font] [&_a]:[text-decoration-skip-ink:auto] [&_blockquote]:my-3 [&_blockquote]:border-s-2 [&_blockquote]:border-border [&_blockquote]:ps-3 [&_blockquote]:text-muted-foreground [&_h1]:mt-6 [&_h1]:mb-3 [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:mt-5 [&_h2]:mb-2 [&_h2]:text-lg [&_h2]:font-semibold [&_img]:max-w-full [&_img]:rounded-md [&_img]:outline [&_img]:outline-1 [&_img]:-outline-offset-1 [&_img]:outline-prose-image-outline [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:ps-6 [&_p]:my-3 [&_ul]:my-3 [&_ul]:list-disc [&_ul]:ps-6"
+				class="max-w-none flex-1 text-base leading-relaxed break-words text-foreground [&_a]:underline [&_a]:decoration-from-font [&_a]:[text-underline-position:from-font] [&_a]:[text-decoration-skip-ink:auto] [&_blockquote]:my-3 [&_blockquote]:border-s-2 [&_blockquote]:border-border [&_blockquote]:ps-3 [&_blockquote]:text-muted-foreground [&_h2]:mt-6 [&_h2]:mb-3 [&_h2]:text-xl [&_h2]:font-semibold [&_h3]:mt-5 [&_h3]:mb-2 [&_h3]:text-lg [&_h3]:font-semibold [&_img]:max-w-full [&_img]:rounded-md [&_img]:outline [&_img]:outline-1 [&_img]:-outline-offset-1 [&_img]:outline-prose-image-outline [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:ps-6 [&_p]:my-3 [&_ul]:my-3 [&_ul]:list-disc [&_ul]:ps-6"
 			>
 				{#if loading}
 					<!-- The shape of what is coming, rather than a sentence about it:

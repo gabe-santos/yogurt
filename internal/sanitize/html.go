@@ -18,9 +18,11 @@ var policy = bluemonday.UGCPolicy()
 var textPolicy = bluemonday.StrictPolicy()
 
 // HTML strips dangerous markup from raw, publisher-supplied HTML, returning
-// only what is safe to render.
+// only what is safe to render, with every heading demoted one level.
+// Feed View, like Reader View, nests a publisher's own markup beneath the
+// page's own h1 (the Collection) and h2 (the Entry title): see issue #37.
 func HTML(raw string) string {
-	return policy.Sanitize(raw)
+	return policy.Sanitize(demoteHeadings(raw))
 }
 
 // PlainText reduces raw, publisher-supplied HTML to plain text: every tag is

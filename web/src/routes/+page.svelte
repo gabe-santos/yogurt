@@ -865,7 +865,7 @@
   <Sidebar.Root>
     <Sidebar.Header>
       <div class="flex items-center justify-between gap-2 ps-2">
-        <h1 class="text-base font-semibold">Reader</h1>
+        <div class="text-base font-semibold">Reader</div>
         <div class="flex items-center gap-0.5">
           <Button
             variant="ghost"
@@ -1029,12 +1029,12 @@
           class="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-2 border-b border-border p-3"
         >
           <Sidebar.Trigger class="-ms-1 shrink-0 @max-3xl:size-9" />
-          <h2
+          <h1
             data-testid="collection"
             class="min-w-20 flex-1 truncate px-1 text-base font-medium"
           >
             {collectionTitle}
-          </h2>
+          </h1>
           <div class="flex shrink-0 items-center gap-1">
             {#if unreadOnlyOffered}
               <!-- Pressed fills the pill with the colour the unread dot on

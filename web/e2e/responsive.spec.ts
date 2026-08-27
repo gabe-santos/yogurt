@@ -70,3 +70,29 @@ test('on a phone-sized viewport the sidebar is a sheet and reading still works',
   await page.getByTestId('reading-pane-back').click();
   await expect(pane).toBeHidden();
 });
+
+// 320px is the narrowest width the layout is expected to hold at: see issue
+// #37. It runs the Reading Pane as the same overlay the 390px journey above
+// exercises, so this test only re-checks the heading outline, not the rest
+// of the overlay's behaviour.
+test('holds a single h1 at 320px, where the Reading Pane is an overlay', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 568 });
+  await page.goto('/login');
+  await page.getByLabel('Password').fill(password);
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByTestId('entry')).toHaveCount(2);
+
+  // No Entry open: the Collection's own name is the page's only h1, and
+  // there is no h2.
+  await expect(page.locator('h1')).toHaveCount(1);
+  await expect(page.locator('h2')).toHaveCount(0);
+
+  // The open Entry's title becomes the page's only h2, nested under the same
+  // h1 — the overlay never swaps which element is the h1.
+  await page.getByTestId('entry').first().click();
+  await expect(page.getByTestId('reading-pane')).toBeVisible();
+  await expect(page.locator('h1')).toHaveCount(1);
+  await expect(page.locator('h2')).toHaveCount(1);
+});

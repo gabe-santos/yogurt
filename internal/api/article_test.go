@@ -33,6 +33,7 @@ density checks extraction performs internally before it decides this is
 worth keeping.</p>
 <img src="https://example.com/tracking.gif" width="1" height="1" alt="">
 <img src="http://example.com/photo.jpg" alt="A photo worth seeing">
+<h2>A section heading distinct from the title</h2>
 <p>A third paragraph wraps up the piece with a concluding thought, some
 further detail, and enough additional words to keep the parser satisfied
 about the total length of the extracted content block it produces.</p>
@@ -89,6 +90,12 @@ func TestReaderViewExtractsSanitisesAndReusesTheArticle(t *testing.T) {
 	}
 	if !strings.Contains(body.Article.HTML, `referrerpolicy="no-referrer"`) {
 		t.Errorf("extracted HTML = %q, image carries no no-referrer policy", body.Article.HTML)
+	}
+	if strings.Contains(body.Article.HTML, "<h1") {
+		t.Errorf("extracted HTML = %q, still carries an h1 (see issue #37)", body.Article.HTML)
+	}
+	if want := "<h3>A section heading distinct from the title</h3>"; !strings.Contains(body.Article.HTML, want) {
+		t.Errorf("extracted HTML = %q, want the Article's own h2 demoted to %q", body.Article.HTML, want)
 	}
 	if !body.Article.Embeddable {
 		t.Error("article with no framing headers reported as not embeddable")

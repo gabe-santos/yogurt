@@ -77,6 +77,11 @@ test('Unread Only narrows the list once and then holds it still', async ({
     page.getByText('Turn Unread off to see everything in All Feeds.'),
   ).toBeVisible();
 
+  // An emptied Collection still carries exactly one h1 — the Collection's
+  // own name — and no h2, since no Entry is open. See issue #37.
+  await expect(page.locator('h1')).toHaveCount(1);
+  await expect(page.locator('h2')).toHaveCount(0);
+
   // Left off for the journeys that follow, which read an unnarrowed list.
   await page.getByTestId('unread-only').click();
   await expect(entries).toHaveCount(2);

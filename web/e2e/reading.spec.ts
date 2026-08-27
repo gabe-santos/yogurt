@@ -14,6 +14,12 @@ test('the reader opens an Entry, reads it, and triages by keyboard', async ({
   await addFeed(page, publisherURL);
   await expect(page.getByTestId('entry')).toHaveCount(2);
 
+  // The Collection's own name is the page's single h1; no Entry is open yet,
+  // so there is no h2 either. See issue #37.
+  await expect(page.locator('h1')).toHaveCount(1);
+  await expect(page.locator('h1')).toHaveAttribute('data-testid', 'collection');
+  await expect(page.locator('h2')).toHaveCount(0);
+
   // The Feed Icon slot renders the publisher's real, stored icon —
   // discovered at subscribe time — rather than the monogram fallback, and
   // stays decorative to assistive technology.
@@ -139,6 +145,13 @@ test('the reader opens an Entry, reads it, and triages by keyboard', async ({
     'Round, and it rolls.',
   );
   await expect(entries.nth(0)).not.toContainText('unread');
+
+  // The open Entry's own title becomes the page's only h2, nested under the
+  // Collection's own h1 — never a second h1. See issue #37.
+  await expect(page.locator('h1')).toHaveCount(1);
+  await expect(page.locator('h1')).toHaveAttribute('data-testid', 'collection');
+  await expect(page.locator('h2')).toHaveCount(1);
+  await expect(page.locator('h2')).toContainText('Wheels: a review');
 
   // Next/previous from the keyboard, without leaving the Reading Pane.
   await page.keyboard.press('j');

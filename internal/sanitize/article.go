@@ -25,10 +25,76 @@ func newArticlePolicy() *bluemonday.Policy {
 // Article cleans HTML this application extracted from a publisher's page
 // before it is stored and rendered: dangerous markup is stripped, one-pixel
 // tracking images are removed, every remaining image carries a no-referrer
-// policy, and an insecure image source is upgraded to https or, when that is
-// not possible, dropped.
+// policy, an insecure image source is upgraded to https or, when that is not
+// possible, dropped, and every heading is demoted one level. Reader View
+// nests an Article beneath the page's own h1 (the Collection) and h2 (the
+// Entry title); left alone, a publisher's own <h1> inside the Article body
+// would read as a second h1 on the page.
 func Article(raw string) string {
-	return articlePolicy.Sanitize(rewriteImages(raw))
+	return articlePolicy.Sanitize(demoteHeadings(rewriteImages(raw)))
+}
+
+// headingLevel maps each heading atom to its numeric level.
+var headingLevel = map[atom.Atom]int{
+	atom.H1: 1,
+	atom.H2: 2,
+	atom.H3: 3,
+	atom.H4: 4,
+	atom.H5: 5,
+	atom.H6: 6,
+}
+
+// demotedHeading maps a heading level to the tag one level lower, capping at
+// h6 rather than inventing a level HTML has no tag for.
+var demotedHeading = map[int]atom.Atom{
+	1: atom.H2,
+	2: atom.H3,
+	3: atom.H4,
+	4: atom.H5,
+	5: atom.H6,
+	6: atom.H6,
+}
+
+// demoteHeadings walks the parsed document, rewriting every h1-h6 to the tag
+// one level lower. It runs before the allowlist sanitiser, alongside
+// rewriteImages.
+func demoteHeadings(raw string) string {
+	body := &html.Node{Type: html.ElementNode, Data: "body", DataAtom: atom.Body}
+	nodes, err := html.ParseFragment(strings.NewReader(raw), body)
+	if err != nil {
+		// Malformed input is left for the allowlist sanitiser to deal with; it
+		// strips anything it cannot make sense of.
+		return raw
+	}
+	for _, n := range nodes {
+		body.AppendChild(n)
+	}
+
+	lowerHeadings(body)
+
+	var buf bytes.Buffer
+	for c := body.FirstChild; c != nil; c = c.NextSibling {
+		_ = html.Render(&buf, c)
+	}
+	return buf.String()
+}
+
+// lowerHeadings walks n and its descendants, demoting every heading it finds
+// in place.
+func lowerHeadings(n *html.Node) {
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		lowerHeadings(c)
+	}
+	if n.Type != html.ElementNode {
+		return
+	}
+	level, ok := headingLevel[n.DataAtom]
+	if !ok {
+		return
+	}
+	demoted := demotedHeading[level]
+	n.DataAtom = demoted
+	n.Data = demoted.String()
 }
 
 // rewriteImages walks the parsed document, dropping tracking pixels and

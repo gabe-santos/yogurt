@@ -22,6 +22,12 @@ test('the reader switches views, keeps the choice, and is offered a tab when a p
     'Keeping a fire alive overnight.',
   );
 
+  // Feed View nests under the page's single h1 and the Entry's own h2 —
+  // never a second h1. See issue #37.
+  await expect(page.locator('h1')).toHaveCount(1);
+  await expect(page.locator('h2')).toHaveCount(1);
+  await expect(page.locator('h2')).toContainText('Fire, and how to keep it');
+
   // The travelling surface remains an immediate state marker when readers ask
   // for reduced motion; its geometry is already that of the chosen cell when
   // the click completes.
@@ -57,6 +63,11 @@ test('the reader switches views, keeps the choice, and is offered a tab when a p
     'Site navigation the reader does not want',
   );
 
+  // Reader View, including its own extracted markup, still nests under one
+  // h1 and one h2. See issue #37.
+  await expect(page.locator('h1')).toHaveCount(1);
+  await expect(page.locator('h2')).toHaveCount(1);
+
   // Original View embeds the live page for a publisher that allows it.
   await page.getByTestId('view-original').click();
   const frame = page.getByTestId('original-view');
@@ -71,6 +82,12 @@ test('the reader switches views, keeps the choice, and is offered a tab when a p
     'ready',
   );
   await expect(embedded.getByText('Application error')).toHaveCount(0);
+
+  // Original View embeds the publisher's page in an iframe with its own
+  // document; the app page keeps its own single h1 and h2 regardless. See
+  // issue #37.
+  await expect(page.locator('h1')).toHaveCount(1);
+  await expect(page.locator('h2')).toHaveCount(1);
 
   // The publisher keeps its own origin, so its storage-dependent application
   // works. That origin still reaches neither Reader's session nor its DOM.
