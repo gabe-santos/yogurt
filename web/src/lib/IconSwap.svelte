@@ -15,9 +15,11 @@
   // Both icons share one grid cell, so each has an enter and an exit: the icon
   // leaving shrinks and blurs away while its replacement grows in. Toggling
   // visibility gives you neither, and in a button whose label never changes the
-  // swap is the sign that the action landed.
+  // swap is the sign that the action landed. This fires on every Star/Archive/
+  // Mark read/Refresh press, so 150ms keeps the choreography readable without
+  // leaving the icon visibly mid-swap under rapid j/k plus m/s use.
   const cell =
-    'col-start-1 row-start-1 flex transition-[opacity,scale,filter] duration-300 ease-[cubic-bezier(0.2,0,0,1)]';
+    'col-start-1 row-start-1 flex transition-[opacity,scale,filter] duration-150 ease-[cubic-bezier(0.2,0,0,1)] motion-reduce:transition-none';
   const shown = 'scale-100 opacity-100 blur-[0px]';
   const hidden = 'scale-25 opacity-0 blur-[4px]';
 </script>
