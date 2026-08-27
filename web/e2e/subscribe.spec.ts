@@ -200,3 +200,70 @@ test('the "…" menu button opens the same menu as right-click, reporting Feed h
   await expect(feedMenu).toContainText(/^Checked /);
   await page.keyboard.press('Escape');
 });
+
+test('a failing Feed offers its full error from either menu, by keyboard', async ({
+  page,
+}) => {
+  const longError =
+    'Error: fetch failed\n'.repeat(4) +
+    'caused by: context deadline exceeded while reading the response body';
+
+  await page.route('**/api/feeds', async (route) => {
+    if (route.request().method() !== 'GET') return route.continue();
+    const response = await route.fetch();
+    const body = await response.json();
+    body.feeds = body.feeds.map((feed: { last_error: string }) => ({
+      ...feed,
+      last_error: longError,
+    }));
+    await route.fulfill({ response, json: body });
+  });
+
+  await page.goto('/login');
+  await page.getByLabel('Password').fill(password);
+  await page.getByRole('button', { name: 'Sign in' }).click();
+
+  const feed = page.getByTestId('feed');
+  const errorDialog = page.getByTestId('feed-error-dialog');
+  await expect(feed).toHaveText('The Daily Cave');
+
+  // The right-click menu's clamped preview stays two lines — the full text
+  // is reachable, not inlined into the menu.
+  const contextMenu = page.getByTestId('feed-context-menu');
+  await feed.click({ button: 'right' });
+  await expect(contextMenu).toBeVisible();
+  await expect(
+    contextMenu.getByRole('menuitem', { name: 'View full error' }),
+  ).toBeVisible();
+
+  // Reached by keyboard alone, no mouse hover involved — Enter activates
+  // the item once it holds focus, the same way Rename and Delete Feed do.
+  await contextMenu.getByRole('menuitem', { name: 'View full error' }).press('Enter');
+  await expect(errorDialog).toBeVisible();
+  await expect(errorDialog).toContainText(
+    'context deadline exceeded while reading the response body',
+  );
+  await page.keyboard.press('Escape');
+  await expect(errorDialog).toBeHidden();
+
+  // The "…" button menu offers the identical control — one shared body.
+  const dropdownMenu = page.getByTestId('feed-menu');
+  await page.getByRole('button', { name: 'The Daily Cave menu' }).click();
+  await expect(dropdownMenu).toBeVisible();
+  await dropdownMenu.getByRole('menuitem', { name: 'View full error' }).click();
+  await expect(errorDialog).toBeVisible();
+  await expect(errorDialog).toContainText(
+    'context deadline exceeded while reading the response body',
+  );
+  await page.keyboard.press('Escape');
+  await expect(errorDialog).toBeHidden();
+
+  // A Feed with no failure offers no such control.
+  await page.unroute('**/api/feeds');
+  await page.reload();
+  await expect(feed).toHaveText('The Daily Cave');
+  await feed.click({ button: 'right' });
+  await expect(
+    contextMenu.getByRole('menuitem', { name: 'View full error' }),
+  ).toHaveCount(0);
+});

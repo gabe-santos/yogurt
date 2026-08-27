@@ -2,6 +2,7 @@
   import { feedIconUrl } from '$lib/api';
   import type { Feed } from '$lib/api';
   import * as ContextMenu from '$lib/components/ui/context-menu';
+  import * as Dialog from '$lib/components/ui/dialog';
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
   import * as Sidebar from '$lib/components/ui/sidebar';
   import { cn } from '$lib/utils';
@@ -21,6 +22,11 @@
   }
 
   const { feed, isActive, onSelect, onRename, onDelete }: Props = $props();
+
+  // The clamped preview stays two lines so a stack-trace-shaped reason can't
+  // blow up the menu; this dialog is the keyboard- and touch-reachable path
+  // to the rest of it, opened from a menu item rather than a hover tooltip.
+  let showError = $state(false);
 
   // Right-click and the "…" button open the identical menu, so its body is
   // written once and rendered inside both ContextMenu.Content and
@@ -45,6 +51,15 @@
       <p class="mt-1 line-clamp-2 text-destructive">{feed.last_error}</p>
     {/if}
   </div>
+  {#if feed.last_error}
+    <M.Separator />
+    <M.Group>
+      <M.Item onclick={() => (showError = true)}>
+        <TriangleAlertIcon strokeWidth={1.5} />
+        View full error
+      </M.Item>
+    </M.Group>
+  {/if}
   <M.Separator />
   <M.Group>
     <M.Item onclick={onRename}>
@@ -116,6 +131,19 @@
     {@render feedMenuBody(DropdownMenu)}
   </DropdownMenu.Content>
 </DropdownMenu.Root>
+
+{#if feed.last_error}
+  <Dialog.Root bind:open={showError}>
+    <Dialog.Content data-testid="feed-error-dialog" class="sm:max-w-md">
+      <Dialog.Header>
+        <Dialog.Title class="text-lg font-semibold">{feed.title} error</Dialog.Title>
+      </Dialog.Header>
+      <p class="max-h-[60vh] overflow-y-auto text-sm whitespace-pre-wrap text-destructive">
+        {feed.last_error}
+      </p>
+    </Dialog.Content>
+  </Dialog.Root>
+{/if}
 {#if feed.unread_count > 0}
   <!-- The badge and the "…" action share one slot (top-1.5 right-1): on
        touch the action is always shown there, and on desktop it takes the
