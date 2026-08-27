@@ -83,7 +83,7 @@ func (h *Handler) createFeed(w http.ResponseWriter, r *http.Request) {
 	case errors.Is(err, pull.ErrInvalidURL):
 		h.writeError(w, r, http.StatusBadRequest, "that url is not a web address")
 	case errors.Is(err, store.ErrFeedExists):
-		h.writeError(w, r, http.StatusConflict, "you are already subscribed to this Feed")
+		h.writeError(w, r, http.StatusConflict, "you already have this Feed")
 	case errors.Is(err, pull.ErrNoFeed):
 		h.writeError(w, r, http.StatusUnprocessableEntity,
 			"that address is not a Feed, and carries no link to one")

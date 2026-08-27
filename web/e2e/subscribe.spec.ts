@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 import { password, publisherURL } from './env';
-import { subscribeToFeed } from './actions';
+import { addFeed } from './actions';
 
 test('the reader subscribes to a site and reads what it published', async ({
   page,
@@ -16,9 +16,11 @@ test('the reader subscribes to a site and reads what it published', async ({
   // Feed — is refused, with the reason beside the field that caused it, and
   // the address stays put so it can be corrected. The dialog stays open.
   const dialog = page.getByTestId('add-feed-dialog');
-  await subscribeToFeed(page, publisherURL);
+  await addFeed(page, publisherURL);
   await expect(dialog).toBeVisible();
-  await expect(dialog.getByRole('alert')).toContainText('already subscribed');
+  await expect(dialog.getByRole('alert')).toContainText(
+    'already have this Feed',
+  );
   await expect(dialog.getByLabel('Feed or site address')).toHaveValue(
     publisherURL,
   );
@@ -39,9 +41,11 @@ test('the reader subscribes to a site and reads what it published', async ({
 
   // Subscribing to the Feed's own address, rather than the site, is refused
   // the same way.
-  await subscribeToFeed(page, `${publisherURL}/feed.xml`);
+  await addFeed(page, `${publisherURL}/feed.xml`);
   await expect(dialog).toBeVisible();
-  await expect(dialog.getByRole('alert')).toContainText('already subscribed');
+  await expect(dialog.getByRole('alert')).toContainText(
+    'already have this Feed',
+  );
   await page.keyboard.press('Escape');
   await expect(dialog).toBeHidden();
   await expect(page.getByTestId('feed')).toHaveCount(1);
@@ -87,14 +91,14 @@ test('the reader names a Feed while subscribing', async ({ page }) => {
     .getByLabel('Feed or site address')
     .fill(`${publisherURL}/second.xml`);
   await dialog.getByLabel('Name').fill('My Second Feed');
-  await dialog.getByRole('button', { name: 'Subscribe' }).click();
+  await dialog.getByRole('button', { name: 'Add Feed' }).click();
   await expect(dialog).toBeHidden();
 
   const feed = page.getByTestId('feed').filter({ hasText: 'My Second Feed' });
   await expect(feed).toBeVisible();
   await expect(page.getByTestId('collection')).toHaveText('My Second Feed');
   await expect(page.getByTestId('notice')).toHaveText(
-    'Subscribed to My Second Feed.',
+    'Added Feed My Second Feed.',
   );
 
   // The suite shares one database; remove the Feed so the journeys after
@@ -154,7 +158,7 @@ test('the reader manages a Feed from its right-click menu', async ({
     'Every Entry it carried is deleted with it',
   );
   await expect(page.getByTestId('confirm-dialog')).toContainText(
-    'Re-subscribing starts the Feed from scratch.',
+    'Adding the Feed again starts it from scratch.',
   );
   await page.getByRole('button', { name: 'Cancel' }).click();
   await expect(feed).toHaveCount(1);

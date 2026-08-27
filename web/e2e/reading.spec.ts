@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 import { password, publisherURL } from './env';
-import { subscribeToFeed } from './actions';
+import { addFeed } from './actions';
 
 test('the reader opens an Entry, reads it, and triages by keyboard', async ({
   page,
@@ -11,7 +11,7 @@ test('the reader opens an Entry, reads it, and triages by keyboard', async ({
   await page.getByRole('button', { name: 'Sign in' }).click();
   await expect(page.getByRole('button', { name: 'Add Feed' })).toBeVisible();
 
-  await subscribeToFeed(page, publisherURL);
+  await addFeed(page, publisherURL);
   await expect(page.getByTestId('entry')).toHaveCount(2);
 
   // The Feed Icon slot renders the publisher's real, stored icon —

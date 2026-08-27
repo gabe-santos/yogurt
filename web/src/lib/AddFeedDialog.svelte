@@ -9,10 +9,10 @@
 
 	interface Props {
 		onClose: () => void;
-		onSubscribed: (feed: Feed) => void;
+		onFeedAdded: (feed: Feed) => void;
 	}
 
-	const { onClose, onSubscribed }: Props = $props();
+	const { onClose, onFeedAdded }: Props = $props();
 
 	let address = $state('');
 	let name = $state('');
@@ -32,7 +32,7 @@
 		submitting = true;
 		try {
 			const feed = await addFeed(address, name);
-			onSubscribed(feed);
+			onFeedAdded(feed);
 		} catch (cause) {
 			error = cause instanceof ApiError ? cause.message : 'Could not reach the server';
 		} finally {
@@ -73,7 +73,7 @@
 					{#if submitting}
 						<LoaderCircleIcon class="animate-spin" />
 					{/if}
-					Subscribe
+					Add Feed
 				</Button>
 			</Dialog.Footer>
 		</form>

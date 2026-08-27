@@ -375,13 +375,13 @@
     feeds = await listFeeds();
   }
 
-  async function handleFeedSubscribed(feed: Feed) {
+  async function handleFeedAdded(feed: Feed) {
     addFeedOpen = false;
     try {
       await refreshCounts();
       collection = { type: "feed", id: feed.id };
       await reload();
-      notice = `Subscribed to ${feed.title}.`;
+      notice = `Added Feed ${feed.title}.`;
     } catch (cause) {
       reportError(cause);
     }
@@ -759,7 +759,7 @@
     removal = {
       title: `Delete "${feed.title}"?`,
       description:
-        "Every Entry it carried is deleted with it, Starred ones included. Re-subscribing starts the Feed from scratch.",
+        "Every Entry it carried is deleted with it, Starred ones included. Adding the Feed again starts it from scratch.",
       confirmLabel: "Delete Feed",
       run: async () => {
         await deleteFeed(feed.id);
@@ -1303,7 +1303,7 @@
 {#if addFeedOpen}
   <AddFeedDialog
     onClose={() => (addFeedOpen = false)}
-    onSubscribed={handleFeedSubscribed}
+    onFeedAdded={handleFeedAdded}
   />
 {/if}
 
