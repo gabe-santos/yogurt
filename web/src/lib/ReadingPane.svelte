@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { onMount, untrack } from 'svelte';
-	import { MediaQuery } from 'svelte/reactivity';
 	import { prefersReducedMotion } from 'svelte/motion';
 	import { fly } from 'svelte/transition';
 	import { expoOut } from 'svelte/easing';
@@ -37,6 +36,11 @@
 		/** iconUrl is the Entry's Feed Icon, so the pane's own metadata line
 		 * names its Feed the same way the Entry List row did. */
 		iconUrl?: string;
+		/** overlay is true while the pane covers the Entry List instead of
+		 * standing beside it. The page owns the answer because it owns the box
+		 * both panes are measured against; the CSS here asks the same question
+		 * with `@3xl`. */
+		overlay: boolean;
 		/** onClose backs out of the overlay the pane becomes on a narrow
 		 * screen. On a wide one the pane is furniture and nothing calls it. */
 		onClose: () => void;
@@ -51,6 +55,7 @@
 		busy,
 		view,
 		iconUrl,
+		overlay,
 		onClose,
 		onView,
 		onToggleRead,
@@ -58,22 +63,20 @@
 		onArchive
 	}: Props = $props();
 
-	// The pane is an overlay over the Entry List below `lg` and the third column
-	// at or above it, so only the overlay has somewhere to arrive from and leave
-	// to. The enter is CSS gated by `max-lg:motion-safe:`; the exit needs the
-	// same two answers in JavaScript.
-	const overlay = new MediaQuery('width < 64rem');
+	// Only the overlay has somewhere to arrive from and leave to. The enter is
+	// CSS gated by `@max-3xl:motion-safe:`; the exit needs the same two
+	// answers in JavaScript, which is what `overlay` carries in.
 	// Exits run 250ms against the entrance's 300ms — the reader should not wait
 	// on the way out — and travel the same 32px the entrance already uses,
 	// along expoOut: the JS equivalent of the entrance's own
 	// cubic-bezier(0.16, 1, 0.3, 1). Sampled across the curve expoOut deviates
 	// by 0.0056 (0.18px over 32px); cubicOut, the obvious default, deviates by
 	// 0.264 (8.5px) and would visibly change the entrance this exit mirrors.
-	// Only the overlay has somewhere to leave to; the third column never
-	// transitions. Reduced motion still cross-fades — gentler, not absent —
-	// just without the horizontal travel, and faster than the full exit.
+	// The third column never transitions; only the overlay leaves. Reduced
+	// motion still cross-fades — gentler, not absent — just without the
+	// horizontal travel, and faster than the full exit.
 	const exit = $derived(
-		!overlay.current
+		!overlay
 			? { duration: 0 }
 			: prefersReducedMotion.current
 				? { x: 0, duration: 100 }
@@ -110,7 +113,7 @@
 	// stays open must not keep re-stealing focus, so this never re-runs for
 	// that; onMount alone gives the once-per-open timing for free.
 	onMount(() => {
-		if (overlay.current) backButton?.focus({ preventScroll: true });
+		if (overlay) backButton?.focus({ preventScroll: true });
 	});
 	// titleScrolledAway drives the sticky bar's copy of the title: the title
 	// itself lives in the scrolling body, so once it leaves the pane the bar has
@@ -263,7 +266,7 @@
 					{...props}
 					variant={pressed ? 'secondary' : 'ghost'}
 					size="icon-sm"
-					class="max-lg:size-9"
+					class="@max-3xl:size-9"
 					aria-label={label}
 					aria-pressed={pressed}
 					data-testid={testid}
@@ -307,7 +310,7 @@
 					disabled={busy}
 					aria-label={label}
 					data-testid={`view-${id}`}
-					class="relative flex size-7 items-center justify-center rounded-[calc(var(--radius)*1.8_-_2px)] text-muted-foreground transition-[color,scale] hover:text-foreground active:scale-[0.96] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-50 data-active:text-foreground max-lg:size-9"
+					class="relative flex size-7 items-center justify-center rounded-[calc(var(--radius)*1.8_-_2px)] text-muted-foreground transition-[color,scale] hover:text-foreground active:scale-[0.96] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-50 data-active:text-foreground @max-3xl:size-9"
 				>
 					<Icon class="size-4" />
 				</Tabs.Trigger>
@@ -326,12 +329,15 @@
 <section
 	data-testid="reading-pane"
 	aria-label="Reading Pane"
-	class="absolute inset-0 z-30 flex flex-col bg-background max-lg:motion-safe:animate-in max-lg:motion-safe:slide-in-from-right-8 max-lg:motion-safe:duration-300 max-lg:motion-safe:ease-[cubic-bezier(0.16,1,0.3,1)] lg:static lg:z-auto lg:flex-1 lg:border-l lg:border-border"
+	class="absolute inset-0 z-30 flex flex-col bg-background @max-3xl:motion-safe:animate-in @max-3xl:motion-safe:slide-in-from-right-8 @max-3xl:motion-safe:duration-300 @max-3xl:motion-safe:ease-[cubic-bezier(0.16,1,0.3,1)] @3xl:static @3xl:z-auto @3xl:flex-1 @3xl:border-s @3xl:border-border"
 	out:fly={exit}
 >
 	<Tooltip.Provider delayDuration={400}>
+		<!-- Eight 36px controls and their divider need 311px, so below 21rem the
+		     bar tightens its own margins rather than letting the trailing
+		     control run into the edge of the screen. -->
 		<header
-			class="flex h-12 shrink-0 items-center gap-1 border-b border-border bg-background/95 px-2 backdrop-blur max-lg:h-14 max-lg:gap-0"
+			class="flex h-12 shrink-0 items-center gap-1 border-b border-border bg-background/95 px-2 backdrop-blur @max-3xl:h-14 @max-3xl:gap-0 @max-[21rem]:px-1"
 		>
 			<Tooltip.Root>
 				<Tooltip.Trigger>
@@ -341,7 +347,7 @@
 							bind:ref={backButton}
 							variant="ghost"
 							size="icon-sm"
-							class="lg:hidden max-lg:size-9"
+							class="@3xl:hidden @max-3xl:size-9"
 							aria-label="Back to the Entry List"
 							data-testid="reading-pane-back"
 							onclick={onClose}
@@ -355,7 +361,7 @@
 
 			<p
 				data-testid="reading-pane-title"
-				class="min-w-0 flex-1 truncate px-1 text-sm font-medium transition-opacity duration-150 max-lg:hidden"
+				class="min-w-0 flex-1 truncate px-1 text-sm font-medium transition-opacity duration-150 @max-3xl:hidden"
 				class:opacity-0={!titleScrolledAway}
 				aria-hidden={!titleScrolledAway}
 			>
@@ -364,7 +370,7 @@
 
 			<!-- On a phone the eight controls are the whole bar, so the spare
 			     width sits between the two groups rather than beside them. -->
-			<div class="flex-1 lg:hidden"></div>
+			<div class="flex-1 @3xl:hidden"></div>
 
 			<Tabs.Root value={view} onValueChange={(value) => onView(value as EntryView)} class="shrink-0">
 				<Tabs.List aria-label="View" class="gap-0.5 p-0.5">
@@ -374,7 +380,10 @@
 				</Tabs.List>
 			</Tabs.Root>
 
-			<div class="mx-1.5 h-5 w-px shrink-0 bg-border max-lg:mx-1" aria-hidden="true"></div>
+			<div
+				class="mx-1.5 h-5 w-px shrink-0 bg-border @max-3xl:mx-1 @max-[21rem]:mx-0.5"
+				aria-hidden="true"
+			></div>
 
 			<div class="flex shrink-0 items-center gap-0.5">
 				{@render control(
@@ -416,7 +425,7 @@
 								{...props}
 								variant="ghost"
 								size="icon-sm"
-								class="max-lg:size-9"
+								class="@max-3xl:size-9"
 								href={entry.url}
 								target="_blank"
 								rel="noreferrer"

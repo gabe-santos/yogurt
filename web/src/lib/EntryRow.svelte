@@ -74,7 +74,7 @@
             {/if}
             <FeedIcon feedTitle={entry.feed_title} {iconUrl} />
             <span class="min-w-0 truncate">{entry.feed_title}</span>
-            <span class="ml-auto flex shrink-0 items-center gap-1.5">
+            <span class="ms-auto flex shrink-0 items-center gap-1.5">
               {#if entry.starred}
                 <StarIcon class="size-3 fill-current" strokeWidth={1.5} aria-hidden="true" />
                 <span class="sr-only">Starred</span>

@@ -93,7 +93,9 @@
 			</div>
 		{/if}
 
-		<ul class="flex flex-col gap-2">
+		<!-- The list is what grows without limit here, so it is what scrolls: the
+		     form below it is the reason the dialog is open and stays in view. -->
+		<ul class="scrollbar-hover flex max-h-64 flex-col gap-2 overflow-y-auto">
 			{#each tokens as token (token.id)}
 				<li
 					class="flex items-center justify-between gap-3 rounded-md px-3 py-2 text-sm shadow-border"

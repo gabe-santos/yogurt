@@ -47,7 +47,6 @@
     Settings,
   } from "$lib/api";
   import ReadingPane from "$lib/ReadingPane.svelte";
-  import { IsMobile } from "$lib/hooks/is-mobile.svelte.js";
   import BookOpenIcon from "@lucide/svelte/icons/book-open";
   import CheckCheckIcon from "@lucide/svelte/icons/check-check";
   import RefreshCwIcon from "@lucide/svelte/icons/refresh-cw";
@@ -106,9 +105,25 @@
   // position. See docs/adr/0010-selection-is-opening.md.
   let selectedIndex = $state<number | undefined>(undefined);
   // The Reading Pane is a column of the layout once there is room for three,
-  // and an overlay over the Entry List before that. The list behind an
-  // overlay must not be reachable by tab, which is what narrow decides.
-  const narrow = new IsMobile(1024);
+  // and an overlay over the Entry List before that. "Room" is what this pane
+  // pair actually has, not what the window has: the Collection List takes
+  // 16rem out of the window when it is open and gives it all back when it is
+  // collapsed, so a window query answers the question wrong by that much in
+  // both directions. The element is measured instead, and the CSS beside it
+  // asks the same question with `@container`/`@3xl` against the same box.
+  // The list behind an overlay must not be reachable by tab, which is what
+  // narrow decides.
+  const twoColumnMin = 768;
+  let inset = $state<HTMLElement | null>(null);
+  // insetWidth is 0 only before the element exists. Nothing reads `narrow`
+  // in that window: every consumer — the list's `inert`, Escape, and the
+  // pane's own overlay behaviour — needs a selected Entry, and a selection
+  // cannot exist before the Entries have loaded, which is several frames
+  // after the effect below has measured. A window-width seed was the
+  // alternative and it is wrong by the Collection List's 16rem in exactly
+  // the band this measurement exists for.
+  let insetWidth = $state(0);
+  const narrow = $derived(insetWidth < twoColumnMin);
   // selectionRestored stops the empty selection the page starts with from
   // clearing the Entry named in the address bar before it has been read.
   let selectionRestored = $state(false);
@@ -211,7 +226,7 @@
   const selectedEntry = $derived(
     selectedIndex !== undefined ? entries[selectedIndex] : undefined,
   );
-  const overlayUp = $derived(narrow.current && selectedEntry !== undefined);
+  const overlayUp = $derived(narrow && selectedEntry !== undefined);
   // The Feeds group is a flat, title-sorted list of every Feed: this stays in
   // step with a rename without a separate resort step.
   const sortedFeeds = $derived(
@@ -219,6 +234,23 @@
       a.title.localeCompare(b.title, undefined, { sensitivity: "base" }),
     ),
   );
+
+  // ResizeObserver rather than a window listener: the pane pair also changes
+  // width when the Collection List opens or collapses, which resizes nothing.
+  // The first measurement is taken synchronously here rather than waiting for
+  // the observer's first delivery, which lands after this frame's layout: a
+  // deep-linked Entry must not be able to mount its pane against a width
+  // nobody has measured yet.
+  $effect(() => {
+    const measured = inset;
+    if (!measured) return;
+    insetWidth = measured.clientWidth;
+    const observer = new ResizeObserver(([entry]) => {
+      insetWidth = entry.contentRect.width;
+    });
+    observer.observe(measured);
+    return () => observer.disconnect();
+  });
 
   onMount(async () => {
     // An Entry named in the address bar is restored in place: the list loads
@@ -579,7 +611,7 @@
    * is room for a third column. With the room, there is nothing to back out
    * of and the pane keeps what it is showing. */
   function clearSelection() {
-    if (busy || !narrow.current) return;
+    if (busy || !narrow) return;
     selectedIndex = undefined;
   }
 
@@ -833,7 +865,7 @@
 <Sidebar.Provider>
   <Sidebar.Root>
     <Sidebar.Header>
-      <div class="flex items-center justify-between gap-2 pl-2">
+      <div class="flex items-center justify-between gap-2 ps-2">
         <h1 class="text-base font-semibold">Reader</h1>
         <div class="flex items-center gap-0.5">
           <Button
@@ -973,23 +1005,38 @@
     </Sidebar.Footer>
   </Sidebar.Root>
 
-  <Sidebar.Inset class="relative h-svh flex-row overflow-hidden">
+  <!-- `@container` is what every `@3xl:` below asks: the pane pair is sized
+       against this box, so the layout changes when the room changes rather
+       than when the window does. -->
+  <Sidebar.Inset
+    bind:ref={inset}
+    class="@container relative h-svh flex-row overflow-hidden"
+  >
     <div
       data-testid="entry-list"
-      class="flex h-full w-full flex-col overflow-hidden lg:w-88 lg:shrink-0"
+      class="flex h-full w-full flex-col overflow-hidden @3xl:w-88 @3xl:shrink-0"
       inert={overlayUp}
     >
       <Tooltip.Provider delayDuration={400}>
+        <!-- Identity leads, actions trail, and the two are one gap apart
+             against the half-gap inside the action group. The Collection's
+             own name keeps a floor: the controls are all `shrink-0`, so
+             without one the title is the only thing that can give, and it
+             gives all of it — "All…" on the narrowest phone. The floor is
+             5rem because that is what the 22rem column leaves once the
+             controls have taken theirs; below the width where both fit, the
+             actions take a second row instead. -->
         <div
-          class="flex shrink-0 items-center gap-1 border-b border-border p-3"
+          class="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-2 border-b border-border p-3"
         >
-            <Sidebar.Trigger class="-ml-1 shrink-0 max-lg:size-9" />
-            <h2
-              data-testid="collection"
-              class="min-w-0 flex-1 truncate px-1 text-base font-medium"
-            >
-              {collectionTitle}
-            </h2>
+          <Sidebar.Trigger class="-ms-1 shrink-0 @max-3xl:size-9" />
+          <h2
+            data-testid="collection"
+            class="min-w-20 flex-1 truncate px-1 text-base font-medium"
+          >
+            {collectionTitle}
+          </h2>
+          <div class="flex shrink-0 items-center gap-1">
             {#if unreadOnlyOffered}
               <!-- Pressed fills the pill with the colour the unread dot on
                    every row is already drawn in, so the control and the mark
@@ -999,7 +1046,7 @@
               <Toggle
                 data-testid="unread-only"
                 variant="outline"
-                class="shrink-0 aria-pressed:border-primary aria-pressed:bg-primary aria-pressed:text-primary-foreground aria-pressed:hover:bg-primary/90 aria-pressed:hover:text-primary-foreground max-lg:h-9"
+                class="shrink-0 aria-pressed:border-primary aria-pressed:bg-primary aria-pressed:text-primary-foreground aria-pressed:hover:bg-primary/90 aria-pressed:hover:text-primary-foreground @max-3xl:h-9"
                 pressed={unreadOnly}
                 onPressedChange={(next) => void setUnreadOnly(next)}
                 disabled={busy || loading}
@@ -1025,7 +1072,7 @@
                 id="entry-order"
                 data-testid="entry-order"
                 aria-label="Sort Entries by publish date"
-                class="shrink-0 max-lg:h-9"
+                class="shrink-0 @max-3xl:h-9"
               >
                 {#if entryOrder === "newest"}
                   <ArrowDownWideNarrowIcon strokeWidth={1.5} />
@@ -1055,7 +1102,7 @@
                       {...props}
                       variant="ghost"
                       size="icon-sm"
-                      class="max-lg:size-9"
+                      class="@max-3xl:size-9"
                       aria-label="Mark all read"
                       onclick={markAllRead}
                       disabled={busy || entries.length === 0}
@@ -1074,7 +1121,7 @@
                     {...props}
                     variant="ghost"
                     size="icon-sm"
-                    class="max-lg:size-9"
+                    class="@max-3xl:size-9"
                     aria-label="Refresh all"
                     onclick={refresh}
                     disabled={busy}
@@ -1092,6 +1139,7 @@
               </Tooltip.Trigger>
               <Tooltip.Content>Refresh all</Tooltip.Content>
             </Tooltip.Root>
+          </div>
         </div>
       </Tooltip.Provider>
 
@@ -1111,7 +1159,7 @@
           <div
             data-testid={noticeVisible ? "notice" : undefined}
             role="status"
-            class="flex items-start gap-2 border-b border-border bg-muted/50 py-2 pr-1.5 pl-3 text-xs text-muted-foreground"
+            class="flex items-start gap-2 border-b border-border bg-muted/50 py-2 pe-1.5 ps-3 text-xs text-muted-foreground"
           >
             <span
               class={cn(
@@ -1210,6 +1258,7 @@
         busy={busy || pendingEntryIDs.has(selectedEntry.id)}
         view={entryView}
         iconUrl={iconForEntry(selectedEntry)}
+        overlay={narrow}
         onClose={clearSelection}
         onView={chooseEntryView}
         onToggleRead={toggleReadCurrent}
@@ -1219,7 +1268,7 @@
     {:else}
       <div
         data-testid="reading-pane-empty"
-        class="hidden flex-1 flex-col items-center justify-center gap-3 border-l border-border px-6 text-center lg:flex"
+        class="hidden flex-1 flex-col items-center justify-center gap-3 border-s border-border px-6 text-center @3xl:flex"
       >
         <BookOpenIcon
           class="size-6 text-muted-foreground/60"
