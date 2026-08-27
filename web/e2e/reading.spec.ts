@@ -11,6 +11,12 @@ test('the reader opens an Entry, reads it, and triages by keyboard', async ({
   await page.getByRole('button', { name: 'Sign in' }).click();
   await expect(page.getByRole('button', { name: 'Add Feed' })).toBeVisible();
 
+  // Before any Feed exists, the Collection is genuinely empty — not merely
+  // narrowed by a filter. The Collection's own name is still the page's
+  // single h1, and there is no h2 since no Entry can be open.
+  await expect(page.locator('h1')).toHaveCount(1);
+  await expect(page.locator('h2')).toHaveCount(0);
+
   await addFeed(page, publisherURL);
   await expect(page.getByTestId('entry')).toHaveCount(2);
 
