@@ -66,6 +66,10 @@
   function scheduleSearch(next: string) {
     query = next;
     clearTimeout(debounceHandle);
+    // Invalidate any request already in flight immediately — not when the
+    // debounce fires — so a slow response for a query this keystroke just
+    // superseded can never clobber the state this call sets below.
+    const id = ++requestID;
     if (next.trim() === '') {
       feeds = [];
       entries = [];
@@ -75,11 +79,10 @@
     }
     searching = true;
     error = '';
-    debounceHandle = setTimeout(() => void runQuery(next), 200);
+    debounceHandle = setTimeout(() => void runQuery(next, id), 200);
   }
 
-  async function runQuery(text: string) {
-    const id = ++requestID;
+  async function runQuery(text: string, id: number) {
     try {
       const found = await runSearch(text);
       if (id !== requestID) return;
