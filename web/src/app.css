@@ -134,6 +134,18 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
+  /* Tracking is a function of size, not a constant: the same optical gap
+     reads as loose at 24px and as cramped at 9px. One value per step of the
+     type scale, named after the step it belongs to, so a heading is written
+     `text-2xl tracking-2xl` and can never carry the wrong pairing by
+     accident. Geist has no optical-size axis to do this for us. */
+  --tracking-2xl: -0.022em;
+  --tracking-xl: -0.017em;
+  --tracking-lg: -0.011em;
+  --tracking-base: 0em;
+  --tracking-sm: 0.004em;
+  --tracking-xs: 0.008em;
+  --tracking-2xs: 0.016em;
   /* The project's first shared easing token: a decelerate curve for changes
      that grow or settle in place — the notice bar's height and text below —
      distinct from the pane and notice's own travel curves. Safe to define:
@@ -197,5 +209,53 @@
 
   &:hover::-webkit-scrollbar-thumb {
     background: var(--muted-foreground);
+  }
+}
+
+/* The popovers, menus, and Select lists are one material: a translucent,
+   blurred sheet that keeps what is behind it legible as context. Two system
+   preferences ask for that context to be given up, and neither is served by
+   dropping the blur alone — without it the tint is a washed-out sheet with
+   nothing under it — so the material resolves to the solid surface it was
+   standing in for. Selected by `data-slot`, because that is the identifier
+   the vendored primitives own: their Tailwind classes belong to the
+   generator and are rewritten whenever it reruns. These rules sit outside
+   every layer, which is what puts them above the utilities they answer. */
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  [data-slot='dropdown-menu-content'],
+  [data-slot='dropdown-menu-sub-content'],
+  [data-slot='context-menu-content'],
+  [data-slot='context-menu-sub-content'],
+  [data-slot='select-content'] {
+    background-color: var(--popover);
+
+    &::before {
+      backdrop-filter: none;
+    }
+  }
+
+  /* The blur was half of what held a modal off the page behind it. With it
+     gone the dim carries the separation alone, so it deepens. */
+  [data-slot='dialog-overlay'],
+  [data-slot='sheet-overlay'] {
+    backdrop-filter: none;
+    background-color: oklch(0 0 0 / 0.55);
+  }
+}
+
+/* Increased contrast wants an edge it can rely on. The hairline ring these
+   surfaces wear is tuned to sit quietly on glass; on a solid surface it has
+   to become a line. An outline rather than a border: it follows the same
+   corner radius without taking a pixel of the box the menu is laid out in. */
+@media (prefers-contrast: more) {
+  [data-slot='dropdown-menu-content'],
+  [data-slot='dropdown-menu-sub-content'],
+  [data-slot='context-menu-content'],
+  [data-slot='context-menu-sub-content'],
+  [data-slot='select-content'],
+  [data-slot='dialog-content'],
+  [data-slot='sheet-content'] {
+    outline: 1px solid var(--foreground);
+    outline-offset: -1px;
   }
 }

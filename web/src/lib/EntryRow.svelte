@@ -52,13 +52,19 @@
   <ContextMenu.Root>
     <ContextMenu.Trigger>
       {#snippet child({ props })}
+        <!-- The row answers the press, not the release: selection lands on
+             click, and without a pressed state the ~100ms in between reads as
+             a dead row. The highlight is the one the selected row already
+             wears, so a press previews its own outcome; it is applied with no
+             transition on the way in and the shared one on the way out, which
+             is instant to the finger and still graceful when it lets go. -->
         <button
           {...props}
           type="button"
           data-testid="entry"
           aria-current={isCurrent}
           tabindex={tabbable ? 0 : -1}
-          class="flex w-full flex-col gap-1 px-3 py-3 text-left transition-colors hover:bg-accent/50 focus-visible:bg-accent/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring aria-[current=true]:bg-accent"
+          class="flex w-full flex-col gap-1 px-3 py-3 text-left transition-colors hover:bg-accent/50 focus-visible:bg-accent/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring active:bg-accent active:duration-0 aria-[current=true]:bg-accent"
           onclick={onClick}
         >
           <span class="flex w-full min-w-0 items-center gap-1.5 text-xs text-muted-foreground">

@@ -12,7 +12,7 @@
 <Dialog.Root open onOpenChange={(open) => !open && onClose()}>
 	<Dialog.Content data-testid="help-dialog" class="sm:max-w-sm">
 		<Dialog.Header>
-			<Dialog.Title class="text-lg font-semibold">Keyboard shortcuts</Dialog.Title>
+			<Dialog.Title class="text-lg font-semibold tracking-lg">Keyboard shortcuts</Dialog.Title>
 		</Dialog.Header>
 
 		<dl class="flex flex-col gap-2 text-sm">

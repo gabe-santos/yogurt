@@ -19,7 +19,7 @@
 <span
   data-testid="feed-icon"
   aria-hidden="true"
-  class="flex h-4 w-4 shrink-0 items-center justify-center overflow-hidden rounded-sm bg-muted text-[9px] font-semibold leading-none text-muted-foreground"
+  class="flex h-4 w-4 shrink-0 items-center justify-center overflow-hidden rounded-sm bg-muted text-[9px] font-semibold tracking-2xs leading-none text-muted-foreground"
 >
   {#if iconUrl && !imageFailed}
     <img
