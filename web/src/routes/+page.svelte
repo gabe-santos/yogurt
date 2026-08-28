@@ -645,18 +645,18 @@
     if (selectedIndex !== undefined) toggleStarAt(selectedIndex);
   }
 
-  function archiveAt(index: number) {
+  function toggleArchiveAt(index: number) {
     const entry = entries[index];
-    if (!entry || entry.archived) return;
+    if (!entry) return;
     void applyEntryState(index, {
       read: true,
       starred: entry.starred,
-      archived: true,
+      archived: !entry.archived,
     });
   }
 
-  function archiveCurrent() {
-    if (selectedIndex !== undefined) archiveAt(selectedIndex);
+  function toggleArchiveCurrent() {
+    if (selectedIndex !== undefined) toggleArchiveAt(selectedIndex);
   }
 
   async function markAllRead() {
@@ -809,6 +809,7 @@
     prev: () => void moveSelection(-1),
     close: closeCurrent,
     toggleRead: toggleReadCurrent,
+    toggleArchive: toggleArchiveCurrent,
     toggleUnreadOnly,
     help: () => (helpOpen = true),
     search: () => (searchOpen = true),
@@ -1223,7 +1224,7 @@
                 onClick={() => selectEntryAt(index)}
                 onToggleRead={() => toggleReadAt(index)}
                 onToggleStar={() => toggleStarAt(index)}
-                onArchive={() => archiveAt(index)}
+                onToggleArchive={() => toggleArchiveAt(index)}
               />
 
             {/each}
@@ -1262,7 +1263,7 @@
         onView={chooseEntryView}
         onToggleRead={toggleReadCurrent}
         onToggleStar={toggleStarCurrent}
-        onArchive={archiveCurrent}
+        onToggleArchive={toggleArchiveCurrent}
       />
     {:else}
       <div

@@ -19,6 +19,7 @@
 	import FeedIcon from '$lib/FeedIcon.svelte';
 	import IconSwap from '$lib/IconSwap.svelte';
 	import ArchiveIcon from '@lucide/svelte/icons/archive';
+	import ArchiveRestoreIcon from '@lucide/svelte/icons/archive-restore';
 	import ArrowLeftIcon from '@lucide/svelte/icons/arrow-left';
 	import BookOpenIcon from '@lucide/svelte/icons/book-open';
 	import ExternalLinkIcon from '@lucide/svelte/icons/external-link';
@@ -47,7 +48,7 @@
 		onView: (view: EntryView) => void;
 		onToggleRead: () => void;
 		onToggleStar: () => void;
-		onArchive: () => void;
+		onToggleArchive: () => void;
 	}
 
 	const {
@@ -60,7 +61,7 @@
 		onView,
 		onToggleRead,
 		onToggleStar,
-		onArchive
+		onToggleArchive
 	}: Props = $props();
 
 	// Only the overlay has somewhere to arrive from and leave to. The enter is
@@ -396,18 +397,16 @@
 					undefined,
 					false
 				)}
-				{#if !entry.archived}
-					{@render control(
-						'Archive',
-						ArchiveIcon,
-						onArchive,
-						false,
-						busy,
-						'entry-archive',
-						undefined,
-						false
-					)}
-				{/if}
+				{@render control(
+					entry.archived ? 'Unarchive' : 'Archive',
+					ArchiveRestoreIcon,
+					onToggleArchive,
+					false,
+					busy,
+					'entry-archive',
+					ArchiveIcon,
+					entry.archived
+				)}
 				{@render control(
 					entry.read ? 'Mark unread' : 'Mark read',
 					MailIcon,

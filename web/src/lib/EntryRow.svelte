@@ -4,6 +4,7 @@
   import FeedIcon from '$lib/FeedIcon.svelte';
   import { entryExcerpt, formatEntryAge, formatPublished } from '$lib/format';
   import ArchiveIcon from '@lucide/svelte/icons/archive';
+  import ArchiveRestoreIcon from '@lucide/svelte/icons/archive-restore';
   import MailIcon from '@lucide/svelte/icons/mail';
   import MailOpenIcon from '@lucide/svelte/icons/mail-open';
   import StarIcon from '@lucide/svelte/icons/star';
@@ -21,7 +22,7 @@
     onClick: () => void;
     onToggleRead: () => void;
     onToggleStar: () => void;
-    onArchive: () => void;
+    onToggleArchive: () => void;
   }
 
   const {
@@ -33,7 +34,7 @@
     onClick,
     onToggleRead,
     onToggleStar,
-    onArchive,
+    onToggleArchive,
   }: Props = $props();
 
   // excerpt is blank whenever the Entry's Feed carried no body worth
@@ -119,15 +120,18 @@
           {entry.starred ? 'Unstar' : 'Star'}
         </ContextMenu.Item>
       </ContextMenu.Group>
-      {#if !entry.archived}
-        <ContextMenu.Separator />
-        <ContextMenu.Group>
-          <ContextMenu.Item disabled={disabled} onclick={onArchive}>
+      <ContextMenu.Separator />
+      <ContextMenu.Group>
+        <ContextMenu.Item disabled={disabled} onclick={onToggleArchive}>
+          {#if entry.archived}
+            <ArchiveRestoreIcon strokeWidth={1.5} />
+            Unarchive
+          {:else}
             <ArchiveIcon strokeWidth={1.5} />
             Archive
-          </ContextMenu.Item>
-        </ContextMenu.Group>
-      {/if}
+          {/if}
+        </ContextMenu.Item>
+      </ContextMenu.Group>
     </ContextMenu.Content>
   </ContextMenu.Root>
 </li>

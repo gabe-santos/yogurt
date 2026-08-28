@@ -313,6 +313,45 @@ func TestArchivingAnEntryImpliesReadAndLeavesOnlyTheArchiveView(t *testing.T) {
 	}
 }
 
+func TestUnarchivingAnEntryReturnsItToTheOrdinaryReadingListAndOutOfTheArchive(t *testing.T) {
+	h := loggedIn(t)
+	feedURL := h.Publisher.Serve("/feed.xml", apitest.RSS("The Publisher", "",
+		apitest.Item{ID: "one", Title: "One", Published: published}))
+	subscribe(t, h, feedURL)
+	id := listEntries(t, h, "").Entries[0].ID
+
+	setEntryState(t, h, id, entryState{Read: true, Archived: true}).
+		ExpectStatus(http.StatusOK)
+
+	var body struct {
+		Entry entryView `json:"entry"`
+	}
+	// Declaring the complete state with archived false, and read left true
+	// as an already-Archived Entry is always Read, is the whole of
+	// unarchiving: no dedicated endpoint exists for it.
+	setEntryState(t, h, id, entryState{Read: true, Archived: false}).
+		ExpectStatus(http.StatusOK).JSON(&body)
+	if body.Entry.Archived {
+		t.Fatalf("unarchived Entry Archived = %t, want false", body.Entry.Archived)
+	}
+	if !body.Entry.Read {
+		t.Fatalf("unarchived Entry Read = %t, want true", body.Entry.Read)
+	}
+
+	if got := listEntries(t, h, "archived=true").Entries; len(got) != 0 {
+		t.Fatalf("Archive view = %#v, want empty after unarchiving", got)
+	}
+	found := false
+	for _, entry := range listEntries(t, h, "").Entries {
+		if entry.ID == id {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("Entry %d missing from the ordinary reading list after unarchiving", id)
+	}
+}
+
 func TestMarkAllReadAffectsOnlyTheCurrentFilterAndScope(t *testing.T) {
 	h := loggedIn(t)
 	oneURL := h.Publisher.Serve("/one.xml", apitest.RSS("One", "",

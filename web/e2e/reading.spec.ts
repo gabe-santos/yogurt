@@ -312,3 +312,182 @@ test('the reader opens an Entry, reads it, and triages by keyboard', async ({
     });
   });
 });
+
+// Runs against the two Entries reading.spec.ts's journey above leaves behind:
+// both read, unstarred, unarchived. See issues #43 and #44.
+test('archiving toggles from the Reading Pane, the context menu, and the keyboard, with rollback on rejection', async ({
+  page,
+}) => {
+  await page.goto('/login');
+  await page.getByLabel('Password').fill(password);
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  const entries = page.getByTestId('entry');
+  await expect(entries).toHaveCount(2);
+
+  // e does nothing with no Entry selected.
+  await page.keyboard.press('e');
+  await expect(entries.first()).not.toContainText('Archived');
+  await expect(entries.nth(1)).not.toContainText('Archived');
+
+  const stateResponse = () =>
+    page.waitForResponse(
+      (response) =>
+        response.url().includes('/api/entries/') &&
+        response.url().endsWith('/state') &&
+        response.request().method() === 'PUT',
+    );
+
+  // The Reading Pane control is a two-way toggle: Archive on an ordinary
+  // Entry, Unarchive once it is Archived, without leaving the pane.
+  await entries.first().click();
+  const pane = page.getByTestId('reading-pane');
+  await expect(pane).toBeVisible();
+  await expect(page.getByTestId('entry-archive')).toHaveAccessibleName(
+    'Archive',
+  );
+  let saved = stateResponse();
+  await page.getByTestId('entry-archive').click();
+  await saved;
+  await expect(page.getByTestId('entry-archive')).toHaveAccessibleName(
+    'Unarchive',
+  );
+  await expect(entries.first()).toContainText('Archived');
+  // Mark read is disabled while Archived; unarchiving below re-enables it.
+  await expect(
+    page.getByRole('button', { name: 'Mark unread', exact: true }),
+  ).toBeDisabled();
+
+  // A rejected unarchive restores the Entry to Archived and surfaces the
+  // error, leaving the row and the rest of the list untouched.
+  await page.route('**/api/entries/*/state', async (route) => {
+    await route.fulfill({
+      status: 500,
+      contentType: 'application/json',
+      body: JSON.stringify({ error: 'Unarchive rejected' }),
+    });
+  });
+  await page.getByTestId('entry-archive').click();
+  await expect(page.getByTestId('notice')).toContainText(
+    'Unarchive rejected',
+  );
+  await expect(page.getByTestId('entry-archive')).toHaveAccessibleName(
+    'Unarchive',
+  );
+  await expect(entries.first()).toContainText('Archived');
+  await expect(entries).toHaveCount(2);
+  await page.unroute('**/api/entries/*/state');
+
+  // Unarchiving for real: the row holds still — same place, Archived marker
+  // gone, Mark read available again — until the reader rebuilds the list.
+  saved = stateResponse();
+  await page.getByTestId('entry-archive').click();
+  await saved;
+  await expect(page.getByTestId('entry-archive')).toHaveAccessibleName(
+    'Archive',
+  );
+  await expect(entries.first()).not.toContainText('Archived');
+  await expect(entries.first()).not.toContainText('unread');
+  await expect(entries).toHaveCount(2);
+  await expect(
+    page.getByRole('button', { name: 'Mark unread', exact: true }),
+  ).toBeEnabled();
+  await expect(pane).toBeVisible();
+
+  // The Entry List context menu carries the same toggle.
+  await entries.nth(1).click({ button: 'right' });
+  const entryMenu = page.getByTestId('entry-context-menu');
+  await expect(
+    entryMenu.getByRole('menuitem', { name: 'Archive', exact: true }),
+  ).toBeVisible();
+  saved = stateResponse();
+  await entryMenu.getByRole('menuitem', { name: 'Archive', exact: true }).click();
+  await saved;
+  await expect(entries.nth(1)).toContainText('Archived');
+  await entries.nth(1).click({ button: 'right' });
+  await expect(
+    entryMenu.getByRole('menuitem', { name: 'Unarchive', exact: true }),
+  ).toBeVisible();
+  saved = stateResponse();
+  await entryMenu.getByRole('menuitem', { name: 'Unarchive', exact: true }).click();
+  await saved;
+  await expect(entries.nth(1)).not.toContainText('Archived');
+
+  // The `?` help dialog documents the binding, straight from the one table.
+  await page.keyboard.press('?');
+  const help = page.getByTestId('help-dialog');
+  await expect(help).toBeVisible();
+  await expect(help).toContainText('Archive / unarchive');
+  await page.keyboard.press('Escape');
+  await expect(help).toBeHidden();
+
+  // e toggles Archived on the selected Entry from the keyboard, exactly like
+  // the pointer path — same Read rules, same rollback, same held-still list.
+  await entries.first().click();
+  await expect(pane).toBeVisible();
+  saved = stateResponse();
+  await page.keyboard.press('e');
+  await saved;
+  await expect(entries.first()).toContainText('Archived');
+  await expect(page.getByTestId('entry-archive')).toHaveAccessibleName(
+    'Unarchive',
+  );
+  saved = stateResponse();
+  await page.keyboard.press('e');
+  await saved;
+  await expect(entries.first()).not.toContainText('Archived');
+  await expect(entries.first()).not.toContainText('unread');
+  await expect(page.getByTestId('entry-archive')).toHaveAccessibleName(
+    'Archive',
+  );
+
+  // Unarchiving inside the archive Collection itself holds the row still —
+  // same place, Archived marker gone — and only actually leaves once the
+  // reader rebuilds the list, never on its own.
+  saved = stateResponse();
+  await page.getByTestId('entry-archive').click();
+  await saved;
+  await page.getByTestId('collection-archive').click();
+  await expect(entries).toHaveCount(1);
+  await expect(entries).toContainText('Archived');
+  await entries.first().click();
+  await expect(pane).toBeVisible();
+  saved = stateResponse();
+  await page.getByTestId('entry-archive').click();
+  await saved;
+  await expect(entries).toHaveCount(1);
+  await expect(entries).not.toContainText('Archived');
+  await expect(entries).not.toContainText('unread');
+  await expect(pane).toBeVisible();
+  await page.getByTestId('collection-archive').click();
+  await expect(entries).toHaveCount(0);
+  await page.getByTestId('collection-all').click();
+  await expect(entries).toHaveCount(2);
+
+  // Inert while the reader is typing in an input — not a modal, which
+  // already blocks every binding, but the isTypingTarget guard itself.
+  await entries.first().click();
+  await expect(pane).toBeVisible();
+  await expect(page.getByTestId('entry-archive')).toHaveAccessibleName(
+    'Archive',
+  );
+  const feed = page.getByTestId('feed');
+  const feedMenu = page.getByTestId('feed-context-menu');
+  await feed.click({ button: 'right' });
+  await feedMenu.getByRole('menuitem', { name: 'Rename' }).click();
+  const renameInput = page.getByLabel('Rename the Feed The Daily Cave');
+  await expect(renameInput).toBeFocused();
+  await page.keyboard.type('e');
+  await expect(renameInput).toHaveValue('e');
+  // Leaving edit mode saves the draft rather than discarding it, so the
+  // name is selected and typed back before the input closes — left as it
+  // was found. It matches the original, so saving it is a no-op: only the
+  // edit closing is worth waiting on.
+  await renameInput.selectText();
+  await page.keyboard.type('The Daily Cave');
+  await page.keyboard.press('Enter');
+  await expect(renameInput).toBeHidden();
+  await expect(feed).toHaveText('The Daily Cave');
+  await expect(page.getByTestId('entry-archive')).toHaveAccessibleName(
+    'Archive',
+  );
+});
