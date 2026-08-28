@@ -154,6 +154,20 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
+  /* Every native clickable element gets a pointer cursor; disabled buttons
+     get the "not allowed" cursor instead. Components that need a different
+     cursor (drag handles, native menu items) set it explicitly and win via
+     the utilities layer. */
+  button:not(:disabled),
+  a[href],
+  select,
+  summary,
+  label[for] {
+    @apply cursor-pointer;
+  }
+  button:disabled {
+    @apply cursor-not-allowed;
+  }
 }
 
 /* Track and thumb are transparent until the container is hovered, so the

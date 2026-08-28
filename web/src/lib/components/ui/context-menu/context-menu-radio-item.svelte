@@ -19,7 +19,7 @@
 	data-slot="context-menu-radio-item"
 	data-inset={inset}
 	class={cn(
-		"min-h-7 gap-2 rounded-[calc(var(--radius)*1.8_-_4px)] py-1.5 pr-8 pl-2 text-sm focus:bg-accent focus:text-accent-foreground data-inset:pl-7 [&_svg:not([class*='size-'])]:size-4 relative flex cursor-default items-center outline-hidden select-none data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+		"min-h-7 gap-2 rounded-[calc(var(--radius)*1.8_-_4px)] py-1.5 pr-8 pl-2 text-sm focus:bg-accent focus:text-accent-foreground data-inset:pl-7 [&_svg:not([class*='size-'])]:size-4 relative flex cursor-pointer items-center outline-hidden select-none data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0",
 		className
 	)}
 	{...restProps}
