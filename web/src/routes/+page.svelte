@@ -4,6 +4,7 @@
   import { Label } from "$lib/components/ui/label";
   import AddFeedDialog from "$lib/AddFeedDialog.svelte";
   import * as Sidebar from "$lib/components/ui/sidebar";
+  import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
   import * as Select from "$lib/components/ui/select";
   import { Toggle } from "$lib/components/ui/toggle";
   import * as Tooltip from "$lib/components/ui/tooltip";
@@ -13,15 +14,19 @@
   import ArrowDownWideNarrowIcon from "@lucide/svelte/icons/arrow-down-wide-narrow";
   import ArrowUpNarrowWideIcon from "@lucide/svelte/icons/arrow-up-narrow-wide";
   import ArchiveIcon from "@lucide/svelte/icons/archive";
+  import ChevronsUpDownIcon from "@lucide/svelte/icons/chevrons-up-down";
   import CircleHelpIcon from "@lucide/svelte/icons/circle-help";
   import InboxIcon from "@lucide/svelte/icons/inbox";
   import KeyRoundIcon from "@lucide/svelte/icons/key-round";
   import LoaderCircleIcon from "@lucide/svelte/icons/loader-circle";
+  import LogOutIcon from "@lucide/svelte/icons/log-out";
   import PlusIcon from "@lucide/svelte/icons/plus";
+  import RssIcon from "@lucide/svelte/icons/rss";
   import SearchIcon from "@lucide/svelte/icons/search";
   import StarIcon from "@lucide/svelte/icons/star";
   import XIcon from "@lucide/svelte/icons/x";
   import { onMount } from "svelte";
+  import { browser } from "$app/environment";
   import { goto, invalidateAll, replaceState } from "$app/navigation";
   import {
     deleteFeed,
@@ -130,7 +135,19 @@
   let helpOpen = $state(false);
   let deviceTokensOpen = $state(false);
   let searchOpen = $state(false);
+  // The footer menu is a bits-ui DropdownMenu: it closes itself on Escape
+  // without telling the window `keydown` listener below, so that listener
+  // has to be told independently or Escape also runs the app's own "close
+  // whatever is open" shortcut on top of the menu's own close — see
+  // closeCurrent and onKeydown.
+  let readerMenuOpen = $state(false);
   let markOnOpen = $state(true);
+  // The only thing this app knows about who is signed in is which server
+  // they are signed in to: there are no accounts, just one password
+  // (docs/adr/0002-single-user.md). Read at init, so it is empty while
+  // prerendering and filled on the client.
+  const serverHost = browser ? location.host : "";
+
   // The view an Entry opens in belongs to the reader, not to an Entry: it is
   // stored on the server, so it survives both moving to the next Entry and
   // coming back tomorrow in another browser.
@@ -786,7 +803,9 @@
   }
 
   function closeCurrent() {
-    if (searchOpen) {
+    if (readerMenuOpen) {
+      readerMenuOpen = false;
+    } else if (searchOpen) {
       searchOpen = false;
     } else if (helpOpen) {
       helpOpen = false;
@@ -836,7 +855,12 @@
         continue;
       }
       if (
-        (helpOpen || searchOpen || deviceTokensOpen || addFeedOpen || removal) &&
+        (helpOpen ||
+          searchOpen ||
+          deviceTokensOpen ||
+          addFeedOpen ||
+          removal ||
+          readerMenuOpen) &&
         binding.action !== "close"
       ) {
         return;
@@ -864,37 +888,19 @@
 
 <Sidebar.Provider>
   <Sidebar.Root>
+    <!-- Search stays the icon it has always been, in its own bar: the menu at
+         the foot took the app-level controls and nothing else. -->
     <Sidebar.Header>
-      <div class="flex items-center justify-between gap-2 ps-2">
-        <div class="text-base font-semibold">Reader</div>
-        <div class="flex items-center gap-0.5">
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label="Search"
-            data-testid="open-search"
-            onclick={() => (searchOpen = true)}
-          >
-            <SearchIcon />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label="Device tokens"
-            onclick={() => (deviceTokensOpen = true)}
-          >
-            <KeyRoundIcon />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label="Keyboard shortcuts"
-            onclick={() => (helpOpen = true)}
-          >
-            <CircleHelpIcon />
-          </Button>
-          <Button variant="ghost" size="sm" onclick={signOut}>Sign out</Button>
-        </div>
+      <div class="flex items-center justify-end gap-2 ps-2">
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Search"
+          data-testid="open-search"
+          onclick={() => (searchOpen = true)}
+        >
+          <SearchIcon />
+        </Button>
       </div>
     </Sidebar.Header>
 
@@ -985,23 +991,72 @@
       </Sidebar.Group>
     </Sidebar.Content>
 
+    <!-- Everything the app knows about itself sits in one row at the foot of
+         the Collection List: which server this is, the one preference, the
+         two dialogs, and the way out. The menu matches the trigger's width,
+         so it opens upward over the list rather than beside it, and the same
+         placement works inside the mobile sheet. -->
     <Sidebar.Footer>
-      <label
-        class="flex cursor-pointer items-start gap-2.5 rounded-xl px-2 py-2 text-xs leading-snug text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-      >
-        <!-- A preference is declared whole, so no control that writes one is
-             live until the stored preferences have arrived: a click before
-             then would send this page's defaults as if the reader had chosen
-             them. -->
-        <input
-          type="checkbox"
-          class="mt-px size-3.5 shrink-0 accent-primary"
-          checked={markOnOpen}
-          disabled={loading}
-          onchange={toggleMarkOnOpen}
-        />
-        Mark an Entry read when it opens in the Reading Pane
-      </label>
+      <Sidebar.Menu>
+        <Sidebar.MenuItem>
+          <DropdownMenu.Root bind:open={readerMenuOpen}>
+            <DropdownMenu.Trigger>
+              {#snippet child({ props })}
+                <Sidebar.MenuButton {...props} size="lg" data-testid="reader-menu">
+                  <span
+                    class="flex aspect-square size-8 shrink-0 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground"
+                  >
+                    <RssIcon strokeWidth={1.5} class="size-4" />
+                  </span>
+                  <!-- The host is the whole of this app's notion of identity,
+                       and a long one truncates rather than growing the row. -->
+                  <span class="grid flex-1 leading-tight">
+                    <span class="truncate font-medium">Reader</span>
+                    <span class="truncate text-xs text-muted-foreground">{serverHost}</span>
+                  </span>
+                  <ChevronsUpDownIcon strokeWidth={1.5} class="size-4 shrink-0" />
+                </Sidebar.MenuButton>
+              {/snippet}
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Content side="top" align="start" data-testid="reader-menu-content">
+              <DropdownMenu.Group>
+                <!-- A preference is declared whole, so no control that writes
+                     one is live until the stored preferences have arrived: a
+                     click before then would send this page's defaults as if
+                     the reader had chosen them. The menu stays open on toggle
+                     so the tick lands where the reader is looking. -->
+                <DropdownMenu.CheckboxItem
+                  checked={markOnOpen}
+                  disabled={loading}
+                  closeOnSelect={false}
+                  onCheckedChange={() => toggleMarkOnOpen()}
+                >
+                  Mark Read on open
+                </DropdownMenu.CheckboxItem>
+              </DropdownMenu.Group>
+              <DropdownMenu.Separator />
+              <DropdownMenu.Group>
+                <DropdownMenu.Item onSelect={() => (helpOpen = true)}>
+                  <CircleHelpIcon strokeWidth={1.5} />
+                  Keyboard shortcuts
+                  <DropdownMenu.Shortcut aria-hidden="true">?</DropdownMenu.Shortcut>
+                </DropdownMenu.Item>
+                <DropdownMenu.Item onSelect={() => (deviceTokensOpen = true)}>
+                  <KeyRoundIcon strokeWidth={1.5} />
+                  Device tokens
+                </DropdownMenu.Item>
+              </DropdownMenu.Group>
+              <DropdownMenu.Separator />
+              <DropdownMenu.Group>
+                <DropdownMenu.Item onSelect={signOut}>
+                  <LogOutIcon strokeWidth={1.5} />
+                  Sign out
+                </DropdownMenu.Item>
+              </DropdownMenu.Group>
+            </DropdownMenu.Content>
+          </DropdownMenu.Root>
+        </Sidebar.MenuItem>
+      </Sidebar.Menu>
     </Sidebar.Footer>
   </Sidebar.Root>
 
