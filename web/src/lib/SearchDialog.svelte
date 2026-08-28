@@ -34,6 +34,22 @@
     ...entries.map((entry): Result => ({ kind: 'entry', entry })),
   ]);
 
+  /** politeAnnouncement is the sr-only, aria-live="polite" status text for
+   * search-in-progress, result arrival, and no-match transitions. It is
+   * empty (and thus silent) whenever a request has failed, since that case
+   * is announced assertively instead. */
+  const politeAnnouncement = $derived(
+    error
+      ? ''
+      : searching
+        ? 'Searching…'
+        : query.trim() !== '' && results.length === 0
+          ? `No matches for "${query.trim()}".`
+          : results.length > 0
+            ? `${results.length} result${results.length === 1 ? '' : 's'} found.`
+            : '',
+  );
+
   /** resultId is the id a result's row carries and the input's
    * aria-activedescendant points at, so the combobox pattern can say which
    * option is active without ever moving real DOM focus off the input. */
@@ -58,6 +74,7 @@
       return;
     }
     searching = true;
+    error = '';
     debounceHandle = setTimeout(() => void runQuery(next), 200);
   }
 
@@ -121,12 +138,15 @@
       onkeydown={onInputKeydown}
     />
 
+    <div class="sr-only" aria-live="polite" data-testid="search-status">{politeAnnouncement}</div>
+    <div class="sr-only" aria-live="assertive" data-testid="search-error-status">{error}</div>
+
     {#if error}
       <p class="text-sm text-destructive" data-testid="search-error">{error}</p>
     {:else if searching}
       <p class="text-sm text-muted-foreground">Searching…</p>
     {:else if query.trim() !== '' && results.length === 0}
-      <p class="text-sm text-muted-foreground">No matches.</p>
+      <p class="text-sm text-muted-foreground">No matches for "{query.trim()}".</p>
     {:else if results.length > 0}
       <ul
         id="search-results-listbox"
