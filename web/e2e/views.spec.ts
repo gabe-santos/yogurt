@@ -173,13 +173,11 @@ test('the reader switches views, keeps the choice, and is offered a tab when a p
 
   // The face an Entry is read in is the reader's too, and it outlives the
   // reload the same way the view does.
-  await page.getByTestId('reader-menu').click();
   await page.getByTestId('reading-font-serif').click();
   await expect(page.getByTestId('reading-prose')).toHaveCSS(
     'font-family',
     /Literata/,
   );
-  await page.keyboard.press('Escape');
   await page.reload();
   await expect(page.getByTestId('reading-prose')).toHaveCSS(
     'font-family',
@@ -200,11 +198,9 @@ test('the reader switches views, keeps the choice, and is offered a tab when a p
   expect(drawnItalics.sans).toBeGreaterThan(0);
   expect(drawnItalics.serif).toBeGreaterThan(0);
 
-  await page.getByTestId('reader-menu').click();
   await page.getByTestId('reading-font-sans').click();
   await expect(page.getByTestId('reading-prose')).toHaveCSS(
     'font-family',
     /Geist/,
   );
-  await page.keyboard.press('Escape');
 });

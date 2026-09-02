@@ -1047,34 +1047,6 @@
                 >
                   Mark Read on open
                 </DropdownMenu.CheckboxItem>
-                <!-- Two faces, so the choice is shown rather than described:
-                     each label is set in the face it selects, which is the
-                     whole of what the reader is deciding between. -->
-                <DropdownMenu.GroupHeading class="text-xs text-muted-foreground">
-                  Reading font
-                </DropdownMenu.GroupHeading>
-                <DropdownMenu.RadioGroup
-                  value={readingFont}
-                  onValueChange={(value) => chooseReadingFont(value as ReadingFont)}
-                >
-                  <DropdownMenu.RadioItem
-                    value="sans"
-                    disabled={loading}
-                    closeOnSelect={false}
-                    data-testid="reading-font-sans"
-                  >
-                    Sans
-                  </DropdownMenu.RadioItem>
-                  <DropdownMenu.RadioItem
-                    value="serif"
-                    disabled={loading}
-                    closeOnSelect={false}
-                    class="font-serif"
-                    data-testid="reading-font-serif"
-                  >
-                    Serif
-                  </DropdownMenu.RadioItem>
-                </DropdownMenu.RadioGroup>
               </DropdownMenu.Group>
               <DropdownMenu.Separator />
               <DropdownMenu.Group>
@@ -1359,6 +1331,7 @@
         overlay={narrow}
         onClose={clearSelection}
         onView={chooseEntryView}
+        onFontChange={chooseReadingFont}
         onToggleRead={toggleReadCurrent}
         onToggleStar={toggleStarCurrent}
         onToggleArchive={toggleArchiveCurrent}

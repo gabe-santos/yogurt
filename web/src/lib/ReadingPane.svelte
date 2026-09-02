@@ -52,6 +52,7 @@
 		 * screen. On a wide one the pane is furniture and nothing calls it. */
 		onClose: () => void;
 		onView: (view: EntryView) => void;
+		onFontChange: (font: ReadingFont) => void;
 		onToggleRead: () => void;
 		onToggleStar: () => void;
 		onToggleArchive: () => void;
@@ -66,6 +67,7 @@
 		overlay,
 		onClose,
 		onView,
+		onFontChange,
 		onToggleRead,
 		onToggleStar,
 		onToggleArchive
@@ -170,6 +172,18 @@
 		{ id: 'feed', label: 'From the Feed', icon: RssIcon },
 		{ id: 'reader', label: 'Reader View', icon: BookOpenIcon },
 		{ id: 'original', label: 'Original View', icon: GlobeIcon }
+	];
+
+	// The two faces the reader can choose between, shown as the letter each
+	// one draws rather than named: "A" set in the interface's own grotesque
+	// beside the same letter set in the reading serif is the whole of the
+	// choice, with nothing to read. Literata's cap sits lower in its own em
+	// than Geist's does, so centering the two boxes on their line height
+	// still reads as the serif "A" sitting low; the offset below nudges only
+	// the ink back to the sans letter's optical center.
+	const fonts: { id: ReadingFont; label: string; face: string; align?: string }[] = [
+		{ id: 'sans', label: 'Sans-serif', face: 'font-sans' },
+		{ id: 'serif', label: 'Serif', face: 'font-serif', align: '-translate-y-[2px]' }
 	];
 
 	// One effect owns everything that must happen when the Entry or the view
@@ -358,6 +372,31 @@
 	</Tooltip.Root>
 {/snippet}
 
+<!-- The reading font is the same kind of choice as the view: a small,
+     always-visible track rather than a menu the reader has to open to see
+     what it currently says. Each option is set in the face it chooses, so
+     the letter itself is the label. -->
+{#snippet fontControl(id: ReadingFont, label: string, face: string, align: string | undefined)}
+	<Tooltip.Root>
+		<Tooltip.Trigger>
+			{#snippet child({ props })}
+				<Tabs.Trigger
+					{...props}
+					data-slot="tabs-trigger"
+					value={id}
+					disabled={busy}
+					aria-label={label}
+					data-testid={`reading-font-${id}`}
+					class="relative flex size-7 items-center justify-center rounded-[calc(var(--radius)*1.8_-_2px)] text-muted-foreground transition-[color,scale] hover:text-foreground active:scale-[0.96] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-50 data-active:text-foreground @max-3xl:size-9"
+				>
+					<span class={`${face} ${align ?? ''} text-[15px] leading-none`} aria-hidden="true">A</span>
+				</Tabs.Trigger>
+			{/snippet}
+		</Tooltip.Trigger>
+		<Tooltip.Content>{label}</Tooltip.Content>
+	</Tooltip.Root>
+{/snippet}
+
 <!-- One component, two containers: a column of the layout once there is room
      for three, and a full-bleed overlay over the Entry List before that. The
      page marks what is behind it inert, which is what keeps the tab order
@@ -411,6 +450,23 @@
 			<!-- On a phone the eight controls are the whole bar, so the spare
 			     width sits between the two groups rather than beside them. -->
 			<div class="flex-1 @3xl:hidden"></div>
+
+			<Tabs.Root
+				value={readingFont}
+				onValueChange={(value) => onFontChange(value as ReadingFont)}
+				class="shrink-0"
+			>
+				<Tabs.List aria-label="Reading font" class="gap-0.5 p-0.5">
+					{#each fonts as choice (choice.id)}
+						{@render fontControl(choice.id, choice.label, choice.face, choice.align)}
+					{/each}
+				</Tabs.List>
+			</Tabs.Root>
+
+			<div
+				class="mx-1.5 h-5 w-px shrink-0 bg-border @max-3xl:mx-1 @max-[21rem]:mx-0.5"
+				aria-hidden="true"
+			></div>
 
 			<Tabs.Root value={view} onValueChange={(value) => onView(value as EntryView)} class="shrink-0">
 				<Tabs.List aria-label="View" class="gap-0.5 p-0.5">
