@@ -22,8 +22,8 @@ colors:
   ring: "oklch(0.705 0.015 286.067)"
 typography:
   headline:
-    fontFamily: "Geist Variable, sans-serif"
-    fontSize: "1.5rem"
+    fontFamily: "Geist Variable, sans-serif | Literata Variable, Georgia, serif (reading_font)"
+    fontSize: "1.875rem"
     fontWeight: 600
     lineHeight: 1.25
   title:
@@ -31,11 +31,16 @@ typography:
     fontSize: "1rem"
     fontWeight: 500
     lineHeight: 1.5
+  reading-body:
+    fontFamily: "Geist Variable, sans-serif | Literata Variable, Georgia, serif (reading_font)"
+    fontSize: "1.125rem"
+    fontWeight: 400
+    lineHeight: 1.625
   body:
     fontFamily: "Geist Variable, sans-serif"
     fontSize: "1rem"
     fontWeight: 400
-    lineHeight: 1.625
+    lineHeight: 1.5
   label:
     fontFamily: "Geist Variable, sans-serif"
     fontSize: "0.75rem"
@@ -96,16 +101,16 @@ components:
 
 **Creative North Star: "Clean, Lightweight, Thoughtful"**
 
-This is the incumbent shadcn-svelte `rhea` system, on the `zinc` base color, left almost entirely as delivered: no brand hue has been introduced anywhere in the codebase. The palette is pure neutral gray plus one chromatic token — destructive red — reserved for errors and the one irreversible action (Archive-adjacent affordances stay neutral; only genuine loss gets color). Controls are softly rounded (buttons and inputs at ~13px, dialogs capped at 24px) against a flat, bordered chrome; elevation is used sparingly and only for things that temporarily float above the reading surface. Geist Variable is the only typeface, in three weights (400/500/600), at a narrow set of sizes. Nothing decorates; every visual choice so far has been the default the component library shipped with, applied consistently rather than fought.
+This is the incumbent shadcn-svelte `rhea` system, on the `zinc` base color, refined without changing its identity: no brand hue has been introduced. The palette is neutral gray plus destructive red. Controls stay softly rounded against flat, bordered chrome; elevation is reserved for temporary floating surfaces. Geist Variable remains the interface voice. The Reading Pane alone can switch its own text to Literata Variable, a reader-chosen serif with optical sizing and real italics.
 
-This suits the product truth in `PRODUCT.md`: success here is depth of reading, not a distinctive storefront. A single, private reader has no audience to persuade — the interface's job is to disappear during the two sessions that matter (fast keyboard triage, slower deliberate reading) and never introduce a visual decision the reader has to parse. Nothing here has been confirmed as a permanent rejection of color or personality; it is what fourteen commits of shipping features on an unmodified component library produced, honestly recorded rather than dressed up as more deliberate than it is.
+This suits the product truth in `PRODUCT.md`: success here is depth of reading, not a distinctive storefront. A single, private reader has no audience to persuade — the interface disappears during fast keyboard triage, then gives the longer reading session a deliberate typeface and measure without turning the product into a magazine imitation.
 
 **Key Characteristics:**
 - Achromatic by default: gray scale plus red-for-destructive, nothing else.
 - Soft, consistent rounding (~13px controls, up to ~19-24px floating surfaces) against otherwise flat, bordered chrome.
-- One typeface (Geist Variable), three weights, no serif or display face.
+- One interface typeface (Geist Variable); one optional Reading Font (Literata Variable); no display face.
 - Borders carry structure; shadow is reserved for things that float above content.
-- Every value is a shadcn-svelte `rhea`/`zinc` default — nothing has been overridden.
+- Component geometry and color remain the `rhea`/`zinc` foundation; reading typography is the deliberate override.
 
 ## Colors
 
@@ -130,19 +135,28 @@ Dark mode inverts lightness on the same near-zero-chroma hue (`app.css:45-79`); 
 
 ## Typography
 
-**Body/UI Font:** Geist Variable (with `sans-serif` fallback)
+**Interface Font:** Geist Variable (with `sans-serif` fallback) — every pane, control, label and dialog, without exception.
+**Reading Font:** the reader's choice of Geist Variable or Literata Variable (with `Georgia, serif` fallback), stored server-side as the `reading_font` preference and applied only to the Reading Pane's own text.
 **Label/Mono Font:** system `ui-monospace` (the `<kbd>` shortcut glyphs in the Help dialog only)
 
-**Character:** A single, quiet grotesque doing every job — headline, body, and label are the same face at different sizes and weights, so nothing in the interface competes with the Entry being read. No serif, no display face, no letter-spacing or uppercase transforms anywhere in the UI.
+**Character:** A single, quiet grotesque runs the interface — headline, title and label are the same face at different sizes and weights, so nothing in the chrome competes with the Entry being read. The one place a second family is permitted is the text of the Entry itself, and only because the reader asked for it. No display face, no letter-spacing or uppercase transforms anywhere in the UI.
+
+Both faces are bundled (`@fontsource-variable/*`, latin subset ~29KB sans / ~110KB serif) and served from the binary; nothing is fetched from a CDN. Each ships a **drawn italic**, not a synthesised slant — extracted Articles are full of `<em>`, so the italic stylesheet is imported alongside the upright for both.
 
 ### Hierarchy
-- **Headline** (600, 1.5rem/24px, 1.25 line-height): the open Entry's own title at the top of the Reading Pane. The one place type is allowed to be loud.
-- **Title** (500, 1rem/16px, 1.5 line-height): the Entry List's scope heading, the Reading Pane's collapsed sticky-bar title, and each Entry row's own title line.
-- **Body** (400, 1rem/16px, 1.625 line-height "relaxed"): Reader View, Feed View, and Original View's extracted-HTML content. Reading Pane column is capped at `max-w-2xl` (672px) for Reader/Feed View only — Original View, being the publisher's own layout, is given the full pane instead.
-- **Label** (400, 0.75rem/12px, 1.5 line-height): Feed name, timestamp, Excerpt text, filter tabs, all metadata rows. Always paired with the Ash (`muted-foreground`) color, never Ink at this size.
+- **Headline** (600, 1.875rem/30px, 1.25 line-height): the open Entry's own title at the top of the Reading Pane. Set in the chosen Reading Font. The one place type is allowed to be loud.
+- **Title** (500, 1rem/16px, 1.5 line-height): the Entry List's scope heading, the Reading Pane's collapsed sticky-bar title, and each Entry row's own title line. Always the Interface Font.
+- **Reading Body** (400, 1.125rem/18px, 1.625 line-height "relaxed"): Reader View and Feed View content, in the chosen Reading Font. Prose headings step to 24px (`h2`) and 20px (`h3`) above it; paragraphs, lists and blockquotes are separated by 16px of space and never also indented.
+- **Label** (400, 0.75rem/12px, 1.5 line-height): Feed name, timestamp, Excerpt text, filter tabs, all metadata rows — including the Reading Pane's own metadata line under the headline, which is chrome and stays in the Interface Font. Always paired with the Ash (`muted-foreground`) color, never Ink at this size.
 
 ### Named Rules
-**The One Voice Rule.** Geist Variable is the only typeface anywhere in the product, including the reading surface itself — this app never reaches for a serif "reading font." Depth comes from consistency, not from imitating a magazine.
+**The One Interface Voice Rule.** Geist Variable is the only typeface in the interface. Every control, label, pane and dialog is set in it, and a second family in the chrome is a defect. This rule stops at the Reading Pane's own text and nowhere earlier.
+
+**The Measure-Follows-the-Face Rule.** The reading column is sized in characters, not pixels: `--container-reading-sans` (39.5rem) and `--container-reading-serif` (40.625rem) each hold ~72 characters of their own face at 18px, measured rather than guessed. A shared cap would give the two faces different measures, and a shared `ch` cap would be worse — `ch` is the width of a zero, and the ratio of average character to zero runs 0.68 in Geist against 0.80 in Literata. A new reading face gets its own measured token.
+
+**The Font-Does-Its-Own-Work Rule.** The `tracking-*` scale exists because Geist has no optical-size axis and needs headings pulled tight by hand. Literata has one, is drawn correctly at every size, and therefore takes none of that scale. Never apply the tracking tokens to a face with an `opsz` axis.
+
+**The Dark-Serif Compensation.** Light text on a dark surface reads thinner than the same text inverted, and a serif's thin strokes show it first. On dark, the reading serif takes 420 of its 200–900 weight axis and 1.75 line-height. Geist's strokes are uniform enough to need neither, and gets neither.
 
 ## Layout
 
@@ -150,7 +164,7 @@ Three fixed structural regions at desktop width (`lg:` and up, 1024px Tailwind b
 
 The page itself does not scroll (`h-svh`, `overflow-hidden` on the shell); each pane owns its own internal scroll region, so the chrome around it — header bars, filter tabs — stays fixed while content moves underneath.
 
-**Spacing rhythm:** chrome padding (headers, list gutters) sits at 12px (`p-3`/`px-3`); Entry rows use 12px vertical rhythm (`py-3`) separated by 1px hairline dividers (`divide-y divide-border`), never a gap plus rounded card — the list reads as one continuous column, not stacked cards. The reading column itself opens out to 24px horizontal/vertical padding (`px-6 py-6`) around its capped 672px measure. Controls are uniformly 32px tall (`h-8`); header bars are 48px (`h-12`).
+**Spacing rhythm:** chrome padding (headers, list gutters) sits at 12px (`p-3`/`px-3`); Entry rows use 12px vertical rhythm (`py-3`) separated by 1px hairline dividers (`divide-y divide-border`), never a gap plus rounded card. The reading column uses 24px horizontal padding and an 18px body: the measured sans/serif caps are 632px and 650px respectively, each yielding ~74 characters per line in real Article copy. Controls are uniformly 32px tall (`h-8`); header bars are 48px (`h-12`).
 
 ## Elevation & Depth
 
@@ -191,7 +205,7 @@ Soft, uniform rounding scaled from one base token (`--radius: 0.45rem`/7.2px) ra
 The list's core unit, and deliberately not a card: no border, no radius, no shadow — just a full-width row separated from its neighbors by a 1px hairline (`divide-y`). A 6px unread dot in Ink is the only differentiator between read and unread besides text weight (unread titles stay full-weight Ink; read titles drop to Ash). Feed Icon (16px, rounded-sm, monogram fallback), Feed name, and timestamp share the 12px Label row; Star/Archive glyphs float right, shown only when set. Title is Title-weight (500) at body size; a two-line-clamped Excerpt below it is Label-sized and Ash-colored, and the row skips that line entirely rather than reserving empty space when an Entry has no Excerpt.
 
 ### Reading Pane (signature component)
-Two states of one component, never two implementations: a static third column at desktop width, a full-bleed `inset-0` overlay below it, with the Entry List beneath it marked `inert` so tab order never leaks out of the overlay. A 48px header holds back-navigation (mobile only), a title that only appears once the real headline has scrolled out of view, the three-way view switcher (Feed / Reader / Original), and the Star/Archive/Read/open-in-new-tab controls — all `ghost` icon buttons at `icon-sm`, grouped with a single hairline divider between "view" and "state" controls. Below it, the reading column itself is capped at 672px for Reader/Feed View and released to full width for Original View, which is the publisher's own layout rather than this app's typography.
+Two states of one component, never two implementations: a static third column at desktop width, a full-bleed `inset-0` overlay below it, with the Entry List beneath it marked `inert` so tab order never leaks out of the overlay. A 48px header holds back-navigation (mobile only), a title that only appears once the real headline has scrolled out of view, the three-way view switcher (Feed / Reader / Original), and the Star/Archive/Read/open-in-new-tab controls — all `ghost` icon buttons at `icon-sm`, grouped with a single hairline divider between “view” and “state” controls. Below it, Reader/Feed View use the chosen face's measured reading cap (632px Geist / 650px Literata); Original View is full width and keeps the publisher's own typography.
 
 ## Do's and Don'ts
 
@@ -201,12 +215,13 @@ Two states of one component, never two implementations: a static third column at
 - **Do** separate structural surfaces with 1px hairline borders, not shadows.
 - **Do** use shadow only on content that floats above the page and disappears when dismissed (dialogs, sheets, menus).
 - **Do** build one component with two containers (pane vs. overlay) for anything that must work at every width, per ADR-0009 — never a second, parallel implementation for narrow screens.
-- **Do** cap Reader/Feed View prose at `max-w-2xl` (672px); leave Original View full-width, since it renders the publisher's own layout.
+- **Do** cap Reader/Feed View prose with the reading-measure token for the chosen face (`max-w-reading-sans` / `max-w-reading-serif`); leave Original View full-width, since it renders the publisher's own layout.
 - **Do** use the domain vocabulary from `CONTEXT.md` in every label, test id, and component name (Feed List, Entry List, Reading Pane, Starred, Archived — never "sidebar," "drawer," or "bookmark").
 
 ### Don't:
 - **Don't** introduce a brand accent hue without an explicit decision to depart from the No-Hue Rule — it is not a placeholder waiting to be filled in.
 - **Don't** put a solid destructive-red fill on a button; the system's one chromatic token stays at reduced opacity everywhere it appears.
 - **Don't** wrap Entry rows in cards, add per-row radius, or add per-row shadow — the list is one continuous hairline-divided column, not a stack of cards.
-- **Don't** reach for a second typeface. Hierarchy comes from Geist Variable's own weight and size steps (400/500/600 at 12/16/24px), not from mixing faces.
+- **Don't** reach for a second typeface in the interface. Chrome hierarchy comes from Geist Variable's own weight and size steps (400/500/600 at 12/16/30px), not from mixing faces; the Reading Font is the single, reader-chosen exception and never leaves the Reading Pane's own text.
+- **Don't** hard-code a pixel width for the reading column, or share one across faces — see the Measure-Follows-the-Face Rule.
 - **Don't** uppercase or letter-space labels; none of the incumbent UI does, and Excerpt/metadata rows read as plain sentence case throughout.

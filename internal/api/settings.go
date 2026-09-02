@@ -27,6 +27,12 @@ const entryViewKey = "entry_view"
 // belongs with the reader's other preferences and survives a reload.
 const unreadOnlyKey = "unread_only"
 
+// readingFontKey is the settings row remembering which typeface the Reading
+// Pane sets its own text in. It governs Reader View and Feed View, which are
+// this app's markup; Original View is the publisher's own layout and their
+// typography, and is never restyled.
+const readingFontKey = "reading_font"
+
 // The views an Entry can open in: the text the Feed itself carried, the
 // Article reduced to its main text, or the publisher's own page embedded.
 const (
@@ -41,6 +47,18 @@ const (
 // for.
 var entryViews = []string{feedEntryView, readerEntryView, originalEntryView}
 
+// The typefaces the Reading Pane can set an Entry in: the interface's own
+// grotesque, or a serif cut for long-form screen reading.
+const (
+	sansReadingFont  = "sans"
+	serifReadingFont = "serif"
+)
+
+// readingFonts is every accepted reading_font value. sansReadingFont is first
+// and is the default: reading in the same face as the rest of the interface is
+// what the app did before the choice existed.
+var readingFonts = []string{sansReadingFont, serifReadingFont}
+
 // settingsView is the reader's preferences as the API presents them.
 type settingsView struct {
 	// MarkOnOpen is on by default: opening an Entry marks it Read unless the
@@ -51,6 +69,8 @@ type settingsView struct {
 	// UnreadOnly is off by default: a Collection opens showing everything it
 	// holds until the reader narrows it.
 	UnreadOnly bool `json:"unread_only"`
+	// ReadingFont is one of readingFonts.
+	ReadingFont string `json:"reading_font"`
 }
 
 func (h *Handler) readSettings(r *http.Request) (settingsView, error) {
@@ -80,7 +100,20 @@ func (h *Handler) readSettings(r *http.Request) (settingsView, error) {
 		unreadOnly = false
 	}
 
-	return settingsView{MarkOnOpen: markOnOpen, EntryView: entryView, UnreadOnly: unreadOnly}, nil
+	readingFont, err := h.deps.Store.Setting(r.Context(), readingFontKey, sansReadingFont)
+	if err != nil {
+		return settingsView{}, err
+	}
+	if !slices.Contains(readingFonts, readingFont) {
+		readingFont = sansReadingFont
+	}
+
+	return settingsView{
+		MarkOnOpen:  markOnOpen,
+		EntryView:   entryView,
+		UnreadOnly:  unreadOnly,
+		ReadingFont: readingFont,
+	}, nil
 }
 
 // getSettings is the reader's whole set of preferences.
@@ -98,12 +131,17 @@ func (h *Handler) getSettings(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) setSettings(w http.ResponseWriter, r *http.Request) {
 	var body settingsView
 	if err := json.NewDecoder(io.LimitReader(r.Body, maxSettingsBody)).Decode(&body); err != nil {
-		h.writeError(w, r, http.StatusBadRequest, "expected a JSON object with mark_on_open, entry_view and unread_only")
+		h.writeError(w, r, http.StatusBadRequest, "expected a JSON object with mark_on_open, entry_view, unread_only and reading_font")
 		return
 	}
 	if !slices.Contains(entryViews, body.EntryView) {
 		h.writeError(w, r, http.StatusBadRequest,
 			"entry_view must be one of "+strings.Join(entryViews, ", "))
+		return
+	}
+	if !slices.Contains(readingFonts, body.ReadingFont) {
+		h.writeError(w, r, http.StatusBadRequest,
+			"reading_font must be one of "+strings.Join(readingFonts, ", "))
 		return
 	}
 
@@ -116,6 +154,10 @@ func (h *Handler) setSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.deps.Store.SetSetting(r.Context(), unreadOnlyKey, strconv.FormatBool(body.UnreadOnly)); err != nil {
+		h.serverError(w, r, err)
+		return
+	}
+	if err := h.deps.Store.SetSetting(r.Context(), readingFontKey, body.ReadingFont); err != nil {
 		h.serverError(w, r, err)
 		return
 	}

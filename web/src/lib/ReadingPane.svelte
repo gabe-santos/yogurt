@@ -9,6 +9,7 @@
 		type Article,
 		type Entry,
 		type EntryView,
+		type ReadingFont,
 		type Original
 	} from '$lib/api';
 	import { formatPublished } from '$lib/format';
@@ -34,6 +35,11 @@
 		busy: boolean;
 		/** view is the reader's remembered choice, owned by the page. */
 		view: EntryView;
+		/** readingFont is the face this pane sets an Entry in, also owned by
+		 * the page. It reaches Reader View and Feed View, which are this app's
+		 * markup; Original View is the publisher's own page and keeps their
+		 * typography. */
+		readingFont: ReadingFont;
 		/** iconUrl is the Entry's Feed Icon, so the pane's own metadata line
 		 * names its Feed the same way the Entry List row did. */
 		iconUrl?: string;
@@ -55,6 +61,7 @@
 		entry,
 		busy,
 		view,
+		readingFont,
 		iconUrl,
 		overlay,
 		onClose,
@@ -82,6 +89,36 @@
 			: prefersReducedMotion.current
 				? { x: 0, duration: 100 }
 				: { x: 32, duration: 250, easing: expoOut }
+	);
+
+	// Reading typography, decided once here rather than spelled out twice in
+	// the markup. Two things change with the face, and both are properties of
+	// the face rather than of taste:
+	//
+	// The column. A measure is counted in characters, not pixels, and the two
+	// faces are not the same width — so each gets the column that holds ~72 of
+	// its own characters at 18px (`--container-reading-*` in app.css).
+	//
+	// The tracking. The `tracking-*` scale was drawn against Geist, which has
+	// no optical-size axis and needs headings pulled tight by hand. Literata
+	// has one and is already drawn correctly at every size, so applying that
+	// scale to it would be undoing the font's own work.
+	const serif = $derived(readingFont === 'serif');
+	const readingColumn = $derived(
+		serif ? 'max-w-reading-serif' : 'max-w-reading-sans'
+	);
+	// The Entry's own headline is part of what is being read, so it takes the
+	// chosen face too. The metadata line under it is chrome and stays sans.
+	const readingTitle = $derived(serif ? 'font-serif' : 'tracking-3xl');
+	// Light text on a dark surface reads thinner than the same text inverted,
+	// and a serif's thin strokes are where that shows first. On dark the
+	// reading serif takes one small step of weight — 420 of its 200-900 axis,
+	// below the next named weight — and a little more leading to carry it.
+	// Geist's strokes are uniform enough not to need either.
+	const readingProse = $derived(
+		serif
+			? 'font-serif dark:font-[420] dark:leading-[1.75] [&_h2]:text-2xl [&_h3]:text-xl'
+			: '[&_h2]:text-2xl [&_h2]:tracking-2xl [&_h3]:text-xl [&_h3]:tracking-xl'
 	);
 
 	// The Article views are fetched per Entry and per view, on demand: an Entry
@@ -451,10 +488,12 @@
 		<div
 			class={view === 'original'
 				? 'flex h-full flex-col gap-5 p-4'
-				: 'mx-auto flex max-w-2xl flex-col gap-5 px-6 py-8'}
+				: `mx-auto flex ${readingColumn} flex-col gap-5 px-6 py-8`}
 		>
 			<div bind:this={titleAnchor} class="flex flex-col gap-2">
-				<h2 class="text-2xl leading-tight font-semibold tracking-2xl break-words text-balance">
+				<h2
+					class="text-3xl leading-tight font-semibold break-words text-balance {readingTitle}"
+				>
 					{entry.title || entry.url}
 				</h2>
 				<p class="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
@@ -466,8 +505,9 @@
 			</div>
 
 			<div
+				data-testid="reading-prose"
 				dir="auto"
-				class="max-w-none flex-1 text-base leading-relaxed break-words text-foreground [&_a]:underline [&_a]:decoration-from-font [&_a]:[text-underline-position:from-font] [&_a]:[text-decoration-skip-ink:auto] [&_blockquote]:my-3 [&_blockquote]:border-s-2 [&_blockquote]:border-border [&_blockquote]:ps-3 [&_blockquote]:text-muted-foreground [&_h2]:mt-6 [&_h2]:mb-3 [&_h2]:text-xl [&_h2]:font-semibold [&_h2]:tracking-xl [&_h3]:mt-5 [&_h3]:mb-2 [&_h3]:text-lg [&_h3]:font-semibold [&_h3]:tracking-lg [&_img]:max-w-full [&_img]:rounded-md [&_img]:outline [&_img]:outline-1 [&_img]:-outline-offset-1 [&_img]:outline-prose-image-outline [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:ps-6 [&_p]:my-3 [&_ul]:my-3 [&_ul]:list-disc [&_ul]:ps-6"
+				class="max-w-none flex-1 text-lg leading-relaxed break-words text-foreground [&_a]:underline [&_a]:decoration-from-font [&_a]:[text-underline-position:from-font] [&_a]:[text-decoration-skip-ink:auto] [&_blockquote]:my-4 [&_blockquote]:border-s-2 [&_blockquote]:border-border [&_blockquote]:ps-4 [&_blockquote]:text-muted-foreground [&_h2]:mt-8 [&_h2]:mb-3 [&_h2]:font-semibold [&_h3]:mt-6 [&_h3]:mb-2 [&_h3]:font-semibold [&_img]:max-w-full [&_img]:rounded-md [&_img]:outline [&_img]:outline-1 [&_img]:-outline-offset-1 [&_img]:outline-prose-image-outline [&_ol]:my-4 [&_ol]:list-decimal [&_ol]:ps-6 [&_p]:my-4 [&_ul]:my-4 [&_ul]:list-disc [&_ul]:ps-6 {readingProse}"
 			>
 				{#if loading}
 					<!-- The shape of what is coming, rather than a sentence about it:

@@ -105,6 +105,12 @@ export interface Original {
  * embedded. */
 export type EntryView = 'feed' | 'reader' | 'original';
 
+/** ReadingFont is the typeface the Reading Pane sets an Entry in: the
+ * interface's own grotesque, or a serif cut for long-form screen reading. It
+ * governs Reader View and Feed View; Original View is the publisher's own
+ * layout and is never restyled. */
+export type ReadingFont = 'sans' | 'serif';
+
 /** Settings are the reader's own preferences. */
 export interface Settings {
   /** mark_on_open is on by default: opening an Entry marks it Read. */
@@ -114,6 +120,9 @@ export interface Settings {
   /** unread_only narrows the Entry List to unread Entries, whichever
    * Collection the reader chose. Off by default. */
   unread_only: boolean;
+  /** reading_font is the typeface the Reading Pane reads in. Sans by default:
+   * the same face as the rest of the interface. */
+  reading_font: ReadingFont;
 }
 
 async function request(

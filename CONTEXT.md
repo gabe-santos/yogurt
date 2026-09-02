@@ -70,6 +70,10 @@ _Avoid_: Sidebar, inbox, article list, list pane
 The rightmost and largest column, holding one Entry in whichever view the reader chose.
 _Avoid_: Content pane, detail pane, preview, drawer
 
+**Reading Font**:
+A setting naming the typeface the Reading Pane sets an Entry's own headline and text in — the sans the rest of the interface uses, or the serif. It reaches the app-owned headline plus Reader View and Feed View prose; it never restyles Original View's embedded Article. Like Unread Only it belongs to the reader rather than to any Entry.
+_Avoid_: Font setting, typeface toggle, serif mode, theme
+
 ### State
 
 **Read**:

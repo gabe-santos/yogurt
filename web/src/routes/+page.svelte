@@ -48,6 +48,7 @@
     EntrySelectionOptions,
     EntryView,
     Feed,
+    ReadingFont,
     SearchEntry,
     Settings,
   } from "$lib/api";
@@ -152,6 +153,9 @@
   // stored on the server, so it survives both moving to the next Entry and
   // coming back tomorrow in another browser.
   let entryView = $state<EntryView>("feed");
+  // The face an Entry is read in is the reader's too, and for the same reason:
+  // it is a decision about reading, not about this Entry or this session.
+  let readingFont = $state<ReadingFont>("sans");
   // Entries the reader has declared unread by hand this session: mark-on-open
   // must never re-mark them Read just because j/k passed back through them.
   let manuallyUnread = $state<Set<number>>(new Set());
@@ -287,6 +291,7 @@
       markOnOpen = settings.mark_on_open;
       entryView = settings.entry_view;
       unreadOnly = settings.unread_only;
+      readingFont = settings.reading_font;
       const page = await listEntries({
         ...selectionQuery(),
         ...(deepLink > 0 ? { around: deepLink } : {}),
@@ -711,15 +716,18 @@
     markOnOpen = next.mark_on_open;
     entryView = next.entry_view;
     unreadOnly = next.unread_only;
+    readingFont = next.reading_font;
     try {
       const stored = await setSettings(next);
       markOnOpen = stored.mark_on_open;
       entryView = stored.entry_view;
       unreadOnly = stored.unread_only;
+      readingFont = stored.reading_font;
     } catch {
       markOnOpen = previous.mark_on_open;
       entryView = previous.entry_view;
       unreadOnly = previous.unread_only;
+      readingFont = previous.reading_font;
       notice = "Could not update your settings.";
       // A refused Unread Only would leave the list narrowed the way the toggle
       // no longer claims it is, so the list goes back with the toggle.
@@ -738,6 +746,7 @@
       mark_on_open: markOnOpen,
       entry_view: entryView,
       unread_only: unreadOnly,
+      reading_font: readingFont,
     };
   }
 
@@ -749,6 +758,11 @@
   function chooseEntryView(view: EntryView) {
     const previous = preferences();
     void savePreferences({ ...previous, entry_view: view }, previous);
+  }
+
+  function chooseReadingFont(font: ReadingFont) {
+    const previous = preferences();
+    void savePreferences({ ...previous, reading_font: font }, previous);
   }
 
   function startEditFeed(feed: Feed) {
@@ -1033,6 +1047,34 @@
                 >
                   Mark Read on open
                 </DropdownMenu.CheckboxItem>
+                <!-- Two faces, so the choice is shown rather than described:
+                     each label is set in the face it selects, which is the
+                     whole of what the reader is deciding between. -->
+                <DropdownMenu.GroupHeading class="text-xs text-muted-foreground">
+                  Reading font
+                </DropdownMenu.GroupHeading>
+                <DropdownMenu.RadioGroup
+                  value={readingFont}
+                  onValueChange={(value) => chooseReadingFont(value as ReadingFont)}
+                >
+                  <DropdownMenu.RadioItem
+                    value="sans"
+                    disabled={loading}
+                    closeOnSelect={false}
+                    data-testid="reading-font-sans"
+                  >
+                    Sans
+                  </DropdownMenu.RadioItem>
+                  <DropdownMenu.RadioItem
+                    value="serif"
+                    disabled={loading}
+                    closeOnSelect={false}
+                    class="font-serif"
+                    data-testid="reading-font-serif"
+                  >
+                    Serif
+                  </DropdownMenu.RadioItem>
+                </DropdownMenu.RadioGroup>
               </DropdownMenu.Group>
               <DropdownMenu.Separator />
               <DropdownMenu.Group>
@@ -1312,6 +1354,7 @@
         entry={selectedEntry}
         busy={busy || pendingEntryIDs.has(selectedEntry.id)}
         view={entryView}
+        {readingFont}
         iconUrl={iconForEntry(selectedEntry)}
         overlay={narrow}
         onClose={clearSelection}

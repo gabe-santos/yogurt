@@ -170,4 +170,41 @@ test('the reader switches views, keeps the choice, and is offered a tab when a p
   );
   await page.unroute('**/api/entries/*/original');
   await page.getByTestId('view-feed').click();
+
+  // The face an Entry is read in is the reader's too, and it outlives the
+  // reload the same way the view does.
+  await page.getByTestId('reader-menu').click();
+  await page.getByTestId('reading-font-serif').click();
+  await expect(page.getByTestId('reading-prose')).toHaveCSS(
+    'font-family',
+    /Literata/,
+  );
+  await page.keyboard.press('Escape');
+  await page.reload();
+  await expect(page.getByTestId('reading-prose')).toHaveCSS(
+    'font-family',
+    /Literata/,
+  );
+
+  // Extracted Articles are full of `<em>`, and a face whose italic is not
+  // loaded gets one the browser slants by hand. Both reading faces ship a
+  // drawn italic, and `load` resolves with nothing at all when the stylesheet
+  // declaring one is missing.
+  const drawnItalics = await page.evaluate(async () => {
+    const [sans, serif] = await Promise.all([
+      document.fonts.load("italic 18px 'Geist Variable'"),
+      document.fonts.load("italic 18px 'Literata Variable'"),
+    ]);
+    return { sans: sans.length, serif: serif.length };
+  });
+  expect(drawnItalics.sans).toBeGreaterThan(0);
+  expect(drawnItalics.serif).toBeGreaterThan(0);
+
+  await page.getByTestId('reader-menu').click();
+  await page.getByTestId('reading-font-sans').click();
+  await expect(page.getByTestId('reading-prose')).toHaveCSS(
+    'font-family',
+    /Geist/,
+  );
+  await page.keyboard.press('Escape');
 });

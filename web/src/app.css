@@ -1,7 +1,19 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 @import 'shadcn-svelte/tailwind.css';
+/* Geist ships normal and italic as separate stylesheets, and the bare package
+   entry is the normal one. Extracted Articles are full of `<em>`, so without
+   the second import every emphasis in the Reading Pane is a slant the browser
+   invents rather than a drawn italic. */
 @import '@fontsource-variable/geist';
+@import '@fontsource-variable/geist/wght-italic.css';
+/* Literata is the Reading Pane's serif, chosen only when the reader asks for
+   it. `standard` is the full-axis cut rather than the weight-only slice: it
+   carries the optical-size axis, so an 18px paragraph and a 30px headline get
+   different drawings of the same face instead of one drawing scaled. Nothing
+   downloads it until a reader picks the serif. */
+@import '@fontsource-variable/literata/standard.css';
+@import '@fontsource-variable/literata/standard-italic.css';
 
 /* No manual toggle: `dark:` stays Tailwind's default
    `prefers-color-scheme` media query rather than a `.dark` class. */
@@ -93,6 +105,20 @@
 
 @theme inline {
   --font-sans: 'Geist Variable', sans-serif;
+  /* The Reading Pane's optional face. Nowhere else in the product sets type in
+     a serif: this exists so an Entry can be read in one, not so the interface
+     can be decorated with one. */
+  --font-serif: 'Literata Variable', Georgia, serif;
+  /* The reading column is sized to the face inside it, not to a shared box.
+     A line of Geist at 18px averages 8.11px per character and a line of
+     Literata averages 8.36px (measured, latin, 400), so the same 672px column
+     would hold 77 characters of one and 75 of the other — and a shared `ch`
+     cap would be worse, since `ch` is the width of a zero and the ratio of
+     average character to zero runs from 0.68 in Geist to 0.80 in Literata.
+     Both values below are 72 characters of their own face plus the column's
+     own 48px of padding, in rem so the measure survives a changed root size. */
+  --container-reading-sans: 39.5rem;
+  --container-reading-serif: 40.625rem;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -138,7 +164,9 @@
      reads as loose at 24px and as cramped at 9px. One value per step of the
      type scale, named after the step it belongs to, so a heading is written
      `text-2xl tracking-2xl` and can never carry the wrong pairing by
-     accident. Geist has no optical-size axis to do this for us. */
+     accident. Geist has no optical-size axis to do this for us — Literata
+     does, which is why the reading serif takes none of these. */
+  --tracking-3xl: -0.026em;
   --tracking-2xl: -0.022em;
   --tracking-xl: -0.017em;
   --tracking-lg: -0.011em;
