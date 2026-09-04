@@ -63,44 +63,133 @@
     0px 2px 4px 0px oklch(0 0 0 / 0.06);
 }
 
+/* The dark scheme's palette, named once. Two scopes read it: the ambient
+   scheme below, which the OS asks for, and the menu inversion scope beneath
+   that, which is dark whatever the OS asks for. One set of literals, so
+   retuning the dark scheme cannot leave the menus behind. */
+:root {
+  --dark-background: oklch(0.141 0.005 285.823);
+  --dark-foreground: oklch(0.985 0 0);
+  --dark-card: oklch(0.21 0.006 285.885);
+  --dark-card-foreground: oklch(0.985 0 0);
+  --dark-popover: oklch(0.21 0.006 285.885);
+  --dark-popover-foreground: oklch(0.985 0 0);
+  --dark-primary: oklch(0.92 0.004 286.32);
+  --dark-primary-foreground: oklch(0.21 0.006 285.885);
+  --dark-secondary: oklch(0.274 0.006 286.033);
+  --dark-secondary-foreground: oklch(0.985 0 0);
+  --dark-muted: oklch(0.274 0.006 286.033);
+  --dark-muted-foreground: oklch(0.705 0.015 286.067);
+  --dark-accent: oklch(0.274 0.006 286.033);
+  --dark-accent-foreground: oklch(0.985 0 0);
+  --dark-destructive: oklch(0.704 0.191 22.216);
+  --dark-border: oklch(1 0 0 / 10%);
+  --dark-input: oklch(1 0 0 / 15%);
+  --dark-prose-image-outline: oklch(1 0 0 / 0.1);
+  --dark-ring: oklch(0.552 0.016 285.938);
+  --dark-chart-1: oklch(0.871 0.006 286.286);
+  --dark-chart-2: oklch(0.552 0.016 285.938);
+  --dark-chart-3: oklch(0.442 0.017 285.786);
+  --dark-chart-4: oklch(0.37 0.013 285.805);
+  --dark-chart-5: oklch(0.274 0.006 286.033);
+  --dark-sidebar: oklch(0.21 0.006 285.885);
+  --dark-sidebar-foreground: oklch(0.985 0 0);
+  --dark-sidebar-primary: oklch(0.488 0.243 264.376);
+  --dark-sidebar-primary-foreground: oklch(0.985 0 0);
+  --dark-sidebar-accent: oklch(0.274 0.006 286.033);
+  --dark-sidebar-accent-foreground: oklch(0.985 0 0);
+  --dark-sidebar-border: oklch(1 0 0 / 10%);
+  --dark-sidebar-ring: oklch(0.552 0.016 285.938);
+  /* Layered depth is invisible on a dark surface: one white ring instead. */
+  --dark-border-shadow: 0 0 0 1px oklch(1 0 0 / 0.08);
+  --dark-border-shadow-hover: 0 0 0 1px oklch(1 0 0 / 0.13);
+}
+
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: oklch(0.141 0.005 285.823);
-    --foreground: oklch(0.985 0 0);
-    --card: oklch(0.21 0.006 285.885);
-    --card-foreground: oklch(0.985 0 0);
-    --popover: oklch(0.21 0.006 285.885);
-    --popover-foreground: oklch(0.985 0 0);
-    --primary: oklch(0.92 0.004 286.32);
-    --primary-foreground: oklch(0.21 0.006 285.885);
-    --secondary: oklch(0.274 0.006 286.033);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.274 0.006 286.033);
-    --muted-foreground: oklch(0.705 0.015 286.067);
-    --accent: oklch(0.274 0.006 286.033);
-    --accent-foreground: oklch(0.985 0 0);
-    --destructive: oklch(0.704 0.191 22.216);
-    --border: oklch(1 0 0 / 10%);
-    --input: oklch(1 0 0 / 15%);
-    --prose-image-outline: oklch(1 0 0 / 0.1);
-    --ring: oklch(0.552 0.016 285.938);
-    --chart-1: oklch(0.871 0.006 286.286);
-    --chart-2: oklch(0.552 0.016 285.938);
-    --chart-3: oklch(0.442 0.017 285.786);
-    --chart-4: oklch(0.37 0.013 285.805);
-    --chart-5: oklch(0.274 0.006 286.033);
-    --sidebar: oklch(0.21 0.006 285.885);
-    --sidebar-foreground: oklch(0.985 0 0);
-    --sidebar-primary: oklch(0.488 0.243 264.376);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.274 0.006 286.033);
-    --sidebar-accent-foreground: oklch(0.985 0 0);
-    --sidebar-border: oklch(1 0 0 / 10%);
-    --sidebar-ring: oklch(0.552 0.016 285.938);
-    /* Layered depth is invisible on a dark surface: one white ring instead. */
-    --border-shadow: 0 0 0 1px oklch(1 0 0 / 0.08);
-    --border-shadow-hover: 0 0 0 1px oklch(1 0 0 / 0.13);
+    --background: var(--dark-background);
+    --foreground: var(--dark-foreground);
+    --card: var(--dark-card);
+    --card-foreground: var(--dark-card-foreground);
+    --popover: var(--dark-popover);
+    --popover-foreground: var(--dark-popover-foreground);
+    --primary: var(--dark-primary);
+    --primary-foreground: var(--dark-primary-foreground);
+    --secondary: var(--dark-secondary);
+    --secondary-foreground: var(--dark-secondary-foreground);
+    --muted: var(--dark-muted);
+    --muted-foreground: var(--dark-muted-foreground);
+    --accent: var(--dark-accent);
+    --accent-foreground: var(--dark-accent-foreground);
+    --destructive: var(--dark-destructive);
+    --border: var(--dark-border);
+    --input: var(--dark-input);
+    --prose-image-outline: var(--dark-prose-image-outline);
+    --ring: var(--dark-ring);
+    --chart-1: var(--dark-chart-1);
+    --chart-2: var(--dark-chart-2);
+    --chart-3: var(--dark-chart-3);
+    --chart-4: var(--dark-chart-4);
+    --chart-5: var(--dark-chart-5);
+    --sidebar: var(--dark-sidebar);
+    --sidebar-foreground: var(--dark-sidebar-foreground);
+    --sidebar-primary: var(--dark-sidebar-primary);
+    --sidebar-primary-foreground: var(--dark-sidebar-primary-foreground);
+    --sidebar-accent: var(--dark-sidebar-accent);
+    --sidebar-accent-foreground: var(--dark-sidebar-accent-foreground);
+    --sidebar-border: var(--dark-sidebar-border);
+    --sidebar-ring: var(--dark-sidebar-ring);
+    --border-shadow: var(--dark-border-shadow);
+    --border-shadow-hover: var(--dark-border-shadow-hover);
   }
+}
+
+/* The menu inversion scope, and nothing else. `menuColor: inverted-translucent`
+   in components.json, and the generator materialises the colour half of that as
+   a literal `dark` class on each menu content element — the whole of its
+   mechanism (see docs/adr/0015). Here that class needs a home, because `dark:`
+   in this project is Tailwind's default `prefers-color-scheme` query rather
+   than a class variant: the class carries the tokens, the variant is untouched.
+   This is NOT a theme toggle. On `<html>` it would darken the app while
+   persisting nothing and while every `dark:` utility kept following the OS.
+   `color-scheme` rides along so a scrolling Select draws a dark scrollbar down
+   a dark sheet instead of a light one. */
+.dark {
+  color-scheme: dark;
+  --background: var(--dark-background);
+  --foreground: var(--dark-foreground);
+  --card: var(--dark-card);
+  --card-foreground: var(--dark-card-foreground);
+  --popover: var(--dark-popover);
+  --popover-foreground: var(--dark-popover-foreground);
+  --primary: var(--dark-primary);
+  --primary-foreground: var(--dark-primary-foreground);
+  --secondary: var(--dark-secondary);
+  --secondary-foreground: var(--dark-secondary-foreground);
+  --muted: var(--dark-muted);
+  --muted-foreground: var(--dark-muted-foreground);
+  --accent: var(--dark-accent);
+  --accent-foreground: var(--dark-accent-foreground);
+  --destructive: var(--dark-destructive);
+  --border: var(--dark-border);
+  --input: var(--dark-input);
+  --prose-image-outline: var(--dark-prose-image-outline);
+  --ring: var(--dark-ring);
+  --chart-1: var(--dark-chart-1);
+  --chart-2: var(--dark-chart-2);
+  --chart-3: var(--dark-chart-3);
+  --chart-4: var(--dark-chart-4);
+  --chart-5: var(--dark-chart-5);
+  --sidebar: var(--dark-sidebar);
+  --sidebar-foreground: var(--dark-sidebar-foreground);
+  --sidebar-primary: var(--dark-sidebar-primary);
+  --sidebar-primary-foreground: var(--dark-sidebar-primary-foreground);
+  --sidebar-accent: var(--dark-sidebar-accent);
+  --sidebar-accent-foreground: var(--dark-sidebar-accent-foreground);
+  --sidebar-border: var(--dark-sidebar-border);
+  --sidebar-ring: var(--dark-sidebar-ring);
+  --border-shadow: var(--dark-border-shadow);
+  --border-shadow-hover: var(--dark-border-shadow-hover);
 }
 
 @theme inline {
@@ -248,13 +337,16 @@
    standing in for. Selected by `data-slot`, because that is the identifier
    the vendored primitives own: their Tailwind classes belong to the
    generator and are rewritten whenever it reruns. These rules sit outside
-   every layer, which is what puts them above the utilities they answer. */
+   every layer, which is what puts them above the utilities they answer.
+   `popover-content` is listed ahead of its component: no Popover is installed
+   yet, and one added later joins the material without a second edit. */
 @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
   [data-slot='dropdown-menu-content'],
   [data-slot='dropdown-menu-sub-content'],
   [data-slot='context-menu-content'],
   [data-slot='context-menu-sub-content'],
-  [data-slot='select-content'] {
+  [data-slot='select-content'],
+  [data-slot='popover-content'] {
     background-color: var(--popover);
 
     &::before {
@@ -281,9 +373,29 @@
   [data-slot='context-menu-content'],
   [data-slot='context-menu-sub-content'],
   [data-slot='select-content'],
+  [data-slot='popover-content'],
   [data-slot='dialog-content'],
   [data-slot='sheet-content'] {
     outline: 1px solid var(--foreground);
     outline-offset: -1px;
   }
+}
+
+/* The hairline these sheets wear was tuned twice: 5% of the foreground under a
+   light scheme, 10% under a dark one, the second gated on `dark:` and so on
+   what the OS asks for. The sheets are dark now whatever it asks for, which
+   leaves the light-tuned value permanently wrong in a light scheme and the
+   gate that would correct it permanently shut. Take the dark-tuned edge
+   unconditionally. `--tw-ring-color` is where the `ring-*` utility keeps the
+   value, and it has to read `--foreground` rather than Tailwind's
+   `--color-foreground` alias: the alias is computed once on `:root`, where the
+   scheme is still light, while `--foreground` resolves against the inversion
+   scope on the element itself — 10% of the light foreground the sheet carries. */
+[data-slot='dropdown-menu-content'],
+[data-slot='dropdown-menu-sub-content'],
+[data-slot='context-menu-content'],
+[data-slot='context-menu-sub-content'],
+[data-slot='select-content'],
+[data-slot='popover-content'] {
+  --tw-ring-color: color-mix(in oklab, var(--foreground) 10%, transparent);
 }
