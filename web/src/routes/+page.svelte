@@ -430,6 +430,7 @@
   }
 
   async function refresh() {
+    if (busy) return;
     notice = "";
     busy = true;
     refreshing = true;
@@ -885,6 +886,7 @@
     help: () => (helpOpen = true),
     search: () => (searchOpen = true),
     addFeed: () => (addFeedOpen = true),
+    refreshAll: () => void refresh(),
   };
 
   function isTypingTarget(target: EventTarget | null): boolean {
