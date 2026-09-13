@@ -65,6 +65,18 @@ test('on a phone-sized viewport the sidebar is a sheet and reading still works',
   await expect(pane).toBeHidden();
   await expect(page.getByTestId('entry-list')).not.toHaveAttribute('inert', '');
 
+  // The overlay took focus when it opened and made the list behind it inert,
+  // so closing it hands focus back to the row the Entry was on: the reader
+  // has not moved in the list, and j continues from that row rather than
+  // starting the list again from the top.
+  await expect(entries.first()).toBeFocused();
+  await page.keyboard.press('j');
+  await expect(page.getByTestId('entry-content')).not.toHaveText(
+    firstContent ?? '',
+  );
+  await page.keyboard.press('Escape');
+  await expect(pane).toBeHidden();
+
   await entries.first().click();
   await expect(pane).toBeVisible();
   await page.getByTestId('reading-pane-back').click();

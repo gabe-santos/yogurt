@@ -14,10 +14,16 @@
     isCurrent: boolean;
     /** iconUrl is the Feed's stored Feed Icon, undefined when it has none. */
     iconUrl?: string;
-    /** tabbable makes this the Entry List's single tab stop. The list is one
-     * control the reader moves through with j/k, so Tab reaches it once and
-     * then leaves for the Reading Pane rather than walking every loaded row. */
+    /** tabbable makes this the Entry List's single tab stop, which is to say
+     * it marks the row the reader is at. The list is one control the reader
+     * moves through with j/k, so Tab reaches it once and then leaves for the
+     * Reading Pane rather than walking every loaded row. */
     tabbable: boolean;
+    /** focusRequest counts the keyboard acts that should leave focus on the
+     * row the reader is at; 0 asks for none. It is read rather than compared
+     * so that the same row can be asked twice — closing the Reading Pane
+     * overlay asks for the focus the pane took. */
+    focusRequest: number;
     disabled: boolean;
     onClick: () => void;
     onToggleRead: () => void;
@@ -30,6 +36,7 @@
     isCurrent,
     iconUrl,
     tabbable,
+    focusRequest,
     disabled,
     onClick,
     onToggleRead,
@@ -46,6 +53,23 @@
   // Feed name also has to fit on.
   const age = $derived(formatEntryAge(entry.published_at));
   const published = $derived(formatPublished(entry.published_at));
+
+  let button = $state<HTMLButtonElement | null>(null);
+  // j and k move the reader's position without touching the list's scroll
+  // box, so the row they land on has to bring itself into view or the reader
+  // ends up reading an Entry whose row is a screenful away. `nearest` scrolls
+  // by the least that makes the row whole, and does nothing when it already
+  // is. Focus follows the keyboard only: it is what announces the move to a
+  // screen reader and leaves Tab continuing from the right row, and it is
+  // also how the narrow-screen overlay hands focus back to the list it
+  // covered.
+  $effect(() => {
+    const requested = focusRequest > 0;
+    const row = button;
+    if (!row || !tabbable) return;
+    row.scrollIntoView({ block: "nearest" });
+    if (requested) row.focus({ preventScroll: true });
+  });
 </script>
 
 <li>
@@ -60,6 +84,7 @@
              is instant to the finger and still graceful when it lets go. -->
         <button
           {...props}
+          bind:this={button}
           type="button"
           data-testid="entry"
           aria-current={isCurrent}

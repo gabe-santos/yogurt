@@ -107,9 +107,26 @@
   }
 
   // Selecting an Entry and opening it are one act: the Reading Pane always
-  // shows the selected Entry, so a single index is the whole notion of
-  // position. See docs/adr/0010-selection-is-opening.md.
+  // shows the selected Entry. See docs/adr/0010-selection-is-opening.md.
   let selectedIndex = $state<number | undefined>(undefined);
+  // Closing the Entry is not moving in the list. Before there is room for a
+  // third column, backing out of the overlay clears the selection, and with
+  // it every trace of where the reader had got to: j would start the list
+  // again from the top. closedIndex keeps the row they were reading, and only
+  // rebuilding the list forgets it.
+  let closedIndex = $state<number | undefined>(undefined);
+  /** position is the row the reader is at whether or not its Entry is open:
+   * what j/k count from, and the Entry List's single tab stop. */
+  const position = $derived(selectedIndex ?? closedIndex);
+  // The keyboard carries the reader's position with it: the row j and k land
+  // on takes focus, which is what puts the move into the accessibility tree
+  // and leaves Tab continuing from where the reader actually is. A count
+  // rather than a flag, because closing the overlay asks the same row that
+  // was already the position to take focus back off the pane that covered
+  // it: nothing about the row itself changes, so the request has to. Zero
+  // asks for no focus at all — a click landed its own, and a list the reader
+  // did not move through must not pull focus out of whatever rebuilt it.
+  let focusRequest = $state(0);
   // The Reading Pane is a column of the layout once there is room for three,
   // and an overlay over the Entry List before that. "Room" is what this pane
   // pair actually has, not what the window has: the Collection List takes
@@ -387,6 +404,10 @@
     entries = page.entries;
     cursor = page.next_cursor;
     selectedIndex = undefined;
+    closedIndex = undefined;
+    // Whatever rebuilt the list — a Collection, the order, Unread Only — is
+    // what the reader is holding, so the new list must not take focus off it.
+    focusRequest = 0;
     manuallyUnread = new Set();
   }
 
@@ -463,6 +484,9 @@
         : [...page.entries, entry].sort(compareEntries);
       cursor = page.next_cursor;
       manuallyUnread = new Set();
+      // This is a different list from the one the reader closed an Entry in.
+      closedIndex = undefined;
+      focusRequest = 0;
       const index = entries.findIndex((candidate) => candidate.id === entry.id);
       selectedIndex = index < 0 ? undefined : index;
       if (index >= 0) maybeMarkOnSelect(index);
@@ -610,7 +634,9 @@
 
   async function moveSelection(delta: number) {
     if (busy || entries.length === 0) return;
-    const base = selectedIndex ?? (delta > 0 ? -1 : entries.length);
+    // Counted from where the reader is, which is the open Entry's row or, if
+    // they closed it, the row it was on.
+    const base = position ?? (delta > 0 ? -1 : entries.length);
     let target = base + delta;
     // The end of the loaded list is not the end of the reading list: j reaches
     // for the next page rather than stopping dead on the last row.
@@ -618,21 +644,33 @@
       await loadMore();
     }
     if (entries.length === 0) return;
+    closedIndex = undefined;
+    focusRequest += 1;
     selectedIndex = Math.min(Math.max(target, 0), entries.length - 1);
     maybeMarkOnSelect(selectedIndex);
   }
 
   function selectEntryAt(index: number) {
     if (busy) return;
+    closedIndex = undefined;
+    focusRequest = 0;
     selectedIndex = index;
     maybeMarkOnSelect(index);
   }
 
   /** clearSelection backs out of the overlay the Reading Pane is before there
    * is room for a third column. With the room, there is nothing to back out
-   * of and the pane keeps what it is showing. */
+   * of and the pane keeps what it is showing.
+   *
+   * The overlay took focus when it opened and the list behind it was inert,
+   * so closing it has to hand focus back; the row the Entry was on is where
+   * the reader is, and where j continues from. */
   function clearSelection() {
-    if (busy || !narrow) return;
+    // Escape with nothing open reaches here too, and there is no position to
+    // take: leaving the closed row alone is what keeps j continuing from it.
+    if (busy || !narrow || selectedIndex === undefined) return;
+    closedIndex = selectedIndex;
+    focusRequest += 1;
     selectedIndex = undefined;
   }
 
@@ -1277,9 +1315,25 @@
             </p>
             <p class="max-w-56 text-xs leading-snug text-muted-foreground">
               {feeds.length === 0
-                ? "Add one with the + beside Feeds in the Collection List."
+                ? "Subscribe to a Feed and its Entries collect here."
                 : emptyState.detail}
             </p>
+            {#if feeds.length === 0}
+              <!-- The first screen a self-hoster sees has to carry the act
+                   itself: the + it used to point at is beside Feeds in the
+                   Collection List, which before there is room for a column is
+                   a sheet behind the trigger and so not on the screen at all. -->
+              <Button
+                variant="outline"
+                size="sm"
+                class="mt-1"
+                data-testid="add-first-feed"
+                onclick={() => (addFeedOpen = true)}
+              >
+                <PlusIcon data-icon="inline-start" />
+                Add your first Feed
+              </Button>
+            {/if}
           </div>
         {:else}
           <ul class="flex flex-col divide-y divide-border">
@@ -1288,7 +1342,8 @@
                 {entry}
                 isCurrent={index === selectedIndex}
                 iconUrl={iconForEntry(entry)}
-                tabbable={index === (selectedIndex ?? 0)}
+                tabbable={index === (position ?? 0)}
+                {focusRequest}
                 disabled={busy || pendingEntryIDs.has(entry.id)}
                 onClick={() => selectEntryAt(index)}
                 onToggleRead={() => toggleReadAt(index)}

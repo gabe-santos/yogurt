@@ -166,6 +166,10 @@ test('the reader opens an Entry, reads it, and triages by keyboard', async ({
     'Keeping a fire alive overnight.',
   );
   await expect(entries.nth(1)).not.toContainText('unread');
+  // The reader's position moves with the keyboard, so the row j landed on
+  // holds focus: that is what brings it into view in a longer list, and what
+  // Tab continues from.
+  await expect(entries.nth(1)).toBeFocused();
 
   await page.keyboard.press('k');
   await expect(page.getByTestId('entry-content')).toContainText(
