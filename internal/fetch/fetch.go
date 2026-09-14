@@ -35,9 +35,6 @@ type Options struct {
 	// addresses. It exists for tests and for self-hosters whose Feeds live on
 	// their own LAN, and is off by default.
 	AllowPrivate bool
-	Timeout      time.Duration
-	MaxBody      int64
-	UserAgent    string
 	// Accept overrides the Accept header every request carries. The zero
 	// value asks for a Feed and settles for the web page that might
 	// advertise one, which is right for checking a Feed but wrong for
@@ -66,16 +63,6 @@ type Response struct {
 
 // New builds a client.
 func New(opts Options) *Client {
-	if opts.Timeout <= 0 {
-		opts.Timeout = DefaultTimeout
-	}
-	if opts.MaxBody <= 0 {
-		opts.MaxBody = DefaultMaxBody
-	}
-	if opts.UserAgent == "" {
-		opts.UserAgent = DefaultUserAgent
-	}
-
 	dialer := &net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}
 	if !opts.AllowPrivate {
 		// The check runs on the address the resolver actually returned, on every
@@ -96,9 +83,9 @@ func New(opts Options) *Client {
 	}
 
 	return &Client{
-		http:      &http.Client{Transport: transport, Timeout: opts.Timeout},
-		maxBody:   opts.MaxBody,
-		userAgent: opts.UserAgent,
+		http:      &http.Client{Transport: transport, Timeout: DefaultTimeout},
+		maxBody:   DefaultMaxBody,
+		userAgent: DefaultUserAgent,
 		accept:    cmp.Or(opts.Accept, defaultAccept),
 	}
 }
