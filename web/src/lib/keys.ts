@@ -34,7 +34,7 @@ export const bindings: Binding[] = [
   { key: 'u', description: 'Show unread only', action: 'toggleUnreadOnly' },
   { key: '/', description: 'Search', action: 'search' },
   { key: 'a', description: 'Add a Feed', action: 'addFeed' },
-  { key: 'r', description: 'Refresh all Feeds', action: 'refreshAll' },
+  { key: 'R', description: 'Refresh all Feeds (Shift+R)', action: 'refreshAll' },
   { key: '?', description: 'Show this help', action: 'help' },
 ];
 
