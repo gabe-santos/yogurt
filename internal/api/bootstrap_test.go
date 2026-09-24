@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/gabe-santos/rss-reader/internal/apitest"
-	"github.com/gabe-santos/rss-reader/internal/store"
+	"github.com/gabe-santos/yogurt/internal/apitest"
+	"github.com/gabe-santos/yogurt/internal/store"
 )
 
 func TestAnEmptyDataDirectoryIsBootstrappedOnFirstRun(t *testing.T) {
@@ -25,7 +25,7 @@ func TestRestartingOverAnExistingDatabaseKeepsWorking(t *testing.T) {
 	dataDir := t.TempDir()
 
 	first := apitest.NewInDir(t, dataDir)
-	token := first.Login(apitest.Password).ExpectStatus(http.StatusNoContent).Cookie("reader_session").Value
+	token := first.Login(apitest.Password).ExpectStatus(http.StatusNoContent).Cookie("yogurt_session").Value
 	first.Stop()
 
 	// Same data directory, new process-equivalent: migrations must be a no-op and

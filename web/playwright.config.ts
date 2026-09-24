@@ -30,16 +30,16 @@ export default defineConfig({
       env: { PUBLISHER_PORT: String(publisherPort) },
     },
     {
-      command: '../bin/reader',
+      command: '../bin/yogurt',
       url: baseURL,
       reuseExistingServer: false,
       env: {
-        READER_ADDR: `127.0.0.1:${port}`,
-        READER_DATA_DIR: dataDir,
-        READER_PASSWORD: password,
+        YOGURT_ADDR: `127.0.0.1:${port}`,
+        YOGURT_DATA_DIR: dataDir,
+        YOGURT_PASSWORD: password,
         // The fake publisher is on loopback, which the app otherwise
         // refuses to fetch.
-        READER_ALLOW_PRIVATE_FETCH: 'true',
+        YOGURT_ALLOW_PRIVATE_FETCH: 'true',
       },
     },
   ],

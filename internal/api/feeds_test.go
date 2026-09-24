@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gabe-santos/rss-reader/internal/apitest"
+	"github.com/gabe-santos/yogurt/internal/apitest"
 )
 
 // published is an arbitrary instant the fake publishers date their items from.

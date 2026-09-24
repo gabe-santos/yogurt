@@ -1,6 +1,6 @@
 .PHONY: all build frontend backend test test-api test-e2e check clean run
 
-BINARY := bin/reader
+BINARY := bin/yogurt
 
 all: check
 
@@ -12,7 +12,7 @@ frontend:
 	pnpm --dir web build
 
 backend:
-	go build -o $(BINARY) ./cmd/reader
+	go build -o $(BINARY) ./cmd/yogurt
 
 run: build
 	./$(BINARY)

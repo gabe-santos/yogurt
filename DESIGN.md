@@ -1,5 +1,5 @@
 ---
-name: RSS Reader
+name: Yogurt
 description: A clean, lightweight, single-user feed reader with thoughtful UI details.
 colors:
   background: "oklch(1 0 0)"
@@ -95,7 +95,7 @@ components:
     height: "{spacing.control-height}"
 ---
 
-# Design System: RSS Reader
+# Design System: Yogurt
 
 ## Overview
 

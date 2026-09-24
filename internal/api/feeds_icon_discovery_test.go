@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gabe-santos/rss-reader/internal/apitest"
+	"github.com/gabe-santos/yogurt/internal/apitest"
 )
 
 // siteWithIcon serves a home page advertising a Feed Icon at iconPath, and

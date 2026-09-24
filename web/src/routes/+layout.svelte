@@ -25,7 +25,7 @@
 
 <svelte:head>
 	<link rel="icon" href={favicon} />
-	<title>Reader</title>
+	<title>Yogurt</title>
 </svelte:head>
 
 <div class="min-h-dvh bg-background text-foreground">

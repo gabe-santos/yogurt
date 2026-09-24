@@ -1,4 +1,4 @@
-// Command reader is the whole application: one binary serving the API, the
+// Command yogurt is the whole application: one binary serving the API, the
 // embedded single-page app, and the feed pull worker, over one SQLite file.
 package main
 
@@ -10,13 +10,13 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/gabe-santos/rss-reader/internal/app"
-	"github.com/gabe-santos/rss-reader/internal/config"
+	"github.com/gabe-santos/yogurt/internal/app"
+	"github.com/gabe-santos/yogurt/internal/config"
 )
 
 func main() {
 	if err := run(); err != nil {
-		fmt.Fprintln(os.Stderr, "reader:", err)
+		fmt.Fprintln(os.Stderr, "yogurt:", err)
 		os.Exit(1)
 	}
 }

@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/gabe-santos/rss-reader/internal/store"
+	"github.com/gabe-santos/yogurt/internal/store"
 )
 
 // maxSearchQuery caps how much of a search's own text this application will

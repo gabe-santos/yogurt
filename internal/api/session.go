@@ -12,7 +12,7 @@ import (
 )
 
 // SessionCookie is the name of the browser's session cookie.
-const SessionCookie = "reader_session"
+const SessionCookie = "yogurt_session"
 
 // maxLoginBody caps how much of a login request we are willing to read.
 const maxLoginBody = 4 << 10

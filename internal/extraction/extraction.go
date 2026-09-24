@@ -16,8 +16,8 @@ import (
 
 	readability "codeberg.org/readeck/go-readability/v2"
 
-	"github.com/gabe-santos/rss-reader/internal/fetch"
-	"github.com/gabe-santos/rss-reader/internal/sanitize"
+	"github.com/gabe-santos/yogurt/internal/fetch"
+	"github.com/gabe-santos/yogurt/internal/sanitize"
 )
 
 // ErrNoContent reports a page with nothing extraction could recognise as an

@@ -8,11 +8,11 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/gabe-santos/rss-reader/internal/auth"
-	"github.com/gabe-santos/rss-reader/internal/clock"
-	"github.com/gabe-santos/rss-reader/internal/extraction"
-	"github.com/gabe-santos/rss-reader/internal/pull"
-	"github.com/gabe-santos/rss-reader/internal/store"
+	"github.com/gabe-santos/yogurt/internal/auth"
+	"github.com/gabe-santos/yogurt/internal/clock"
+	"github.com/gabe-santos/yogurt/internal/extraction"
+	"github.com/gabe-santos/yogurt/internal/pull"
+	"github.com/gabe-santos/yogurt/internal/store"
 )
 
 // Deps are the collaborators the HTTP surface needs.

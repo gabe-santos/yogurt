@@ -10,11 +10,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gabe-santos/rss-reader/internal/pullpolicy"
+	"github.com/gabe-santos/yogurt/internal/pullpolicy"
 )
 
 // Prefix is applied to every environment variable this application reads.
-const Prefix = "READER_"
+const Prefix = "YOGURT_"
 
 // Config is the whole of the application's configuration. Every field has a
 // working default except the password, which must be supplied.

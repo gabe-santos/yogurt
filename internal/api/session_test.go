@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gabe-santos/rss-reader/internal/apitest"
+	"github.com/gabe-santos/yogurt/internal/apitest"
 )
 
 func TestLoggingInWithTheConfiguredPasswordStartsASession(t *testing.T) {
@@ -13,7 +13,7 @@ func TestLoggingInWithTheConfiguredPasswordStartsASession(t *testing.T) {
 
 	resp := h.Login(apitest.Password).ExpectStatus(http.StatusNoContent)
 
-	cookie := resp.Cookie("reader_session")
+	cookie := resp.Cookie("yogurt_session")
 	if cookie == nil {
 		t.Fatal("login set no session cookie")
 	}
@@ -37,7 +37,7 @@ func TestLoggingInWithTheWrongPasswordIsRejected(t *testing.T) {
 	h := apitest.New(t)
 
 	resp := h.Login("hunter2").ExpectStatus(http.StatusUnauthorized)
-	if cookie := resp.Cookie("reader_session"); cookie != nil {
+	if cookie := resp.Cookie("yogurt_session"); cookie != nil {
 		t.Fatalf("rejected login set a session cookie: %q", cookie.Value)
 	}
 
@@ -46,7 +46,7 @@ func TestLoggingInWithTheWrongPasswordIsRejected(t *testing.T) {
 
 func TestLoggingOutEndsTheSessionOnTheServer(t *testing.T) {
 	h := apitest.New(t)
-	token := h.Login(apitest.Password).ExpectStatus(http.StatusNoContent).Cookie("reader_session").Value
+	token := h.Login(apitest.Password).ExpectStatus(http.StatusNoContent).Cookie("yogurt_session").Value
 
 	h.Logout().ExpectStatus(http.StatusNoContent)
 	h.Do(http.MethodGet, "/api/session", nil).ExpectStatus(http.StatusUnauthorized)

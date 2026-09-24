@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gabe-santos/rss-reader/internal/store"
+	"github.com/gabe-santos/yogurt/internal/store"
 )
 
 // maxDeviceTokenBody caps how much of a device token request we are willing

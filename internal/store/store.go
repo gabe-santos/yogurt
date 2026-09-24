@@ -16,7 +16,7 @@ import (
 )
 
 // FileName is the name of the database file inside the data directory.
-const FileName = "reader.db"
+const FileName = "yogurt.db"
 
 // Store is the application's database.
 type Store struct {

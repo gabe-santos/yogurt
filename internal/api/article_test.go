@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gabe-santos/rss-reader/internal/apitest"
+	"github.com/gabe-santos/yogurt/internal/apitest"
 )
 
 // articleHTML is a realistic publisher page: enough substantive prose that

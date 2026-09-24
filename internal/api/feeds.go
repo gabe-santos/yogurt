@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gabe-santos/rss-reader/internal/pull"
-	"github.com/gabe-santos/rss-reader/internal/store"
+	"github.com/gabe-santos/yogurt/internal/pull"
+	"github.com/gabe-santos/yogurt/internal/store"
 )
 
 // maxFeedBody caps how much of a create-Feed request we are willing to read.

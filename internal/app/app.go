@@ -13,16 +13,16 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/gabe-santos/rss-reader/internal/api"
-	"github.com/gabe-santos/rss-reader/internal/auth"
-	"github.com/gabe-santos/rss-reader/internal/clock"
-	"github.com/gabe-santos/rss-reader/internal/config"
-	"github.com/gabe-santos/rss-reader/internal/extraction"
-	"github.com/gabe-santos/rss-reader/internal/fetch"
-	"github.com/gabe-santos/rss-reader/internal/pull"
-	"github.com/gabe-santos/rss-reader/internal/retention"
-	"github.com/gabe-santos/rss-reader/internal/store"
-	"github.com/gabe-santos/rss-reader/internal/webui"
+	"github.com/gabe-santos/yogurt/internal/api"
+	"github.com/gabe-santos/yogurt/internal/auth"
+	"github.com/gabe-santos/yogurt/internal/clock"
+	"github.com/gabe-santos/yogurt/internal/config"
+	"github.com/gabe-santos/yogurt/internal/extraction"
+	"github.com/gabe-santos/yogurt/internal/fetch"
+	"github.com/gabe-santos/yogurt/internal/pull"
+	"github.com/gabe-santos/yogurt/internal/retention"
+	"github.com/gabe-santos/yogurt/internal/store"
+	"github.com/gabe-santos/yogurt/internal/webui"
 )
 
 // Deps are the collaborators a caller may substitute. Zero values mean "the

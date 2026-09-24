@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gabe-santos/rss-reader/internal/apitest"
+	"github.com/gabe-santos/yogurt/internal/apitest"
 )
 
 // originalView is Original View as the API presents it: the address to embed,

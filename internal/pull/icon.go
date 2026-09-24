@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/gabe-santos/rss-reader/internal/fetch"
-	"github.com/gabe-santos/rss-reader/internal/icon"
-	"github.com/gabe-santos/rss-reader/internal/store"
+	"github.com/gabe-santos/yogurt/internal/fetch"
+	"github.com/gabe-santos/yogurt/internal/icon"
+	"github.com/gabe-santos/yogurt/internal/store"
 )
 
 // iconRecheckInterval is how long a Feed's icon check is trusted before it is

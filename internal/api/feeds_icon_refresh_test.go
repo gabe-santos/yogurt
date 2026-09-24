@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gabe-santos/rss-reader/internal/apitest"
-	"github.com/gabe-santos/rss-reader/internal/store"
+	"github.com/gabe-santos/yogurt/internal/apitest"
+	"github.com/gabe-santos/yogurt/internal/store"
 )
 
 func TestPollingBackfillsAnIconForAFeedNeverChecked(t *testing.T) {

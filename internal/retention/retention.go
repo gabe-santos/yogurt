@@ -10,8 +10,8 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/gabe-santos/rss-reader/internal/clock"
-	"github.com/gabe-santos/rss-reader/internal/store"
+	"github.com/gabe-santos/yogurt/internal/clock"
+	"github.com/gabe-santos/yogurt/internal/store"
 )
 
 // defaultTick is how often the schedule wakes to look for expired Entries,

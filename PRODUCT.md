@@ -66,14 +66,14 @@ Hard constraints:
 
 ## Brand Commitments
 
-**Open decision: the product has no settled name.** "RSS Reader" is a placeholder, not a brand commitment. It currently appears in the page title, the login screen and the outbound fetch User-Agent (`internal/fetch`). Future work must not build an identity on that string, treat it as a wordmark, or invent a replacement without the owner choosing one.
+**The product is named Yogurt.** It is one word, with no "Reader" or "RSS" suffix: "Reader" is the person the app serves (and a word already used in Reader View), and Feeds are not only RSS. Where a descriptor is needed, write it in lowercase prose ("Yogurt, a feed reader"). Identifiers use lowercase `yogurt`: the repo, Go module, binary, `YOGURT_*` environment variables, session cookie, database file and outbound User-Agent.
 
 No logo, wordmark, brand voice or identity constraint has been established.
 
 ## Evidence on Hand
 
 - **Real product truth, written down and unusually complete:** `CONTEXT.md` (domain language), `docs/prd/0001-reader-mvp.md` (82 user stories plus implementation and testing decisions), `docs/adr/0001`–`0012`.
-- **A running instance with real but small data:** `data/reader.db` currently holds 6 Feeds in 1 Group ("Unsorted"), 244 Entries, 86 unread, 0 Starred. The "few hundred sites" in the PRD is the intended scale, not the present state — so any layout claim about large collections, deep Group trees, or heavy Starred use is untested against real data and must not be presented as observed.
+- **A running instance with real but small data:** `data/yogurt.db` holds 11 Feeds, 662 Entries, 2 unread, 0 Starred (checked 2026-09-24). The "few hundred sites" in the PRD is the intended scale, not the present state — so any layout claim about large collections or heavy Starred use is untested against real data and must not be presented as observed.
 - **Tests as behavioural evidence:** Go API tests (`internal/apitest`), a pure pull-policy suite, and thin Playwright journeys in `web/e2e/` (`reading`, `responsive`, `views`, `unread`) against the real binary with a fake publisher.
 - **Absent, and not to be fabricated:** no users besides the owner, no usage analytics, no testimonials, no press, no benchmarks, no pricing, no public deployment, no logo or brand assets, and no hosted service.
 

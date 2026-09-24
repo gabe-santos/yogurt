@@ -160,7 +160,7 @@
 	// to say what is being read.
 	let titleScrolledAway = $state(false);
 
-	// Cookies ignore ports. A publisher on Reader's own host could therefore
+	// Cookies ignore ports. A publisher on Yogurt's own host could therefore
 	// receive the session even when its URL has a different origin; never frame
 	// one. External publishers keep their own origin so their cookies, storage,
 	// and JavaScript applications continue to work.
@@ -592,7 +592,7 @@
 					{#if original?.embeddable && !originalSharesAppHost}
 						<!-- allow-same-origin preserves the publisher's own cookies and
 						     storage. Because same-host URLs are refused below, the
-						     browser's same-origin policy still keeps Reader's session and
+						     browser's same-origin policy still keeps Yogurt's session and
 						     DOM inaccessible; no referrer names the Entry it came from. -->
 						<iframe
 							data-testid="original-view"
@@ -608,7 +608,7 @@
 							data-testid="original-view-unsafe"
 						>
 							<p class="text-muted-foreground">
-								This address shares Reader's host, so embedding it could expose your session. Open it
+								This address shares Yogurt's host, so embedding it could expose your session. Open it
 								in a new tab instead.
 							</p>
 							{@render waysOn(true)}

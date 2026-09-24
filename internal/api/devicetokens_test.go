@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/gabe-santos/rss-reader/internal/apitest"
+	"github.com/gabe-santos/yogurt/internal/apitest"
 )
 
 type deviceTokenView struct {

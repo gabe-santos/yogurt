@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gabe-santos/rss-reader/internal/extraction"
-	"github.com/gabe-santos/rss-reader/internal/sanitize"
-	"github.com/gabe-santos/rss-reader/internal/store"
+	"github.com/gabe-santos/yogurt/internal/extraction"
+	"github.com/gabe-santos/yogurt/internal/sanitize"
+	"github.com/gabe-santos/yogurt/internal/store"
 )
 
 // Page sizes for the reading list.

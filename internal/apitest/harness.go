@@ -14,10 +14,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gabe-santos/rss-reader/internal/app"
-	"github.com/gabe-santos/rss-reader/internal/clock"
-	"github.com/gabe-santos/rss-reader/internal/config"
-	"github.com/gabe-santos/rss-reader/internal/store"
+	"github.com/gabe-santos/yogurt/internal/app"
+	"github.com/gabe-santos/yogurt/internal/clock"
+	"github.com/gabe-santos/yogurt/internal/config"
+	"github.com/gabe-santos/yogurt/internal/store"
 )
 
 // Password is the configured password every harness boots with.
@@ -247,7 +247,7 @@ func (h *Harness) Logout() *Response {
 func (h *Harness) UseSessionToken(token string) {
 	h.t.Helper()
 	h.Client.Jar.SetCookies(mustParse(h.t, h.Server.URL), []*http.Cookie{{
-		Name:  "reader_session",
+		Name:  "yogurt_session",
 		Value: token,
 		Path:  "/",
 	}})

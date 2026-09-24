@@ -10,7 +10,7 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/gabe-santos/rss-reader/internal/icon"
+	"github.com/gabe-santos/yogurt/internal/icon"
 )
 
 // fakeFetcher answers Fetch from an in-memory map, so tests exercise Choose

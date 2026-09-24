@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gabe-santos/rss-reader/internal/sanitize"
+	"github.com/gabe-santos/yogurt/internal/sanitize"
 )
 
 // TestArticleDemotesHeadings confirms extraction's own h1-h6 never survive

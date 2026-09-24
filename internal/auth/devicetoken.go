@@ -6,8 +6,8 @@ import (
 	"encoding/base64"
 	"fmt"
 
-	"github.com/gabe-santos/rss-reader/internal/clock"
-	"github.com/gabe-santos/rss-reader/internal/store"
+	"github.com/gabe-santos/yogurt/internal/clock"
+	"github.com/gabe-santos/yogurt/internal/store"
 )
 
 // DeviceTokens issues and validates long-lived bearer credentials for

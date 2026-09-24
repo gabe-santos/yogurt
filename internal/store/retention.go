@@ -105,9 +105,9 @@ func (s *Store) tombstonesSince(ctx context.Context, cursor SinceCursor, limit i
 	return tombstones, rows.Err()
 }
 
-// CleanupExpiredEntries removes every unstarred Entry this reader has held
+// CleanupExpiredEntries removes every unstarred Entry Yogurt has held
 // for longer than maxAge, recording a tombstone for each so a delta reader
-// learns it is gone. Age is measured from CreatedAt — when this reader first
+// learns it is gone. Age is measured from CreatedAt — when Yogurt first
 // stored the Entry — rather than PublishedAt, so a Feed whose current
 // document still lists an old item cannot have that item deleted and then
 // re-inserted by the next poll forever. Starred is the only exemption:

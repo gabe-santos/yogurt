@@ -1065,7 +1065,7 @@
                   <!-- The host is the whole of this app's notion of identity,
                        and a long one truncates rather than growing the row. -->
                   <span class="grid flex-1 leading-tight">
-                    <span class="truncate font-medium">Reader</span>
+                    <span class="truncate font-medium">Yogurt</span>
                     <span class="truncate text-xs text-muted-foreground">{serverHost}</span>
                   </span>
                   <ChevronsUpDownIcon strokeWidth={1.5} class="size-4 shrink-0" />

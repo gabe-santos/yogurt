@@ -4,7 +4,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gabe-santos/rss-reader/internal/clock"
+	"github.com/gabe-santos/yogurt/internal/clock"
 )
 
 // MaxLoginFailures is how many failed logins a client may make before it is

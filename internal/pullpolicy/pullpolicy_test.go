@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gabe-santos/rss-reader/internal/pullpolicy"
+	"github.com/gabe-santos/yogurt/internal/pullpolicy"
 )
 
 var epoch = time.Date(2026, 1, 2, 15, 0, 0, 0, time.UTC)

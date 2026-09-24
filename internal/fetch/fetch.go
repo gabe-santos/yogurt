@@ -20,7 +20,7 @@ import (
 const (
 	DefaultTimeout   = 20 * time.Second
 	DefaultMaxBody   = 8 << 20 // 8 MiB, which no sane Feed document exceeds
-	DefaultUserAgent = "rss-reader/1.0 (+https://github.com/gabe-santos/rss-reader)"
+	DefaultUserAgent = "yogurt/1.0 (+https://github.com/gabe-santos/yogurt)"
 )
 
 // ErrBodyTooLarge reports a response bigger than the client is willing to read.

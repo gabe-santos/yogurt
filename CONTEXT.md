@@ -1,8 +1,14 @@
-# RSS Reader
+# Yogurt
 
-A self-hosted reader for one person, which collects the feeds they follow into one place and presents each item either as extracted text or as the original web page.
+A self-hosted app for one Reader, which collects the feeds they follow into one place and presents each item either as extracted text or as the original web page.
 
 ## Language
+
+### People
+
+**Reader**:
+The one person this app serves, who follows the Feeds and owns every Read, Starred, and Archived state.
+_Avoid_: User, owner, account
 
 ### Sources
 

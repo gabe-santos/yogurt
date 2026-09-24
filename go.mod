@@ -1,4 +1,4 @@
-module github.com/gabe-santos/rss-reader
+module github.com/gabe-santos/yogurt
 
 go 1.25.1
 

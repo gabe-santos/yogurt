@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gabe-santos/rss-reader/internal/sanitize"
+	"github.com/gabe-santos/yogurt/internal/sanitize"
 )
 
 // searchLimit caps how many results of each kind a search returns: enough

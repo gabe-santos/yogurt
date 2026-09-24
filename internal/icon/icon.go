@@ -21,7 +21,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/gabe-santos/rss-reader/internal/feed"
+	"github.com/gabe-santos/yogurt/internal/feed"
 	"golang.org/x/net/html"
 )
 

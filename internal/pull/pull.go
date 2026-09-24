@@ -14,11 +14,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gabe-santos/rss-reader/internal/clock"
-	"github.com/gabe-santos/rss-reader/internal/feed"
-	"github.com/gabe-santos/rss-reader/internal/fetch"
-	"github.com/gabe-santos/rss-reader/internal/pullpolicy"
-	"github.com/gabe-santos/rss-reader/internal/store"
+	"github.com/gabe-santos/yogurt/internal/clock"
+	"github.com/gabe-santos/yogurt/internal/feed"
+	"github.com/gabe-santos/yogurt/internal/fetch"
+	"github.com/gabe-santos/yogurt/internal/pullpolicy"
+	"github.com/gabe-santos/yogurt/internal/store"
 )
 
 // concurrency bounds how many Feeds are fetched at once, so that refreshing

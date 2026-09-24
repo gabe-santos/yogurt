@@ -5,9 +5,9 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/gabe-santos/rss-reader/internal/opml"
-	"github.com/gabe-santos/rss-reader/internal/pull"
-	"github.com/gabe-santos/rss-reader/internal/store"
+	"github.com/gabe-santos/yogurt/internal/opml"
+	"github.com/gabe-santos/yogurt/internal/pull"
+	"github.com/gabe-santos/yogurt/internal/store"
 )
 
 // maxOPMLBody caps how much of an OPML import we are willing to read.
@@ -25,7 +25,7 @@ type skippedFeed struct {
 }
 
 // importOPML reads an OPML document and subscribes to every Feed it names
-// that this reader does not already hold, ignoring whatever folders the
+// that Yogurt does not already hold, ignoring whatever folders the
 // document nested them in. A Feed already subscribed is recognised by its
 // URL before it is ever fetched, and one that could not be fetched is
 // recognised after; both are skipped and reported rather than failing the

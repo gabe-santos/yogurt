@@ -9,8 +9,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gabe-santos/rss-reader/internal/clock"
-	"github.com/gabe-santos/rss-reader/internal/store"
+	"github.com/gabe-santos/yogurt/internal/clock"
+	"github.com/gabe-santos/yogurt/internal/store"
 )
 
 // Sessions issues and validates the browser's session tokens. A token is random

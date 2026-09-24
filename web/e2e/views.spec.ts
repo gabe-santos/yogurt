@@ -95,7 +95,7 @@ test('the reader switches views, keeps the choice, and is offered a tab when a p
   await expect(page.locator('h2')).toHaveCount(1);
 
   // The publisher keeps its own origin, so its storage-dependent application
-  // works. That origin still reaches neither Reader's session nor its DOM.
+  // works. That origin still reaches neither Yogurt's session nor its DOM.
   const embeddedFrame = page.frame({ url: `${publisherURL}/fire` });
   expect(embeddedFrame).not.toBeNull();
   const isolation = await embeddedFrame!.evaluate(async () => {
@@ -116,10 +116,10 @@ test('the reader switches views, keeps the choice, and is offered a tab when a p
     };
   });
   expect(isolation.origin).toBe(publisherURL);
-  expect(isolation.cookies).not.toContain('reader_session');
+  expect(isolation.cookies).not.toContain('yogurt_session');
   expect(isolation.storage).toBe('ready');
   expect(isolation.parentDom).toBe('refused');
-  expect(isolation.requestCookie).not.toContain('reader_session');
+  expect(isolation.requestCookie).not.toContain('yogurt_session');
 
   // The choice is the reader's, not the Entry's: the next Entry opens in it.
   await page.keyboard.press('k');
@@ -146,7 +146,7 @@ test('the reader switches views, keeps the choice, and is offered a tab when a p
   );
 
   // A different port is still the same cookie host. Even if the API calls it
-  // embeddable, Reader refuses the frame rather than exposing its session.
+  // embeddable, Yogurt refuses the frame rather than exposing its session.
   const reader = new URL(page.url());
   const sameHostURL = `${reader.protocol}//${reader.hostname}:65534/`;
   await page.route('**/api/entries/*/original', async (route) => {
@@ -166,7 +166,7 @@ test('the reader switches views, keeps the choice, and is offered a tab when a p
   await expect(page.getByTestId('original-view')).toHaveCount(0);
   await expect(page.getByTestId('original-view-unsafe')).toBeVisible();
   await expect(page.getByTestId('entry-content')).toContainText(
-    "shares Reader's host",
+    "shares Yogurt's host",
   );
   await page.unroute('**/api/entries/*/original');
   await page.getByTestId('view-feed').click();
