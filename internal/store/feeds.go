@@ -121,14 +121,19 @@ type EntryQuery struct {
 }
 
 // CreateFeed stores a new subscription and returns it with its assigned id.
-// It returns ErrFeedExists when this Feed URL is already subscribed.
+// A zero NextCheckAt leaves the Feed due now. It returns ErrFeedExists when
+// this Feed URL is already subscribed.
 func (s *Store) CreateFeed(ctx context.Context, feed Feed, now time.Time) (Feed, error) {
+	var nextCheckAt int64
+	if !feed.NextCheckAt.IsZero() {
+		nextCheckAt = feed.NextCheckAt.Unix()
+	}
 	err := s.db.QueryRowContext(ctx,
-		`INSERT INTO feeds (url, title, site_url, created_at, updated_at)
-	 VALUES (?, ?, ?, ?, ?)
+		`INSERT INTO feeds (url, title, site_url, created_at, updated_at, next_check_at)
+	 VALUES (?, ?, ?, ?, ?, ?)
 	 ON CONFLICT (url) DO NOTHING
 	 RETURNING id`,
-		feed.URL, feed.Title, feed.SiteURL, now.Unix(), now.Unix()).Scan(&feed.ID)
+		feed.URL, feed.Title, feed.SiteURL, now.Unix(), now.Unix(), nextCheckAt).Scan(&feed.ID)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		return Feed{}, ErrFeedExists

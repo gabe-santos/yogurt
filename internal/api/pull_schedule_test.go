@@ -197,6 +197,42 @@ func TestStartupChecksFeedsThatFellDueWhileStoppedWithoutWaitingForTheTick(t *te
 	}
 }
 
+// Subscribe creates a Feed already scheduled from its first fetch, so the
+// schedule cannot find it due in the moment before that fetch's result is
+// saved. Only a Feed created with no schedule at all is due at once.
+func TestACreatedFeedIsDueOnlyFromItsScheduledCheck(t *testing.T) {
+	h := apitest.New(t, apitest.PollTick(time.Hour))
+	now := h.Clock.Now()
+	scheduled, err := h.Store.CreateFeed(t.Context(), store.Feed{
+		URL: h.Publisher.URL("/scheduled.xml"), NextCheckAt: now.Add(time.Hour),
+	}, now)
+	if err != nil {
+		t.Fatalf("create scheduled feed: %v", err)
+	}
+	unscheduled, err := h.Store.CreateFeed(t.Context(), store.Feed{URL: h.Publisher.URL("/unscheduled.xml")}, now)
+	if err != nil {
+		t.Fatalf("create unscheduled feed: %v", err)
+	}
+
+	dueIDs := func(at time.Time) string {
+		due, err := h.Store.DueFeeds(t.Context(), at)
+		if err != nil {
+			t.Fatalf("due feeds: %v", err)
+		}
+		ids := make([]int64, len(due))
+		for i, feed := range due {
+			ids[i] = feed.ID
+		}
+		return fmt.Sprint(ids)
+	}
+	if got, want := dueIDs(now), fmt.Sprint([]int64{unscheduled.ID}); got != want {
+		t.Errorf("due at creation = %s, want only the unscheduled Feed %s", got, want)
+	}
+	if got, want := dueIDs(now.Add(time.Hour)), fmt.Sprint([]int64{unscheduled.ID, scheduled.ID}); got != want {
+		t.Errorf("due at the scheduled check = %s, want both Feeds %s", got, want)
+	}
+}
+
 // waitForHits polls the fake publisher until a path has received at least
 // want hits, for asserting on a background goroutine's effect without a fixed
 // sleep racing the schedule's own tick.

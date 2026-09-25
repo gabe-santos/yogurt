@@ -109,6 +109,9 @@ func (s *Service) Subscribe(ctx context.Context, rawURL string, title string) (s
 		URL:     feedURL,
 		Title:   resolvedTitle,
 		SiteURL: document.SiteURL,
+		// Scheduled from this fetch before the row exists, so the schedule
+		// never sees the new Feed as due while its first result is saved.
+		NextCheckAt: pullpolicy.NextCheck(now, s.interval, pullpolicy.HintsFromHeader(resp.Header, now)),
 	}, now)
 	if err != nil {
 		return store.Feed{}, err
