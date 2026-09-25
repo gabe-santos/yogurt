@@ -1,5 +1,5 @@
 # Yogurt alone. Put your own reverse proxy in front of it for HTTPS; see
-# "Run a Server" in the README.
+# "Self-hosting" in the README.
 services:
   yogurt:
     build: .

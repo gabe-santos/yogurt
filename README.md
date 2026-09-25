@@ -2,13 +2,13 @@
 
 A modern, minimal feed reader.
 
-Run it as a [Server](#run-a-server) on a machine you control. A Desktop App is coming later.
+Run it as a [Server](#self-hosting) on a machine you control. A Desktop App is coming later.
 
-## Run a Server
+## Self-hosting
 
 You need a computer or VPS with [Docker](https://docs.docker.com/get-docker/) installed. Compose comes with it.
 
-**1.** Make a folder for Yogurt and save this in it as `compose.yaml`:
+**1.** Make a folder for Yogurt and save this in it as `docker-compose.yaml`:
 
 ```yaml
 services:
@@ -30,7 +30,7 @@ volumes:
 **2.** In the same folder, create a `.env` file holding the password you will sign in with:
 
 ```sh
-echo 'YOGURT_PASSWORD=choose-a-long-password' > .env
+echo 'YOGURT_PASSWORD=decent-password' > .env
 ```
 
 **3.** Start Yogurt:
@@ -47,7 +47,7 @@ Yogurt only accepts connections from the machine it runs on. To reach it from yo
 
 ```caddyfile
 yogurt.example.com {
-	reverse_proxy localhost:8080
+ reverse_proxy localhost:8080
 }
 ```
 
