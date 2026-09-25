@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
@@ -166,8 +167,8 @@ func (h *Harness) DoBearer(method, path, token string, body any) *Response {
 }
 
 // jsonRequest builds a request against the running server, sending a
-// non-nil body as JSON, for Do and DoBearer to send as-is or add a header
-// to first.
+// non-nil body as JSON, for the request-sending methods to send as-is or
+// add headers to first.
 func (h *Harness) jsonRequest(method, path string, body any) *http.Request {
 	h.t.Helper()
 
@@ -233,7 +234,16 @@ func (h *Harness) send(req *http.Request) *Response {
 // Login posts a password to the session endpoint.
 func (h *Harness) Login(password string) *Response {
 	h.t.Helper()
-	return h.Do(http.MethodPost, "/api/session", map[string]string{"password": password})
+	return h.LoginWithHeader(password, nil)
+}
+
+// LoginWithHeader posts a password carrying extra request headers, such as
+// the forwarding headers a reverse proxy adds.
+func (h *Harness) LoginWithHeader(password string, header http.Header) *Response {
+	h.t.Helper()
+	req := h.jsonRequest(http.MethodPost, "/api/session", map[string]string{"password": password})
+	maps.Copy(req.Header, header)
+	return h.send(req)
 }
 
 // Logout ends the current session.

@@ -26,11 +26,31 @@ func TestLoggingInWithTheConfiguredPasswordStartsASession(t *testing.T) {
 	if cookie.SameSite != http.SameSiteLaxMode {
 		t.Errorf("session cookie SameSite = %v, want Lax", cookie.SameSite)
 	}
+	if cookie.Secure {
+		t.Error("session cookie is Secure over plain HTTP")
+	}
 	if cookie.MaxAge <= 0 {
 		t.Errorf("session cookie MaxAge = %d, want a persistent cookie", cookie.MaxAge)
 	}
 
 	h.Do(http.MethodGet, "/api/session", nil).ExpectStatus(http.StatusOK)
+}
+
+func TestLoggingInThroughAnHTTPSProxyMarksTheSessionCookieSecure(t *testing.T) {
+	h := apitest.New(t)
+
+	// Caddy and Traefik end HTTPS themselves and forward plain HTTP, saying so
+	// in this header.
+	resp := h.LoginWithHeader(apitest.Password, http.Header{"X-Forwarded-Proto": {"https"}}).
+		ExpectStatus(http.StatusNoContent)
+
+	cookie := resp.Cookie("yogurt_session")
+	if cookie == nil {
+		t.Fatal("login set no session cookie")
+	}
+	if !cookie.Secure {
+		t.Error("session cookie is not Secure")
+	}
 }
 
 func TestLoggingInWithTheWrongPasswordIsRejected(t *testing.T) {
@@ -80,6 +100,22 @@ func TestRepeatedFailedLoginsAreRateLimited(t *testing.T) {
 
 	h.Clock.Advance(15 * time.Minute)
 	h.Login(apitest.Password).ExpectStatus(http.StatusNoContent)
+}
+
+// Behind a reverse proxy every login arrives from the proxy's own address, so
+// failures from anyone block the Reader too. The client address the proxy
+// forwards does not tell them apart, because a caller can forge it.
+func TestBehindAProxyFailedLoginsFromAnyoneBlockTheReader(t *testing.T) {
+	h := apitest.New(t)
+	forwardedFor := func(client string) http.Header {
+		return http.Header{"X-Forwarded-For": {client}}
+	}
+
+	for range 5 {
+		h.LoginWithHeader("hunter2", forwardedFor("203.0.113.7")).ExpectStatus(http.StatusUnauthorized)
+	}
+
+	h.LoginWithHeader(apitest.Password, forwardedFor("198.51.100.9")).ExpectStatus(http.StatusTooManyRequests)
 }
 
 func TestASuccessfulLoginClearsEarlierFailures(t *testing.T) {

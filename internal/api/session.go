@@ -75,7 +75,9 @@ func (h *Handler) currentSession(w http.ResponseWriter, r *http.Request) {
 // setSessionCookie writes the browser's credential. Its attributes live in one
 // place so that issuing and clearing cannot drift apart: HttpOnly keeps scripts
 // out, SameSite=Lax survives ordinary navigation, and Secure is set whenever the
-// request arrived over TLS.
+// Reader's connection is HTTPS, whether it ends here or at a reverse proxy that
+// says so in X-Forwarded-Proto. Trusting that header is safe even when forged:
+// it can only make the forger's own cookie stricter.
 func setSessionCookie(w http.ResponseWriter, r *http.Request, value string, maxAge int) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     SessionCookie,
@@ -83,7 +85,7 @@ func setSessionCookie(w http.ResponseWriter, r *http.Request, value string, maxA
 		Path:     "/",
 		MaxAge:   maxAge,
 		HttpOnly: true,
-		Secure:   r.TLS != nil,
+		Secure:   r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https",
 		SameSite: http.SameSiteLaxMode,
 	})
 }
@@ -144,7 +146,13 @@ func bearerToken(r *http.Request) (string, bool) {
 }
 
 // clientKey identifies the caller for rate-limiting purposes. Proxy headers are
-// not trusted: they are forgeable, and this app is one process on one host.
+// not trusted: they are forgeable, and trusting them would give a brute-forcer a
+// fresh allowance for every address it claims. Behind a reverse proxy, then,
+// every caller shares the proxy's address and anyone's failed logins block the
+// Reader's too. That is accepted for a one-Reader Instance: guessing stays capped
+// for everyone combined, and a block stops only new logins, never a live session
+// or a device token. Trusting the forwarded address from a configured proxy is
+// the way out if lockouts become a real problem.
 func clientKey(r *http.Request) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {

@@ -47,7 +47,7 @@ yogurt.example.com {
 }
 ```
 
-Traefik, nginx or any other proxy installed on the same machine works too: point it at `localhost:8080`.
+Traefik, nginx or any other proxy installed on the same machine works too: point it at `localhost:8080`. Have it send the `X-Forwarded-Proto` header as well, so Yogurt knows the connection is HTTPS and your browser only ever sends your login cookie over HTTPS. Caddy and Traefik send it by themselves; in nginx, add `proxy_set_header X-Forwarded-Proto $scheme;`.
 
 ### Update
 
