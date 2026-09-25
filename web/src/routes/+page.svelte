@@ -1,8 +1,7 @@
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
-  import AddFeedDialog from "$lib/AddFeedDialog.svelte";
+  import FeedDialog from "$lib/FeedDialog.svelte";
   import * as Sidebar from "$lib/components/ui/sidebar";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
   import * as Select from "$lib/components/ui/select";
@@ -40,7 +39,6 @@
     refreshFeeds,
     setEntryState,
     setSettings,
-    updateFeed,
   } from "$lib/api";
   import type {
     Entry,
@@ -185,15 +183,7 @@
   // the control the reader actually pressed reports that it is working.
   let refreshing = $state(false);
 
-  let editingFeed = $state<number | undefined>(undefined);
-  let feedTitleDraft = $state("");
-  // Renaming is reached from a Feed's own context menu, so the field it opens
-  // takes focus and selects the current name: the menu closed over it, and
-  // nothing else would put a cursor there.
-  let feedTitleInput = $state<HTMLInputElement | null>(null);
-  $effect(() => {
-    feedTitleInput?.select();
-  });
+  let editingFeed = $state<Feed | undefined>(undefined);
   /** Removal is the one act this app cannot undo, so it is asked in the app's
    * own dialog rather than the browser's, and the consequence is named. */
   type Removal = {
@@ -424,6 +414,17 @@
       collection = { type: "feed", id: feed.id };
       await reload();
       notice = `Added Feed ${feed.title}.`;
+    } catch (cause) {
+      reportError(cause);
+    }
+  }
+
+  async function handleFeedSaved(feed: Feed) {
+    editingFeed = undefined;
+    try {
+      await refreshCounts();
+      await reload();
+      notice = `Saved Feed ${feed.title}.`;
     } catch (cause) {
       reportError(cause);
     }
@@ -804,26 +805,6 @@
     void savePreferences({ ...previous, reading_font: font }, previous);
   }
 
-  function startEditFeed(feed: Feed) {
-    editingFeed = feed.id;
-    feedTitleDraft = feed.title;
-  }
-
-  async function saveFeedTitle(id: number) {
-    const title = feedTitleDraft.trim();
-    editingFeed = undefined;
-    const current = feeds.find((f) => f.id === id);
-    if (!title || current?.title === title) {
-      return;
-    }
-    try {
-      const updated = await updateFeed(id, { title });
-      feeds = feeds.map((f) => (f.id === id ? updated : f));
-    } catch (cause) {
-      reportError(cause);
-    }
-  }
-
   function removeFeed(feed: Feed) {
     removal = {
       title: `Delete "${feed.title}"?`,
@@ -866,6 +847,8 @@
       deviceTokensOpen = false;
     } else if (addFeedOpen) {
       addFeedOpen = false;
+    } else if (editingFeed) {
+      editingFeed = undefined;
     } else if (removal) {
       removal = undefined;
     } else {
@@ -913,6 +896,7 @@
           searchOpen ||
           deviceTokensOpen ||
           addFeedOpen ||
+          editingFeed ||
           removal ||
           readerMenuOpen) &&
         binding.action !== "close"
@@ -1016,28 +1000,14 @@
           <Sidebar.Menu>
             {#each sortedFeeds as feed (feed.id)}
               <Sidebar.MenuItem>
-                {#if editingFeed === feed.id}
-                  <Input
-                    bind:ref={feedTitleInput}
-                    class="h-8 text-sm"
-                    aria-label={`Rename the Feed ${feed.title}`}
-                    bind:value={feedTitleDraft}
-                    onblur={() => saveFeedTitle(feed.id)}
-                    onkeydown={(event) => {
-                      if (event.key === "Enter") saveFeedTitle(feed.id);
-                      if (event.key === "Escape") editingFeed = undefined;
-                    }}
-                  />
-                {:else}
-                  <FeedRow
-                    {feed}
-                    isActive={collection.type === "feed" &&
-                      collection.id === feed.id}
-                    onSelect={() => selectCollection({ type: "feed", id: feed.id })}
-                    onRename={() => startEditFeed(feed)}
-                    onDelete={() => removeFeed(feed)}
-                  />
-                {/if}
+                <FeedRow
+                  {feed}
+                  isActive={collection.type === "feed" &&
+                    collection.id === feed.id}
+                  onSelect={() => selectCollection({ type: "feed", id: feed.id })}
+                  onEdit={() => (editingFeed = feed)}
+                  onDelete={() => removeFeed(feed)}
+                />
               </Sidebar.MenuItem>
             {/each}
           </Sidebar.Menu>
@@ -1429,9 +1399,17 @@
 {/if}
 
 {#if addFeedOpen}
-  <AddFeedDialog
+  <FeedDialog
     onClose={() => (addFeedOpen = false)}
-    onFeedAdded={handleFeedAdded}
+    onSaved={handleFeedAdded}
+  />
+{/if}
+
+{#if editingFeed}
+  <FeedDialog
+    feed={editingFeed}
+    onClose={() => (editingFeed = undefined)}
+    onSaved={handleFeedSaved}
   />
 {/if}
 

@@ -212,30 +212,36 @@ func (s *Store) Feeds(ctx context.Context) ([]Feed, error) {
 	return feeds, rows.Err()
 }
 
-// FeedPatch declares the fields of a Feed the reader wants to change; a nil
-// field is left as stored.
+// FeedPatch declares the fields of a Feed to change; a nil field is left as
+// stored. URL and SiteURL change together when the reader moves a Feed.
 type FeedPatch struct {
-	Title *string
+	Title   *string
+	URL     *string
+	SiteURL *string
 }
 
 // UpdateFeed applies a FeedPatch to a Feed and returns it as stored. It
-// returns ErrNoFeed when there is no such Feed.
+// returns ErrNoFeed when there is no such Feed, and ErrFeedExists when the
+// patch's URL belongs to another Feed.
 func (s *Store) UpdateFeed(ctx context.Context, id int64, patch FeedPatch, now time.Time) (Feed, error) {
-	if patch.Title != nil {
-		result, err := s.db.ExecContext(ctx,
-			`UPDATE feeds SET title = ?, updated_at = ? WHERE id = ?`, *patch.Title, now.Unix(), id)
-		if err != nil {
-			return Feed{}, fmt.Errorf("update feed %d: %w", id, err)
-		}
-		affected, err := result.RowsAffected()
-		if err != nil {
-			return Feed{}, fmt.Errorf("update feed %d: %w", id, err)
-		}
-		if affected == 0 {
-			return Feed{}, ErrNoFeed
-		}
+	// OR IGNORE skips the row on a url conflict instead of failing, so no
+	// row changed means either no such Feed or a URL another Feed holds.
+	result, err := s.db.ExecContext(ctx,
+		`UPDATE OR IGNORE feeds SET title = COALESCE(?, title), url = COALESCE(?, url),
+		site_url = COALESCE(?, site_url), updated_at = ? WHERE id = ?`,
+		patch.Title, patch.URL, patch.SiteURL, now.Unix(), id)
+	if err != nil {
+		return Feed{}, fmt.Errorf("update feed %d: %w", id, err)
 	}
-	return s.Feed(ctx, id)
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return Feed{}, fmt.Errorf("update feed %d: %w", id, err)
+	}
+	feed, err := s.Feed(ctx, id)
+	if err == nil && affected == 0 {
+		return Feed{}, ErrFeedExists
+	}
+	return feed, err
 }
 
 // DeleteFeed removes a Feed and every Entry it carried, in one transaction. It

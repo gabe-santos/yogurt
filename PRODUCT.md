@@ -48,7 +48,7 @@ Vocabulary is fixed and load-bearing. `CONTEXT.md` is the authority: Instance, D
 
 Confirmed behaviour, in the reader's terms:
 
-- Feeds are discovered from a site address or added by Feed URL, validated before saving, renameable, deletable, and importable/exportable as OPML.
+- Feeds are discovered from a site address or added by Feed URL, validated before saving, editable (name and address, keeping their Entries when the address changes), deletable, and importable/exportable as OPML.
 - Polling is scheduled, conditional, and politely backed off per publisher hints; a Feed's last check, last success and last error are visible so that silence is distinguishable from breakage.
 - The Entry List is newest-first, filterable to All / Unread / Starred, scopeable to a Feed or Group, with per-Feed and per-Group unread counts and cursor pagination.
 - Three states only: Read, Starred, Archived. Starring *is* keeping — there is no separate read-later, and Starred Entries plus their extracted Articles are exempt from cleanup. Archiving implies Read and removes the Entry from every view except the archive.

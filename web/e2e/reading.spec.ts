@@ -380,9 +380,7 @@ test('archiving toggles from the Reading Pane, the context menu, and the keyboar
     });
   });
   await page.getByTestId('entry-archive').click();
-  await expect(page.getByTestId('notice')).toContainText(
-    'Unarchive rejected',
-  );
+  await expect(page.getByTestId('notice')).toContainText('Unarchive rejected');
   await expect(page.getByTestId('entry-archive')).toHaveAccessibleName(
     'Unarchive',
   );
@@ -413,7 +411,9 @@ test('archiving toggles from the Reading Pane, the context menu, and the keyboar
     entryMenu.getByRole('menuitem', { name: 'Archive', exact: true }),
   ).toBeVisible();
   saved = stateResponse();
-  await entryMenu.getByRole('menuitem', { name: 'Archive', exact: true }).click();
+  await entryMenu
+    .getByRole('menuitem', { name: 'Archive', exact: true })
+    .click();
   await saved;
   await expect(entries.nth(1)).toContainText('Archived');
   await entries.nth(1).click({ button: 'right' });
@@ -421,7 +421,9 @@ test('archiving toggles from the Reading Pane, the context menu, and the keyboar
     entryMenu.getByRole('menuitem', { name: 'Unarchive', exact: true }),
   ).toBeVisible();
   saved = stateResponse();
-  await entryMenu.getByRole('menuitem', { name: 'Unarchive', exact: true }).click();
+  await entryMenu
+    .getByRole('menuitem', { name: 'Unarchive', exact: true })
+    .click();
   await saved;
   await expect(entries.nth(1)).not.toContainText('Archived');
 
@@ -479,29 +481,26 @@ test('archiving toggles from the Reading Pane, the context menu, and the keyboar
   await page.getByTestId('collection-all').click();
   await expect(entries).toHaveCount(2);
 
-  // Inert while the reader is typing in an input — not a modal, which
-  // already blocks every binding, but the isTypingTarget guard itself.
+  // Inert while the reader is typing in a dialog's field.
   await entries.first().click();
   await expect(pane).toBeVisible();
   await expect(page.getByTestId('entry-archive')).toHaveAccessibleName(
     'Archive',
   );
   const feed = page.getByTestId('feed');
-  const feedMenu = page.getByTestId('feed-context-menu');
+  const dialog = page.getByTestId('edit-feed-dialog');
   await feed.click({ button: 'right' });
-  await feedMenu.getByRole('menuitem', { name: 'Rename' }).click();
-  const renameInput = page.getByLabel('Rename the Feed The Daily Cave');
-  await expect(renameInput).toBeFocused();
+  await page
+    .getByTestId('feed-context-menu')
+    .getByRole('menuitem', { name: 'Edit' })
+    .click();
+  const name = dialog.getByLabel('Name');
+  await name.clear();
   await page.keyboard.type('e');
-  await expect(renameInput).toHaveValue('e');
-  // Leaving edit mode saves the draft rather than discarding it, so the
-  // name is selected and typed back before the input closes — left as it
-  // was found. It matches the original, so saving it is a no-op: only the
-  // edit closing is worth waiting on.
-  await renameInput.selectText();
-  await page.keyboard.type('The Daily Cave');
-  await page.keyboard.press('Enter');
-  await expect(renameInput).toBeHidden();
+  await expect(name).toHaveValue('e');
+  // Escape closes the dialog without saving the draft.
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
   await expect(feed).toHaveText('The Daily Cave');
   await expect(page.getByTestId('entry-archive')).toHaveAccessibleName(
     'Archive',

@@ -72,33 +72,11 @@ func New(db *store.Store, client *fetch.Client, now clock.Clock, logger *slog.Lo
 // title, once trimmed, becomes the Feed's stored title; an empty or
 // all-whitespace title falls back to the publisher's own title.
 func (s *Service) Subscribe(ctx context.Context, rawURL string, title string) (store.Feed, error) {
-	target, err := fetch.ParseURL(strings.TrimSpace(rawURL))
+	document, resp, err := s.resolve(ctx, rawURL)
 	if err != nil {
 		return store.Feed{}, err
 	}
-
-	resp, err := s.get(ctx, target.String())
-	if err != nil {
-		return store.Feed{}, err
-	}
-
-	document, err := feed.Parse(resp.Body, resp.URL)
 	feedURL := resp.URL.String()
-	if err != nil {
-		// Not a Feed: it may still be a page that advertises one.
-		discovered := feed.Discover(resp.Body, resp.URL)
-		if len(discovered) == 0 {
-			return store.Feed{}, ErrNoFeed
-		}
-		feedURL = discovered[0]
-		if resp, err = s.get(ctx, feedURL); err != nil {
-			return store.Feed{}, err
-		}
-		if document, err = feed.Parse(resp.Body, resp.URL); err != nil {
-			return store.Feed{}, ErrNoFeed
-		}
-		feedURL = resp.URL.String()
-	}
 
 	now := s.clock.Now()
 	resolvedTitle := strings.TrimSpace(title)
@@ -126,6 +104,63 @@ func (s *Service) Subscribe(ctx context.Context, rawURL string, title string) (s
 		return store.Feed{}, err
 	}
 	return saved, nil
+}
+
+// Edit applies the reader's changes to a Feed's URL and title; a nil one is
+// left as stored. A URL that resolves anywhere other than where the Feed
+// already is moves it, validated and discovered as Subscribe does: the Feed
+// keeps its Entries, gains what the new URL carries, and starts its fetch
+// state afresh from that read. A title that trims to empty falls back to the
+// publisher's own title, read from the Feed's current URL when it is not
+// moving.
+func (s *Service) Edit(ctx context.Context, id int64, rawURL, title *string) (store.Feed, error) {
+	current, err := s.store.Feed(ctx, id)
+	if err != nil {
+		return store.Feed{}, err
+	}
+	var patch store.FeedPatch
+	if title != nil {
+		trimmed := strings.TrimSpace(*title)
+		patch.Title = &trimmed
+	}
+	address := current.URL
+	if rawURL != nil {
+		address = strings.TrimSpace(*rawURL)
+	}
+	blankTitle := patch.Title != nil && *patch.Title == ""
+	if address == current.URL && !blankTitle {
+		return s.store.UpdateFeed(ctx, id, patch, s.clock.Now())
+	}
+
+	document, resp, err := s.resolve(ctx, address)
+	if err != nil {
+		return store.Feed{}, err
+	}
+	feedURL := resp.URL.String()
+	if blankTitle {
+		publisherTitle := feedTitle(document, feedURL)
+		patch.Title = &publisherTitle
+	}
+	// Only an address the reader changed moves the Feed; a read of its
+	// current URL for the publisher's title never does, even if redirected.
+	moved := address != current.URL && feedURL != current.URL
+	if moved {
+		patch.URL = &feedURL
+		patch.SiteURL = &document.SiteURL
+	}
+
+	now := s.clock.Now()
+	saved, err := s.store.UpdateFeed(ctx, id, patch, now)
+	if err != nil || !moved {
+		return saved, err
+	}
+	if err := s.store.SaveEntries(ctx, id, entriesOf(document, now), now); err != nil {
+		return store.Feed{}, err
+	}
+	// No previous Feed: validators from the old URL mean nothing to the new one.
+	s.recordSuccess(ctx, id, store.Feed{}, resp.Header, now)
+	s.discoverIcon(ctx, id, document.SiteURL, now)
+	return s.store.Feed(ctx, id)
 }
 
 // SubscribeOutcome is what came of one address OPML import asked to
@@ -339,7 +374,7 @@ func (s *Service) recordFailure(ctx context.Context, previous store.Feed, messag
 
 // get fetches a document unconditionally, treating a refusal from the
 // publisher as a failure to fetch rather than as content. It is used only by
-// Subscribe, which holds no validators yet.
+// resolve, which always needs the whole document, never a 304.
 func (s *Service) get(ctx context.Context, rawURL string) (*fetch.Response, error) {
 	resp, err := s.client.Get(ctx, rawURL, fetch.Conditional{})
 	if err != nil {
@@ -349,6 +384,38 @@ func (s *Service) get(ctx context.Context, rawURL string) (*fetch.Response, erro
 		return nil, &FetchError{URL: rawURL, Err: fmt.Errorf("the publisher answered %d", resp.StatusCode)}
 	}
 	return resp, nil
+}
+
+// resolve reads the Feed an address names: the address itself when it is a
+// Feed, or else the first Feed it advertises as a web page. resp.URL is where
+// the Feed was finally read from.
+func (s *Service) resolve(ctx context.Context, rawURL string) (feed.Document, *fetch.Response, error) {
+	target, err := fetch.ParseURL(strings.TrimSpace(rawURL))
+	if err != nil {
+		return feed.Document{}, nil, err
+	}
+
+	resp, err := s.get(ctx, target.String())
+	if err != nil {
+		return feed.Document{}, nil, err
+	}
+	document, err := feed.Parse(resp.Body, resp.URL)
+	if err == nil {
+		return document, resp, nil
+	}
+
+	// Not a Feed: it may still be a page that advertises one.
+	discovered := feed.Discover(resp.Body, resp.URL)
+	if len(discovered) == 0 {
+		return feed.Document{}, nil, ErrNoFeed
+	}
+	if resp, err = s.get(ctx, discovered[0]); err != nil {
+		return feed.Document{}, nil, err
+	}
+	if document, err = feed.Parse(resp.Body, resp.URL); err != nil {
+		return feed.Document{}, nil, ErrNoFeed
+	}
+	return document, resp, nil
 }
 
 // feedTitle is the publisher's own name for the Feed, falling back to its

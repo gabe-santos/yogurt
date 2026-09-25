@@ -31,7 +31,7 @@ _Avoid_: Web client, site, frontend
 ### Sources
 
 **Feed**:
-The document at a URL that a publisher updates with new items, in RSS, Atom, or JSON Feed form, together with the reader's own name for it. There is exactly one Feed per URL.
+The document at a URL that a publisher updates with new items, in RSS, Atom, or JSON Feed form, together with the reader's own name for it. There is exactly one Feed per URL. The reader can change a Feed's URL, as when the publisher moves it, and it stays the same Feed with the same Entries.
 _Avoid_: Channel, source, stream, subscription
 
 **Feed Icon**:

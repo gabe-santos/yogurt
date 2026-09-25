@@ -466,6 +466,108 @@ func TestAFeedCanBeRenamed(t *testing.T) {
 	}
 }
 
+// editFeed PUTs changes to a Feed and returns the response for the caller to
+// check.
+func editFeed(h *apitest.Harness, id int64, changes map[string]any) *apitest.Response {
+	return h.Do(http.MethodPut, feedPath(id, ""), changes)
+}
+
+func TestMovingAFeedToANewURLKeepsItsEntriesAndReadsTheNewOne(t *testing.T) {
+	h := loggedIn(t)
+	old := apitest.RSS("The Publisher", "", apitest.Item{ID: "one", Title: "First post", Published: published})
+	old.Headers = map[string]string{"ETag": `"old"`}
+	feed := subscribe(t, h, h.Publisher.Serve("/old.xml", old))
+	first := listEntries(t, h, feedQuery(feed)).Entries[0]
+	setEntryState(t, h, first.ID, entryState{Starred: true}).ExpectStatus(http.StatusOK)
+
+	// The old address stops answering, so the Feed carries a failure.
+	h.Publisher.Serve("/old.xml", apitest.Document{Status: http.StatusInternalServerError})
+	h.Do(http.MethodPost, feedPath(feed.ID, "/refresh"), nil).ExpectStatus(http.StatusBadGateway)
+
+	newURL := h.Publisher.Serve("/new.xml", apitest.RSS("The Publisher", "",
+		apitest.Item{ID: "one", Title: "First post", Published: published},
+		apitest.Item{ID: "two", Title: "Second post", Published: published.Add(time.Hour)}))
+	// The reader gives the publisher's page, which advertises the new Feed.
+	page := h.Publisher.Serve("/moved", apitest.Page("The Publisher", "/new.xml"))
+
+	var body struct {
+		Feed feedView `json:"feed"`
+	}
+	editFeed(h, feed.ID, map[string]any{"url": page, "title": feed.Title}).
+		ExpectStatus(http.StatusOK).
+		JSON(&body)
+	if body.Feed.ID != feed.ID || body.Feed.URL != newURL {
+		t.Fatalf("moved feed = (id %d, url %q), want (id %d, url %q)", body.Feed.ID, body.Feed.URL, feed.ID, newURL)
+	}
+
+	entries := listEntries(t, h, feedQuery(feed)).Entries
+	if got := entryTitles(entries); !equalStrings(got, []string{"Second post", "First post"}) {
+		t.Errorf("entries after the move = %v, want the new item beside the kept one", got)
+	}
+	if !entries[1].Starred {
+		t.Error("the kept Entry lost its Starred state in the move")
+	}
+	if status := feedStatus(t, h, feed.ID); status.LastError != "" || status.ConsecutiveFailures != 0 {
+		t.Errorf("fetch state after the move = (%q, %d failures), want the old URL's failure cleared",
+			status.LastError, status.ConsecutiveFailures)
+	}
+
+	h.Do(http.MethodPost, feedPath(feed.ID, "/refresh"), nil).ExpectStatus(http.StatusNoContent)
+	if got := h.Publisher.LastRequest("/new.xml").Get("If-None-Match"); got != "" {
+		t.Errorf("new URL was sent the old URL's validator %q", got)
+	}
+}
+
+func TestMovingAFeedOntoAnotherFeedsURLIsRefused(t *testing.T) {
+	h := loggedIn(t)
+	mine := subscribe(t, h, h.Publisher.Serve("/mine.xml", apitest.RSS("Mine", h.Publisher.URL("/mine"),
+		apitest.Item{ID: "one", Title: "First post", Published: published})))
+	otherURL := h.Publisher.Serve("/other.xml", apitest.RSS("Other", "",
+		apitest.Item{ID: "two", Title: "Other post", Published: published}))
+	subscribe(t, h, otherURL)
+
+	resp := editFeed(h, mine.ID, map[string]any{"url": otherURL}).ExpectStatus(http.StatusConflict)
+	expectErrorMentions(t, resp, "already")
+
+	// A page that resolves to the Feed's own URL is no move, so no conflict.
+	page := h.Publisher.Serve("/mine", apitest.Page("Mine", "/mine.xml"))
+	editFeed(h, mine.ID, map[string]any{"url": page, "title": "Renamed"}).ExpectStatus(http.StatusOK)
+
+	for _, feed := range listFeeds(t, h) {
+		if feed.ID == mine.ID && (feed.URL != mine.URL || feed.Title != "Renamed") {
+			t.Errorf("feed = (%q, %q), want its own URL kept and the new title", feed.URL, feed.Title)
+		}
+	}
+}
+
+func TestEditingAFeedsTitle(t *testing.T) {
+	h := loggedIn(t)
+	feedURL := h.Publisher.Serve("/feed.xml", apitest.RSS("The Publisher", "",
+		apitest.Item{ID: "one", Title: "First post", Published: published}))
+	feed := subscribe(t, h, feedURL)
+	var body struct {
+		Feed feedView `json:"feed"`
+	}
+
+	// A blank title reads the publisher's own title afresh.
+	editFeed(h, feed.ID, map[string]any{"title": "Mine"}).ExpectStatus(http.StatusOK)
+	editFeed(h, feed.ID, map[string]any{"url": feedURL, "title": "   "}).
+		ExpectStatus(http.StatusOK).
+		JSON(&body)
+	if body.Feed.Title != "The Publisher" {
+		t.Errorf("title after blanking = %q, want the publisher's own title", body.Feed.Title)
+	}
+
+	// A plain rename never reads the publisher, so works while it is down.
+	h.Publisher.Serve("/feed.xml", apitest.Document{Status: http.StatusInternalServerError})
+	editFeed(h, feed.ID, map[string]any{"url": feedURL, "title": "  Mine  "}).
+		ExpectStatus(http.StatusOK).
+		JSON(&body)
+	if body.Feed.Title != "Mine" {
+		t.Errorf("title after rename = %q, want the new title, trimmed", body.Feed.Title)
+	}
+}
+
 func TestDeletingAFeedRemovesItsEntries(t *testing.T) {
 	h := loggedIn(t)
 	feedURL := h.Publisher.Serve("/feed.xml", apitest.RSS("The Publisher", "",

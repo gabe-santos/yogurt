@@ -79,7 +79,19 @@ func (h *Handler) createFeed(w http.ResponseWriter, r *http.Request) {
 	}
 
 	feed, err := h.deps.Pull.Subscribe(r.Context(), body.URL, strings.TrimSpace(body.Title))
+	if err != nil {
+		h.writeFeedError(w, r, err)
+		return
+	}
+	h.writeJSON(w, r, http.StatusCreated, map[string]any{"feed": viewFeed(feed, nil)})
+}
+
+// writeFeedError answers a failed subscribe or edit, telling the reader what
+// about the address they gave went wrong.
+func (h *Handler) writeFeedError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
+	case errors.Is(err, store.ErrNoFeed):
+		h.writeError(w, r, http.StatusNotFound, "no such Feed")
 	case errors.Is(err, pull.ErrInvalidURL):
 		h.writeError(w, r, http.StatusBadRequest, "that url is not a web address")
 	case errors.Is(err, store.ErrFeedExists):
@@ -89,10 +101,8 @@ func (h *Handler) createFeed(w http.ResponseWriter, r *http.Request) {
 			"that address is not a Feed, and carries no link to one")
 	case isFetchFailure(err):
 		h.writeError(w, r, http.StatusBadGateway, err.Error())
-	case err != nil:
-		h.serverError(w, r, err)
 	default:
-		h.writeJSON(w, r, http.StatusCreated, map[string]any{"feed": viewFeed(feed, nil)})
+		h.serverError(w, r, err)
 	}
 }
 
@@ -155,11 +165,12 @@ func (h *Handler) refreshFeed(w http.ResponseWriter, r *http.Request) {
 // updateFeedRequest declares the fields of a Feed the reader wants to
 // change; an absent field is left as stored.
 type updateFeedRequest struct {
+	URL   *string `json:"url"`
 	Title *string `json:"title"`
 }
 
-// updateFeed changes a Feed's title. Only fields present in the request are
-// changed.
+// updateFeed changes a Feed's URL, title, or both, per pull.Service.Edit.
+// Only fields present in the request are changed.
 func (h *Handler) updateFeed(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
@@ -169,23 +180,17 @@ func (h *Handler) updateFeed(w http.ResponseWriter, r *http.Request) {
 
 	var body updateFeedRequest
 	if err := json.NewDecoder(io.LimitReader(r.Body, maxFeedBody)).Decode(&body); err != nil {
-		h.writeError(w, r, http.StatusBadRequest, "expected a JSON object with a title")
+		h.writeError(w, r, http.StatusBadRequest, "expected a JSON object with a url or a title")
 		return
 	}
-	if body.Title == nil {
-		h.writeError(w, r, http.StatusBadRequest, "expected a title")
+	if body.URL == nil && body.Title == nil {
+		h.writeError(w, r, http.StatusBadRequest, "expected a url or a title")
 		return
 	}
 
-	feed, err := h.deps.Store.UpdateFeed(r.Context(), id, store.FeedPatch{
-		Title: body.Title,
-	}, h.deps.Clock.Now())
-	switch {
-	case errors.Is(err, store.ErrNoFeed):
-		h.writeError(w, r, http.StatusNotFound, "no such Feed")
-		return
-	case err != nil:
-		h.serverError(w, r, err)
+	feed, err := h.deps.Pull.Edit(r.Context(), id, body.URL, body.Title)
+	if err != nil {
+		h.writeFeedError(w, r, err)
 		return
 	}
 

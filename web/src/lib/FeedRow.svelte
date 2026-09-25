@@ -17,11 +17,11 @@
     feed: Feed;
     isActive: boolean;
     onSelect: () => void;
-    onRename: () => void;
+    onEdit: () => void;
     onDelete: () => void;
   }
 
-  const { feed, isActive, onSelect, onRename, onDelete }: Props = $props();
+  const { feed, isActive, onSelect, onEdit, onDelete }: Props = $props();
 
   // The clamped preview stays two lines so a stack-trace-shaped reason can't
   // blow up the menu; this dialog is the keyboard- and touch-reachable path
@@ -62,9 +62,9 @@
   {/if}
   <M.Separator />
   <M.Group>
-    <M.Item onclick={onRename}>
+    <M.Item onclick={onEdit}>
       <PencilIcon strokeWidth={1.5} />
-      Rename
+      Edit
     </M.Item>
   </M.Group>
   <M.Separator />

@@ -127,29 +127,39 @@ test('the reader manages a Feed from its right-click menu', async ({
 
   const feed = page.getByTestId('feed');
   const feedMenu = page.getByTestId('feed-context-menu');
-  const feedPutSaved = (response) =>
-    /\/api\/feeds\/\d+$/.test(response.url()) &&
-    response.request().method() === 'PUT';
+  const dialog = page.getByTestId('edit-feed-dialog');
+  const save = dialog.getByRole('button', { name: 'Save' });
   await expect(feed).toHaveText('The Daily Cave');
 
   // Every act the Collection List offers is on the Feed's own menu.
   await feed.click({ button: 'right' });
-  await expect(
-    feedMenu.getByRole('menuitem', { name: 'Rename' }),
-  ).toBeVisible();
+  await expect(feedMenu.getByRole('menuitem', { name: 'Edit' })).toBeVisible();
   await expect(
     feedMenu.getByRole('menuitem', { name: 'Delete Feed' }),
   ).toBeVisible();
 
-  // Renaming opens the field with the current name selected, so the new one is
-  // typed straight over it without the reader reaching for the mouse again.
-  await feedMenu.getByRole('menuitem', { name: 'Rename' }).click();
-  await expect(page.getByLabel('Rename the Feed The Daily Cave')).toBeFocused();
-  let saved = page.waitForResponse(feedPutSaved);
-  await page.keyboard.type('Cave Chronicle');
-  await page.keyboard.press('Enter');
-  await saved;
+  // Editing opens the Feed's current address and name, ready to change.
+  await feedMenu.getByRole('menuitem', { name: 'Edit' }).click();
+  const address = dialog.getByLabel('Feed or site address');
+  const name = dialog.getByLabel('Name');
+  await expect(address).toBeFocused();
+  await expect(address).toHaveValue(`${publisherURL}/feed.xml`);
+  await expect(name).toHaveValue('The Daily Cave');
+
+  // An address that cannot be read is refused beside the field, and the
+  // dialog stays open so it can be corrected.
+  await address.fill(`${publisherURL}/missing.xml`);
+  await save.click();
+  await expect(dialog.getByRole('alert')).toContainText('could not fetch');
+
+  await address.fill(`${publisherURL}/feed.xml`);
+  await name.fill('Cave Chronicle');
+  await save.click();
+  await expect(dialog).toBeHidden();
   await expect(feed).toHaveText('Cave Chronicle');
+  await expect(page.getByTestId('notice')).toHaveText(
+    'Saved Feed Cave Chronicle.',
+  );
 
   // Deleting the Feed is asked first, and cancelling keeps it.
   await feed.click({ button: 'right' });
@@ -163,13 +173,12 @@ test('the reader manages a Feed from its right-click menu', async ({
   await page.getByRole('button', { name: 'Cancel' }).click();
   await expect(feed).toHaveCount(1);
 
-  // Left as it was found, name included.
+  // Left as it was found: a cleared name falls back to the publisher's own.
   await feed.click({ button: 'right' });
-  await feedMenu.getByRole('menuitem', { name: 'Rename' }).click();
-  saved = page.waitForResponse(feedPutSaved);
-  await page.keyboard.type('The Daily Cave');
-  await page.keyboard.press('Enter');
-  await saved;
+  await feedMenu.getByRole('menuitem', { name: 'Edit' }).click();
+  await name.fill('');
+  await save.click();
+  await expect(dialog).toBeHidden();
   await expect(feed).toHaveText('The Daily Cave');
 });
 
@@ -188,9 +197,7 @@ test('the "…" menu button opens the same menu as right-click, reporting Feed h
   // the identical menu right-click already opens.
   await page.getByRole('button', { name: 'The Daily Cave menu' }).click();
   await expect(feedMenu).toBeVisible();
-  await expect(
-    feedMenu.getByRole('menuitem', { name: 'Rename' }),
-  ).toBeVisible();
+  await expect(feedMenu.getByRole('menuitem', { name: 'Edit' })).toBeVisible();
   await expect(
     feedMenu.getByRole('menuitem', { name: 'Delete Feed' }),
   ).toBeVisible();
@@ -237,8 +244,10 @@ test('a failing Feed offers its full error from either menu, by keyboard', async
   ).toBeVisible();
 
   // Reached by keyboard alone, no mouse hover involved — Enter activates
-  // the item once it holds focus, the same way Rename and Delete Feed do.
-  await contextMenu.getByRole('menuitem', { name: 'View full error' }).press('Enter');
+  // the item once it holds focus, the same way Edit and Delete Feed do.
+  await contextMenu
+    .getByRole('menuitem', { name: 'View full error' })
+    .press('Enter');
   await expect(errorDialog).toBeVisible();
   await expect(errorDialog).toContainText(
     'context deadline exceeded while reading the response body',

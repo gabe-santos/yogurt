@@ -212,12 +212,14 @@ export async function addFeed(url: string, title?: string): Promise<Feed> {
 }
 
 /**
- * updateFeed changes a Feed's title. Only the fields given are changed, and
- * returns the Feed as stored.
+ * updateFeed changes a Feed's address, title, or both, and returns the Feed as
+ * stored. Only the fields given are changed. An address that resolves anywhere
+ * new moves the Feed there, keeping its Entries; a blank title falls back to
+ * the publisher's own title.
  */
 export async function updateFeed(
   id: number,
-  changes: { title?: string },
+  changes: { url?: string; title?: string },
 ): Promise<Feed> {
   const response = await send(
     'PUT',
