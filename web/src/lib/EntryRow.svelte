@@ -72,7 +72,12 @@
   });
 </script>
 
-<li>
+<!-- The separator below a row and the one above it are the border of this
+     `li` and of the one before it; both clear while the row is highlighted,
+     or they would poke out past its rounded corners. -->
+<li
+  class="transition-colors hover:border-transparent has-focus-visible:border-transparent has-aria-[current=true]:border-transparent [&:has(+li:hover)]:border-transparent [&:has(+li_:focus-visible)]:border-transparent [&:has(+li_[aria-current=true])]:border-transparent"
+>
   <ContextMenu.Root>
     <ContextMenu.Trigger>
       {#snippet child({ props })}
@@ -89,17 +94,17 @@
           data-testid="entry"
           aria-current={isCurrent}
           tabindex={tabbable ? 0 : -1}
-          class="flex w-full flex-col gap-1 px-3 py-3 text-left transition-colors hover:bg-accent/50 focus-visible:bg-accent/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring active:bg-accent active:duration-0 aria-[current=true]:bg-accent"
+          class="flex w-full flex-col gap-1 rounded-xl py-3.5 ps-5.5 pe-3.5 text-left transition-colors hover:bg-accent/50 focus-visible:bg-accent/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring active:bg-accent active:duration-0 aria-[current=true]:bg-accent"
           onclick={onClick}
         >
-          <span class="flex w-full min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
-            {#if entry.read}
-              <span class="size-1.5 shrink-0" aria-hidden="true"></span>
-            {:else}
-              <!-- The dot is colour-only, so an sr-only label carries the state
-              for assistive tech instead of relying on the fill alone. -->
+          <span class="relative flex w-full min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+            {#if !entry.read}
+              <!-- The dot hangs in the row's leading padding, as Mail's does,
+              so the Feed Icon lines up with the title on every row. It is
+              colour-only, so an sr-only label carries the state for
+              assistive tech instead of relying on the fill alone. -->
               <span
-                class="size-1.5 shrink-0 rounded-full bg-primary"
+                class="absolute top-1/2 -start-3.5 size-1.5 -translate-y-1/2 rounded-full bg-primary"
                 aria-hidden="true"
               ></span>
               <span class="sr-only">unread</span>

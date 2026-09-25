@@ -1262,13 +1262,15 @@
         </div>
       </div>
 
-      <div class="flex-1 overflow-y-auto scrollbar-hover">
+      <!-- scroll-pt-1 matches the list's pt-1, so j/k scrolling a row into
+           view from above keeps the same breathing room the first row has. -->
+      <div class="flex-1 overflow-y-auto scrollbar-hover scroll-pt-1">
         {#if loading}
           <!-- The shape of the list that is coming, so the first rows land in
                place instead of replacing a sentence. -->
-          <ul class="flex flex-col divide-y divide-border" aria-hidden="true">
+          <ul class="flex flex-col divide-y divide-border px-2 pt-1" aria-hidden="true">
             {#each [0, 1, 2, 3, 4, 5] as placeholder (placeholder)}
-              <li class="flex flex-col gap-2 px-3 py-3">
+              <li class="flex flex-col gap-2 py-3.5 ps-5.5 pe-3.5">
                 <Skeleton class="h-3 w-32 rounded-md" />
                 <Skeleton class="h-4 w-full rounded-md" />
                 <Skeleton class="h-3 w-3/4 rounded-md" />
@@ -1308,7 +1310,7 @@
             {/if}
           </div>
         {:else}
-          <ul class="flex flex-col divide-y divide-border">
+          <ul class="flex flex-col divide-y divide-border px-2 pt-1">
             {#each entries as entry, index (entry.id)}
               <EntryRow
                 {entry}

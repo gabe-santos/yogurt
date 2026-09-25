@@ -60,7 +60,7 @@ rounded:
   4xl: "18.72px"
 spacing:
   chrome: "12px"
-  row: "12px"
+  row: "14px"
   reading-column: "24px"
   control-height: "32px"
   header-height: "48px"
@@ -164,7 +164,7 @@ Three fixed structural regions at desktop width (`lg:` and up, 1024px Tailwind b
 
 The page itself does not scroll (`h-svh`, `overflow-hidden` on the shell); each pane owns its own internal scroll region, so the chrome around it — header bars, filter tabs — stays fixed while content moves underneath.
 
-**Spacing rhythm:** chrome padding (headers, list gutters) sits at 12px (`p-3`/`px-3`); Entry rows use 12px vertical rhythm (`py-3`) separated by 1px hairline dividers (`divide-y divide-border`), never a gap plus rounded card. The reading column uses 24px horizontal padding and an 18px body: the measured sans/serif caps are 632px and 650px respectively, each yielding ~74 characters per line in real Article copy. Controls are uniformly 32px tall (`h-8`); header bars are 48px (`h-12`).
+**Spacing rhythm:** chrome padding (headers, list gutters) sits at 12px (`p-3`/`px-3`); Entry rows use 14px vertical rhythm (`py-3.5`) separated by 1px hairline dividers (`divide-y divide-border`), never a gap plus rounded card. The Entry List insets its rows 8px from both edges (`px-2`, the Collection List's own inset), which also gives an overlay scrollbar room to sit in, and 4px from the header (`pt-1`, with matching `scroll-pt-1` so keyboard scrolling keeps it). The reading column uses 24px horizontal padding and an 18px body: the measured sans/serif caps are 632px and 650px respectively, each yielding ~74 characters per line in real Article copy. Controls are uniformly 32px tall (`h-8`); header bars are 48px (`h-12`).
 
 ## Elevation & Depth
 
@@ -179,7 +179,7 @@ Structural chrome is flat: panes, headers, and the sidebar are separated by 1px 
 
 ## Shapes
 
-Soft, uniform rounding scaled from one base token (`--radius: 0.45rem`/7.2px) rather than per-component values: buttons, inputs, and tabs round at ~13px (`--radius-2xl`); dialogs cap at 24px (`min(--radius-4xl, 24px)`); small chips like the Feed Icon monogram round at ~4px (`--radius-sm`). Borders are 1px and hairline-colored throughout; no component uses a heavier or colored border. Nothing in the interface uses a hard, unrounded corner outside the Entry List's own edge-to-edge container.
+Soft, uniform rounding scaled from one base token (`--radius: 0.45rem`/7.2px) rather than per-component values: buttons, inputs, and tabs round at ~13px (`--radius-2xl`); Entry row and Collection List highlights round at ~10px (`--radius-xl`); dialogs cap at 24px (`min(--radius-4xl, 24px)`); small chips like the Feed Icon monogram round at ~4px (`--radius-sm`). Borders are 1px and hairline-colored throughout; no component uses a heavier or colored border. Nothing in the interface uses a hard, unrounded corner outside the panes' own edges.
 
 ## Components
 
@@ -202,7 +202,7 @@ Soft, uniform rounding scaled from one base token (`--radius: 0.45rem`/7.2px) ra
 - **Active state:** background fill, not a colored indicator bar or icon-color change — consistent with the No-Hue Rule.
 
 ### Entry Row (signature component)
-The list's core unit, and deliberately not a card: no border, no radius, no shadow — just a full-width row separated from its neighbors by a 1px hairline (`divide-y`). A 6px unread dot in Ink is the only differentiator between read and unread besides text weight (unread titles stay full-weight Ink; read titles drop to Ash). Feed Icon (16px, rounded-sm, monogram fallback), Feed name, and timestamp share the 12px Label row; Star/Archive glyphs float right, shown only when set. Title is Title-weight (500) at body size; a two-line-clamped Excerpt below it is Label-sized and Ash-colored, and the row skips that line entirely rather than reserving empty space when an Entry has no Excerpt.
+The list's core unit, and deliberately not a card: no border, no shadow, and no fill at rest — just a row separated from its neighbors by a 1px hairline (`divide-y`) that stops 8px short of each edge of the list. Hover, focus, and the current Entry fill the row as one `rounded-xl` highlight, and the hairlines touching it clear while it shows, so they never poke past its corners. A 6px unread dot in Ink is the only differentiator between read and unread besides text weight (unread titles stay full-weight Ink; read titles drop to Ash); it hangs centred in the row's 22px leading padding, as Apple Mail's does, so the Feed Icon lines up with the title on every row. Feed Icon (16px, rounded-sm, monogram fallback), Feed name, and timestamp share the 12px Label row; Star/Archive glyphs float right, shown only when set. Title is Title-weight (500) at body size; a two-line-clamped Excerpt below it is Label-sized and Ash-colored, and the row skips that line entirely rather than reserving empty space when an Entry has no Excerpt.
 
 ### Reading Pane (signature component)
 Two states of one component, never two implementations: a static third column at desktop width, a full-bleed `inset-0` overlay below it, with the Entry List beneath it marked `inert` so tab order never leaks out of the overlay. A 48px header holds back-navigation (mobile only), a title that only appears once the real headline has scrolled out of view, the three-way view switcher (Feed / Reader / Original), and the Star/Archive/Read/open-in-new-tab controls — all `ghost` icon buttons at `icon-sm`, grouped with a single hairline divider between “view” and “state” controls. Below it, Reader/Feed View use the chosen face's measured reading cap (632px Geist / 650px Literata); Original View is full width and keeps the publisher's own typography.
@@ -221,7 +221,7 @@ Two states of one component, never two implementations: a static third column at
 ### Don't:
 - **Don't** introduce a brand accent hue without an explicit decision to depart from the No-Hue Rule — it is not a placeholder waiting to be filled in.
 - **Don't** put a solid destructive-red fill on a button; the system's one chromatic token stays at reduced opacity everywhere it appears.
-- **Don't** wrap Entry rows in cards, add per-row radius, or add per-row shadow — the list is one continuous hairline-divided column, not a stack of cards.
+- **Don't** wrap Entry rows in cards or add per-row shadow — the list is one continuous hairline-divided column, not a stack of cards. The only rounding is the highlight on a hovered, focused, or current row.
 - **Don't** reach for a second typeface in the interface. Chrome hierarchy comes from Geist Variable's own weight and size steps (400/500/600 at 12/16/30px), not from mixing faces; the Reading Font is the single, reader-chosen exception and never leaves the Reading Pane's own text.
 - **Don't** hard-code a pixel width for the reading column, or share one across faces — see the Measure-Follows-the-Face Rule.
 - **Don't** uppercase or letter-space labels; none of the incumbent UI does, and Excerpt/metadata rows read as plain sentence case throughout.
