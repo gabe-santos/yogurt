@@ -1183,7 +1183,7 @@
                place instead of replacing a sentence. -->
           <ul class="flex flex-col divide-y divide-border px-2 pt-1" aria-hidden="true">
             {#each [0, 1, 2, 3, 4, 5] as placeholder (placeholder)}
-              <li class="flex flex-col gap-2 pt-4 pb-5 ps-6 pe-4">
+              <li class="flex flex-col gap-2 pt-4 pb-6 ps-6 pe-4">
                 <Skeleton class="h-3 w-32 rounded-md" />
                 <Skeleton class="h-4 w-full rounded-md" />
                 <Skeleton class="h-3 w-3/4 rounded-md" />
