@@ -1223,7 +1223,9 @@
             {/if}
           </div>
         {:else}
-          <ul class="flex flex-col divide-y divide-border px-6 pt-1">
+          <!-- Each side is the row's negative margin plus 8px, so the
+               highlight clears the pane edge instead of scrolling it sideways. -->
+          <ul class="flex flex-col divide-y divide-border ps-8.5 pe-7 pt-1">
             {#each entries as entry, index (entry.id)}
               <EntryRow
                 {entry}

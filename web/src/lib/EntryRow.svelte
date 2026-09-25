@@ -76,7 +76,7 @@
      `li` and of the one before it; both clear while the row is highlighted,
      or they would poke out past its rounded corners. -->
 <li
-  class="transition-colors hover:border-transparent has-focus-visible:border-transparent has-aria-[current=true]:border-transparent [&:has(+li:hover)]:border-transparent [&:has(+li_:focus-visible)]:border-transparent [&:has(+li_[aria-current=true])]:border-transparent"
+  class="flex flex-col transition-colors hover:border-transparent has-focus-visible:border-transparent has-aria-[current=true]:border-transparent [&:has(+li:hover)]:border-transparent [&:has(+li_:focus-visible)]:border-transparent [&:has(+li_[aria-current=true])]:border-transparent"
 >
   <ContextMenu.Root>
     <ContextMenu.Trigger>
@@ -94,17 +94,19 @@
           data-testid="entry"
           aria-current={isCurrent}
           tabindex={tabbable ? 0 : -1}
-          class="flex -mx-4 w-[calc(100%+2rem)] px-4 flex-col gap-1 rounded-xl pt-4 pb-5  text-left transition-colors hover:bg-accent/50 focus-visible:bg-accent/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring active:bg-accent active:duration-0 aria-[current=true]:bg-accent"
+          class="flex -ms-6.5 -me-5 ps-6.5 pe-5 flex-col gap-1 rounded-xl pt-4 pb-5  text-left transition-colors hover:bg-accent/50 focus-visible:bg-accent/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring active:bg-accent active:duration-0 aria-[current=true]:bg-accent"
           onclick={onClick}
         >
           <span class="relative flex w-full min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
             {#if !entry.read}
               <!-- The dot hangs in the row's leading padding, as Mail's does,
-              so the Feed Icon lines up with the title on every row. It is
-              colour-only, so an sr-only label carries the state for
-              assistive tech instead of relying on the fill alone. -->
+              so the Feed Icon lines up with the title on every row. It sits
+              centred there: ps-6.5 is the 6px dot with 10px either side, so
+              -start-4 is 10px plus the dot. It is colour-only, so an sr-only
+              label carries the state for assistive tech instead of relying
+              on the fill alone. -->
               <span
-                class="absolute top-1/2 -start-3 size-1.5 -translate-y-1/2 rounded-full bg-primary"
+                class="absolute top-1/2 -start-4 size-1.5 -translate-y-1/2 rounded-full bg-primary"
                 aria-hidden="true"
               ></span>
               <span class="sr-only">unread</span>
