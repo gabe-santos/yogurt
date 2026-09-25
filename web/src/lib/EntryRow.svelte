@@ -94,7 +94,7 @@
           data-testid="entry"
           aria-current={isCurrent}
           tabindex={tabbable ? 0 : -1}
-          class="flex w-full flex-col gap-1 rounded-xl pt-4 pb-5 ps-6 pe-4 text-left transition-colors hover:bg-accent/50 focus-visible:bg-accent/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring active:bg-accent active:duration-0 aria-[current=true]:bg-accent"
+          class="flex -mx-4 w-[calc(100%+2rem)] px-4 flex-col gap-1 rounded-xl pt-4 pb-5  text-left transition-colors hover:bg-accent/50 focus-visible:bg-accent/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring active:bg-accent active:duration-0 aria-[current=true]:bg-accent"
           onclick={onClick}
         >
           <span class="relative flex w-full min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
