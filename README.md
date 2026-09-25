@@ -47,7 +47,7 @@ yogurt.example.com {
 }
 ```
 
-Traefik, nginx or any other proxy works too: point it at `localhost:8080`.
+Traefik, nginx or any other proxy installed on the same machine works too: point it at `localhost:8080`.
 
 ### Update
 
