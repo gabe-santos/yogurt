@@ -1,14 +1,32 @@
 # Yogurt
 
-A self-hosted app for one Reader, which collects the feeds they follow into one place and presents each item either as extracted text or as the original web page.
+An open-source app for one Reader, which collects the feeds they follow into one place and presents each item either as extracted text or as the original web page. It runs either as a Desktop App on the Reader's own computer or as a Server they host.
 
 ## Language
 
 ### People
 
 **Reader**:
-The one person this app serves, who follows the Feeds and owns every Read, Starred, and Archived state.
+The one person an Instance serves, who follows its Feeds and owns every Read, Starred, and Archived state.
 _Avoid_: User, owner, account
+
+### Where Yogurt runs
+
+**Instance**:
+One Yogurt with its own database, serving exactly one Reader. Every Feed, Entry, and state belongs to exactly one Instance.
+_Avoid_: Installation, copy, backend, account
+
+**Desktop App**:
+An Instance installed on the Reader's own computer and run in its own window.
+_Avoid_: Binary, executable, local app, desktop client
+
+**Server**:
+An Instance the Reader installs on a machine they run, such as a VPS, and reaches through a browser.
+_Avoid_: Self-hosted instance, remote, cloud
+
+**Web App**:
+A Server's interface in a browser tab, on a desktop or a phone.
+_Avoid_: Web client, site, frontend
 
 ### Sources
 
