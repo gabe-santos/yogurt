@@ -162,6 +162,11 @@
 	// itself lives in the scrolling body, so once it leaves the pane the bar has
 	// to say what is being read.
 	let titleScrolledAway = $state(false);
+	// Original View is the publisher's page, which already carries its own
+	// headline, so on a wide screen the bar holds the title from the start
+	// instead of the body spending a heading's height on it. On a phone the bar
+	// has no room for a title, so the body keeps it there.
+	const titleInBar = $derived(view === 'original' || titleScrolledAway);
 
 	// Cookies ignore ports. A publisher on Yogurt's own host could therefore
 	// receive the session even when its URL has a different origin; never frame
@@ -465,8 +470,8 @@
 			<p
 				data-testid="reading-pane-title"
 				class="min-w-0 flex-1 truncate px-1 text-sm font-medium transition-opacity duration-150 @max-3xl:hidden"
-				class:opacity-0={!titleScrolledAway}
-				aria-hidden={!titleScrolledAway}
+				class:opacity-0={!titleInBar}
+				aria-hidden={!titleInBar}
 			>
 				{entry.title || entry.url}
 			</p>
@@ -592,7 +597,10 @@
 				? 'flex h-full flex-col gap-5 p-4'
 				: `mx-auto flex ${readingColumn} flex-col gap-5 px-6 py-8`}
 		>
-			<div bind:this={titleAnchor} class="flex flex-col gap-2">
+			<div
+				bind:this={titleAnchor}
+				class="flex flex-col gap-2 {view === 'original' ? '@3xl:hidden' : ''}"
+			>
 				<h2
 					class="text-2xl leading-tight font-semibold break-words text-balance {readingTitle}"
 				>
