@@ -1,0 +1,17 @@
+# Yogurt alone. Put your own reverse proxy in front of it for HTTPS; see
+# "Run a Server" in the README.
+services:
+  yogurt:
+    build: .
+    restart: unless-stopped
+    # Longer than the 10s Yogurt gives open requests to finish on shutdown.
+    stop_grace_period: 15s
+    environment:
+      YOGURT_PASSWORD: ${YOGURT_PASSWORD:?set YOGURT_PASSWORD in .env}
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - data:/data
+
+volumes:
+  data:

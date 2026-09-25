@@ -4,6 +4,7 @@
 
 # Runtime data
 /data/
+/.env
 
 # Frontend
 /web/node_modules/

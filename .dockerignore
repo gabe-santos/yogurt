@@ -1,0 +1,13 @@
+# Send only what the build needs; never the local database or a .env file.
+*
+!go.mod
+!go.sum
+!cmd
+!internal
+!web
+internal/webui/dist/spa
+web/.env*
+web/node_modules
+web/.svelte-kit
+web/test-results
+web/playwright-report
