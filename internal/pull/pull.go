@@ -187,10 +187,11 @@ func (s *Service) PollDue(ctx context.Context) (map[int64]error, error) {
 	return s.refreshMany(ctx, due), nil
 }
 
-// Run polls due Feeds on a schedule until ctx is cancelled. It is the only
-// place a Feed is checked without the reader asking. tick sets how often the
-// schedule wakes to look for a due Feed; a non-positive tick falls back to
-// defaultTick.
+// Run polls due Feeds once right away, then on a schedule until ctx is
+// cancelled, so Feeds that fell due while Yogurt was stopped do not wait for
+// the first tick. It is the only place a Feed is checked without the reader
+// asking. tick sets how often the schedule wakes to look for a due Feed; a
+// non-positive tick falls back to defaultTick.
 func (s *Service) Run(ctx context.Context, tick time.Duration) {
 	if tick <= 0 {
 		tick = defaultTick
@@ -198,13 +199,13 @@ func (s *Service) Run(ctx context.Context, tick time.Duration) {
 	ticker := time.NewTicker(tick)
 	defer ticker.Stop()
 	for {
+		if _, err := s.PollDue(ctx); err != nil {
+			s.logger.ErrorContext(ctx, "poll due feeds", "error", err)
+		}
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			if _, err := s.PollDue(ctx); err != nil {
-				s.logger.ErrorContext(ctx, "poll due feeds", "error", err)
-			}
 		}
 	}
 }

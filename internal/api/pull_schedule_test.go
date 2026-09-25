@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/gabe-santos/yogurt/internal/apitest"
+	"github.com/gabe-santos/yogurt/internal/store"
 )
 
 // feedStatusView is a Feed as the API presents it, including the fetch-state
@@ -161,6 +162,39 @@ func TestTheScheduleChecksEveryDueFeedWithoutManualAction(t *testing.T) {
 
 	waitForHits(t, h.Publisher, "/first.xml", 2, 2*time.Second)
 	waitForHits(t, h.Publisher, "/second.xml", 2, 2*time.Second)
+}
+
+func TestStartupChecksFeedsThatFellDueWhileStoppedWithoutWaitingForTheTick(t *testing.T) {
+	dataDir := t.TempDir()
+	// A tick far longer than the test, so any check can only come from startup.
+	longTick := apitest.PollTick(time.Hour)
+
+	first := apitest.NewInDir(t, dataDir, longTick)
+	first.Login(apitest.Password).ExpectStatus(http.StatusNoContent)
+	due := subscribe(t, first, first.Publisher.Serve("/due.xml", apitest.RSS("Due", "",
+		apitest.Item{ID: "one", Title: "One", Published: published})))
+	subscribe(t, first, first.Publisher.Serve("/later.xml", apitest.RSS("Later", "",
+		apitest.Item{ID: "one", Title: "One", Published: published})))
+
+	// Every boot's clock starts at the same moment, so time passing while
+	// Yogurt was stopped is simulated by moving one Feed's next check into the
+	// past. The other Feed is still not due.
+	now := first.Clock.Now()
+	if err := first.Store.RecordFetchResult(t.Context(), due.ID, store.FetchResult{
+		Success: true, NextCheckAt: now.Add(-time.Minute),
+	}, now); err != nil {
+		t.Fatalf("seed due feed: %v", err)
+	}
+	first.Stop()
+
+	// The Feeds point at the first boot's publisher, which outlives Stop.
+	apitest.NewInDir(t, dataDir, longTick)
+
+	waitForHits(t, first.Publisher, "/due.xml", 2, 2*time.Second)
+	time.Sleep(50 * time.Millisecond)
+	if got := first.Publisher.Hits("/later.xml"); got != 1 {
+		t.Errorf("later Feed hits = %d, want only its subscribe fetch: it is not due yet", got)
+	}
 }
 
 // waitForHits polls the fake publisher until a path has received at least

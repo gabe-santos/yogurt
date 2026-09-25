@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/gabe-santos/yogurt/internal/api"
@@ -41,6 +42,9 @@ type App struct {
 	pull      *pull.Service
 	retention *retention.Service
 	cancel    context.CancelFunc
+	// background tracks the schedules New starts, so Close can wait for a
+	// check in flight before releasing the database under it.
+	background sync.WaitGroup
 }
 
 // New opens the database, applies migrations, and wires the HTTP surface. It
@@ -100,13 +104,13 @@ func New(cfg config.Config, deps Deps) (*App, error) {
 	})
 
 	ctx, cancel := context.WithCancel(context.Background())
-	go pullService.Run(ctx, cfg.PollTick)
-	go retentionService.Run(ctx, cfg.RetentionTick)
-
-	return &App{
+	application := &App{
 		cfg: cfg, logger: deps.Logger, store: db, handler: handler,
 		pull: pullService, retention: retentionService, cancel: cancel,
-	}, nil
+	}
+	application.background.Go(func() { pullService.Run(ctx, cfg.PollTick) })
+	application.background.Go(func() { retentionService.Run(ctx, cfg.RetentionTick) })
+	return application, nil
 }
 
 // Handler is the application's HTTP surface.
@@ -117,9 +121,11 @@ func (a *App) Handler() http.Handler { return a.handler }
 // ever writes state through Subscribe or a scheduled poll.
 func (a *App) Store() *store.Store { return a.store }
 
-// Close stops the background Feed schedule and releases the database.
+// Close stops the background schedules, waits for any check they have in
+// flight, and releases the database.
 func (a *App) Close() error {
 	a.cancel()
+	a.background.Wait()
 	return a.store.Close()
 }
 
