@@ -1,6 +1,6 @@
 # Yogurt
 
-A feed reader for one person. It collects the RSS, Atom and JSON Feeds you follow into one place.
+A modern, minimal feed reader.
 
 Run it as a [Server](#run-a-server) on a machine you control. A Desktop App is coming later.
 
