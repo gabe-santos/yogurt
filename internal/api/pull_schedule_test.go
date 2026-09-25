@@ -197,9 +197,10 @@ func TestStartupChecksFeedsThatFellDueWhileStoppedWithoutWaitingForTheTick(t *te
 	}
 }
 
-// Subscribe creates a Feed already scheduled from its first fetch, so the
-// schedule cannot find it due in the moment before that fetch's result is
-// saved. Only a Feed created with no schedule at all is due at once.
+// CreateFeed stores the next check it is given, so a Feed created with one is
+// not due before then; Subscribe relies on this so the schedule cannot pick up
+// a new Feed while its first fetch's result is still being saved. A Feed
+// created with no next check is due at once.
 func TestACreatedFeedIsDueOnlyFromItsScheduledCheck(t *testing.T) {
 	h := apitest.New(t, apitest.PollTick(time.Hour))
 	now := h.Clock.Now()
