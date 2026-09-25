@@ -67,7 +67,11 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 ### Issue tracker
 
-Issues live in GitHub Issues (via `gh` CLI). See `docs/agents/issue-tracker.md`.
+Issues live in Linear (team `GABE`, project Yogurt) via the Linear MCP server. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default canonical labels (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
 
 ### Domain docs
 
