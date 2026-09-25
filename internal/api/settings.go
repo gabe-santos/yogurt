@@ -21,12 +21,6 @@ const markOnOpenKey = "mark_on_open"
 // in Original View means it for the next Entry too.
 const entryViewKey = "entry_view"
 
-// unreadOnlyKey is the settings row remembering whether the Entry List is
-// narrowed to unread Entries. Unread Only is a modifier over whichever
-// Collection the reader chose rather than a Collection of its own, so it
-// belongs with the reader's other preferences and survives a reload.
-const unreadOnlyKey = "unread_only"
-
 // readingFontKey is the settings row remembering which typeface the Reading
 // Pane sets its own text in. It governs Reader View and Feed View, which are
 // this app's markup; Original View is the publisher's own layout and their
@@ -66,9 +60,6 @@ type settingsView struct {
 	MarkOnOpen bool `json:"mark_on_open"`
 	// EntryView is one of entryViews.
 	EntryView string `json:"entry_view"`
-	// UnreadOnly is off by default: a Collection opens showing everything it
-	// holds until the reader narrows it.
-	UnreadOnly bool `json:"unread_only"`
 	// ReadingFont is one of readingFonts.
 	ReadingFont string `json:"reading_font"`
 }
@@ -91,15 +82,6 @@ func (h *Handler) readSettings(r *http.Request) (settingsView, error) {
 		entryView = feedEntryView
 	}
 
-	rawUnreadOnly, err := h.deps.Store.Setting(r.Context(), unreadOnlyKey, strconv.FormatBool(false))
-	if err != nil {
-		return settingsView{}, err
-	}
-	unreadOnly, err := strconv.ParseBool(rawUnreadOnly)
-	if err != nil {
-		unreadOnly = false
-	}
-
 	readingFont, err := h.deps.Store.Setting(r.Context(), readingFontKey, sansReadingFont)
 	if err != nil {
 		return settingsView{}, err
@@ -111,7 +93,6 @@ func (h *Handler) readSettings(r *http.Request) (settingsView, error) {
 	return settingsView{
 		MarkOnOpen:  markOnOpen,
 		EntryView:   entryView,
-		UnreadOnly:  unreadOnly,
 		ReadingFont: readingFont,
 	}, nil
 }
@@ -131,7 +112,7 @@ func (h *Handler) getSettings(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) setSettings(w http.ResponseWriter, r *http.Request) {
 	var body settingsView
 	if err := json.NewDecoder(io.LimitReader(r.Body, maxSettingsBody)).Decode(&body); err != nil {
-		h.writeError(w, r, http.StatusBadRequest, "expected a JSON object with mark_on_open, entry_view, unread_only and reading_font")
+		h.writeError(w, r, http.StatusBadRequest, "expected a JSON object with mark_on_open, entry_view and reading_font")
 		return
 	}
 	if !slices.Contains(entryViews, body.EntryView) {
@@ -150,10 +131,6 @@ func (h *Handler) setSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.deps.Store.SetSetting(r.Context(), entryViewKey, body.EntryView); err != nil {
-		h.serverError(w, r, err)
-		return
-	}
-	if err := h.deps.Store.SetSetting(r.Context(), unreadOnlyKey, strconv.FormatBool(body.UnreadOnly)); err != nil {
 		h.serverError(w, r, err)
 		return
 	}

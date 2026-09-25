@@ -23,10 +23,10 @@
 	import ArchiveRestoreIcon from '@lucide/svelte/icons/archive-restore';
 	import ArrowLeftIcon from '@lucide/svelte/icons/arrow-left';
 	import BookOpenIcon from '@lucide/svelte/icons/book-open';
+	import CircleCheckIcon from '@lucide/svelte/icons/circle-check';
+	import CircleIcon from '@lucide/svelte/icons/circle';
 	import ExternalLinkIcon from '@lucide/svelte/icons/external-link';
 	import GlobeIcon from '@lucide/svelte/icons/globe';
-	import MailIcon from '@lucide/svelte/icons/mail';
-	import MailOpenIcon from '@lucide/svelte/icons/mail-open';
 	import RssIcon from '@lucide/svelte/icons/rss';
 	import StarIcon from '@lucide/svelte/icons/star';
 
@@ -504,12 +504,12 @@
 				)}
 				{@render control(
 					entry.read ? 'Mark unread' : 'Mark read',
-					MailIcon,
+					CircleCheckIcon,
 					onToggleRead,
 					false,
 					busy || entry.archived,
 					'entry-read',
-					MailOpenIcon,
+					CircleIcon,
 					entry.read
 				)}
 				<Tooltip.Root>

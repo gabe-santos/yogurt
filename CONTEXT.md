@@ -75,16 +75,16 @@ _Avoid_: Web view, browser mode, in-app browser
 ### Layout
 
 **Collection**:
-One thing the Collection List selects, and so what the Entry List is showing: every Feed, one Feed, everything Starred, or the archive. A Collection is a place Entries are found, never a state they are in.
+One thing the Collection List selects, and so what the Entry List is showing: every Feed, everything Unread, everything Starred, the archive, or one Feed. A Collection is where Entries are found, never a state they are in: an Entry is Starred, and is therefore found in Starred.
 _Avoid_: Filter, view, tab, smart folder
 
 **Collection List**:
-The leftmost column, holding every Collection: All Feeds, Starred, the archive, and each Feed by name.
+The leftmost column, holding every Collection: All Feeds, Unread, Starred, the archive, and each Feed by name.
 _Avoid_: Sidebar, nav, feed tree, feed list
 
-**Unread Only**:
-A setting that narrows the Entry List to the Entries in the chosen Collection that are not Read. It is a way of looking at a Collection rather than a Collection of its own, so it applies to whichever one the reader chose, and belongs to the reader rather than to any single Collection.
-_Avoid_: Unread filter, unread view, inbox, unread tab
+**Unread**:
+The Collection of every Entry that is not Read, from every Feed. Archived Entries are Read, so none is ever found here.
+_Avoid_: Unread Only, unread filter, inbox, unread tab
 
 **Entry List**:
 The middle column, holding the Entries of the chosen Collection as they stood when it was last built.
@@ -95,7 +95,7 @@ The rightmost and largest column, holding one Entry in whichever view the reader
 _Avoid_: Content pane, detail pane, preview, drawer
 
 **Reading Font**:
-A setting naming the typeface the Reading Pane sets an Entry's own headline and text in — the sans the rest of the interface uses, or the serif. It reaches the app-owned headline plus Reader View and Feed View prose; it never restyles Original View's embedded Article. Like Unread Only it belongs to the reader rather than to any Entry.
+A setting naming the typeface the Reading Pane sets an Entry's own headline and text in — the sans the rest of the interface uses, or the serif. It reaches the app-owned headline plus Reader View and Feed View prose; it never restyles Original View's embedded Article. It belongs to the reader rather than to any Entry.
 _Avoid_: Font setting, typeface toggle, serif mode, theme
 
 ### State

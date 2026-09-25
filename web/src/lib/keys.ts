@@ -11,7 +11,7 @@ export type Action =
   | 'close'
   | 'toggleRead'
   | 'toggleArchive'
-  | 'toggleUnreadOnly'
+  | 'showUnread'
   | 'help'
   | 'search'
   | 'addFeed'
@@ -31,7 +31,7 @@ export const bindings: Binding[] = [
   { key: 'Escape', description: 'Back to the Entry List', action: 'close' },
   { key: 'm', description: 'Toggle Read / unread', action: 'toggleRead' },
   { key: 'e', description: 'Archive / unarchive', action: 'toggleArchive' },
-  { key: 'u', description: 'Show unread only', action: 'toggleUnreadOnly' },
+  { key: 'u', description: 'Show Unread', action: 'showUnread' },
   { key: '/', description: 'Search', action: 'search' },
   { key: 'a', description: 'Add a Feed', action: 'addFeed' },
   { key: 'R', description: 'Refresh all Feeds (Shift+R)', action: 'refreshAll' },

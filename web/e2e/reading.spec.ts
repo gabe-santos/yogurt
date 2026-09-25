@@ -178,7 +178,7 @@ test('the reader opens an Entry, reads it, and triages by keyboard', async ({
 
   // Manual unread always overrides mark-on-open — including after navigating
   // away and back, which would otherwise re-trigger mark-on-open. Saving it
-  // is held back so Unread Only below is chosen before the server has it: a
+  // is held back so Unread below is chosen before the server has it: a
   // rebuilt list must still reflect what the reader already did.
   await page.route('**/api/entries/*/state', async (route) => {
     const held = Promise.withResolvers<void>();
@@ -197,13 +197,12 @@ test('the reader opens an Entry, reads it, and triages by keyboard', async ({
   await page.keyboard.press('Escape');
   await expect(pane).toBeVisible();
 
-  // Unread Only narrows the list to what mark-on-open left unread, from the
-  // Entry List's own header rather than from a tab that owns the whole list.
-  const unreadOnly = page.getByTestId('unread-only');
-  await unreadOnly.click();
-  await expect(unreadOnly).toHaveAttribute('aria-pressed', 'true');
+  // Unread shows what mark-on-open left unread, as a Collection in the
+  // Collection List rather than a toggle over the Entry List.
+  await page.getByTestId('collection-unread').click();
+  await expect(page.getByTestId('collection')).toHaveText('Unread');
   await expect(page.getByTestId('entry')).toHaveCount(1);
-  // Narrowing rebuilds the list, which empties the Reading Pane.
+  // Choosing a Collection rebuilds the list, which empties the Reading Pane.
   await expect(pane).toBeHidden();
   await expect(page.getByTestId('reading-pane-empty')).toBeVisible();
   await expect(page.getByTestId('entry').first()).toContainText(
@@ -212,10 +211,12 @@ test('the reader opens an Entry, reads it, and triages by keyboard', async ({
   await expect(page.getByTestId('feed-icon').first()).toBeVisible();
   await page.unroute('**/api/entries/*/state');
 
-  // u is the same act from the keyboard.
-  await page.keyboard.press('u');
-  await expect(unreadOnly).toHaveAttribute('aria-pressed', 'false');
+  // u is the same act from the keyboard, from wherever the reader is.
+  await page.getByTestId('collection-all').click();
   await expect(page.getByTestId('entry')).toHaveCount(2);
+  await page.keyboard.press('u');
+  await expect(page.getByTestId('collection')).toHaveText('Unread');
+  await expect(page.getByTestId('entry')).toHaveCount(1);
 
   // The `?` help dialog lists every binding from the one table.
   await page.keyboard.press('?');
@@ -228,10 +229,9 @@ test('the reader opens an Entry, reads it, and triages by keyboard', async ({
 
   // Enter is no longer a binding of its own — selecting an Entry is opening it
   // — so Enter on a focused control is plain native activation.
-  await unreadOnly.focus();
+  await page.getByTestId('collection-all').focus();
   await page.keyboard.press('Enter');
-  await expect(page.getByTestId('entry')).toHaveCount(1);
-  await page.keyboard.press('u');
+  await expect(page.getByTestId('collection')).toHaveText('All Feeds');
   await expect(page.getByTestId('entry')).toHaveCount(2);
 
   // Star is optimistic and gives the Entry a dedicated view.
@@ -284,10 +284,8 @@ test('the reader opens an Entry, reads it, and triages by keyboard', async ({
   await expect(page.getByTestId('entry')).toHaveCount(1);
   await archived;
 
-  // The archive is the one Collection Unread Only is not offered in, because an
-  // Archived Entry is always Read.
+  // The archive holds the Archived Entry, which is always Read.
   await page.getByTestId('collection-archive').click();
-  await expect(page.getByTestId('unread-only')).toBeHidden();
   await expect(page.getByTestId('entry')).toHaveCount(1);
   await expect(page.getByTestId('entry')).toContainText('Archived');
   await expect(page.getByTestId('entry')).not.toContainText('unread');
@@ -299,7 +297,6 @@ test('the reader opens an Entry, reads it, and triages by keyboard', async ({
 
   // Mark-all-read declares the whole Collection Read without shortening it.
   await page.getByTestId('collection-all').click();
-  await expect(page.getByTestId('unread-only')).toBeVisible();
   await expect(page.getByTestId('entry')).toHaveCount(1);
   await page.getByTestId('entry').click();
   await page.getByRole('button', { name: 'Mark unread', exact: true }).click();

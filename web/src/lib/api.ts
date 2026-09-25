@@ -117,9 +117,6 @@ export interface Settings {
   mark_on_open: boolean;
   /** entry_view is the view an Entry opens in, remembered across Entries. */
   entry_view: EntryView;
-  /** unread_only narrows the Entry List to unread Entries, whichever
-   * Collection the reader chose. Off by default. */
-  unread_only: boolean;
   /** reading_font is the typeface the Reading Pane reads in. Sans by default:
    * the same face as the rest of the interface. */
   reading_font: ReadingFont;

@@ -5,7 +5,6 @@
   import * as Sidebar from "$lib/components/ui/sidebar";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
   import * as Select from "$lib/components/ui/select";
-  import { Toggle } from "$lib/components/ui/toggle";
   import * as Tooltip from "$lib/components/ui/tooltip";
   import { Skeleton } from "$lib/components/ui/skeleton";
   import IconSwap from "$lib/IconSwap.svelte";
@@ -15,6 +14,7 @@
   import ArchiveIcon from "@lucide/svelte/icons/archive";
   import ChevronsUpDownIcon from "@lucide/svelte/icons/chevrons-up-down";
   import CircleHelpIcon from "@lucide/svelte/icons/circle-help";
+  import CircleIcon from "@lucide/svelte/icons/circle";
   import InboxIcon from "@lucide/svelte/icons/inbox";
   import KeyRoundIcon from "@lucide/svelte/icons/key-round";
   import LoaderCircleIcon from "@lucide/svelte/icons/loader-circle";
@@ -63,12 +63,12 @@
   import { bindings, matches } from "$lib/keys";
   import type { Action } from "$lib/keys";
 
-  /** Collection is what the Collection List selects: every Feed, one Feed,
-   * everything Starred, or the archive. Unread Only narrows whichever
-   * Collection the reader chose rather than being one of its own — see
-   * docs/adr/0013-unread-only-is-a-modifier.md. */
+  /** Collection is what the Collection List selects: every Feed, everything
+   * Unread, everything Starred, the archive, or one Feed — see
+   * docs/adr/0017-unread-is-a-collection.md. */
   type Collection =
     | { type: "all" }
+    | { type: "unread" }
     | { type: "feed"; id: number }
     | { type: "starred" }
     | { type: "archive" };
@@ -79,9 +79,6 @@
   let entries = $state<Entry[]>([]);
   let cursor = $state("");
   let collection = $state<Collection>({ type: "all" });
-  // Unread Only is the reader's preference and is restored from the server on
-  // mount. The Collection is not: All Feeds is the right place to start.
-  let unreadOnly = $state(false);
   let entryOrder = $state<EntryOrder>("newest");
   let loading = $state(true);
 
@@ -96,12 +93,6 @@
   function iconForEntry(entry: Entry): string | undefined {
     const feed = feedsByID.get(entry.feed_id);
     return feed ? feedIconUrl(feed) : undefined;
-  }
-
-  function compareEntries(a: Entry, b: Entry): number {
-    const ascending =
-      a.published_at.localeCompare(b.published_at) || a.id - b.id;
-    return entryOrder === "oldest" ? ascending : -ascending;
   }
 
   // Selecting an Entry and opening it are one act: the Reading Pane always
@@ -204,6 +195,8 @@
     switch (collection.type) {
       case "feed":
         return collectionFeed?.title ?? "All Feeds";
+      case "unread":
+        return "Unread";
       case "starred":
         return "Starred";
       case "archive":
@@ -212,26 +205,20 @@
         return "All Feeds";
     }
   });
-  // An Archived Entry is always Read, so Unread Only could only ever narrow
-  // the archive to nothing: it is not offered there, and the server ignores
-  // the parameter in that Collection anyway.
-  const unreadOnlyOffered = $derived(collection.type !== "archive");
   const canMarkAllRead = $derived(collection.type !== "archive");
   // The unread total is the sum of the per-Feed counts every Feed already
-  // carries, so the All Feeds badge costs no request of its own.
+  // carries, so the Unread badge costs no request of its own.
   const unreadTotal = $derived(
     feeds.reduce((sum, feed) => sum + feed.unread_count, 0),
   );
-  /** emptyState says why the Entry List is empty and what fills it, composed
-   * from the Collection and the toggle rather than written out per view. */
+  /** emptyState says why the Entry List is empty and what fills it. */
   const emptyState = $derived.by(() => {
-    if (unreadOnly && unreadOnlyOffered) {
-      return {
-        title: "Nothing unread here.",
-        detail: `Turn Unread off to see everything in ${collectionTitle}.`,
-      };
-    }
     switch (collection.type) {
+      case "unread":
+        return {
+          title: "Nothing unread.",
+          detail: "Every Entry from every Feed is Read.",
+        };
       case "starred":
         return {
           title: "Nothing Starred here.",
@@ -288,27 +275,23 @@
       new URL(window.location.href).searchParams.get("entry") ?? "",
     );
     try {
-      // Unread Only decides what the first page even asks for, so the
-      // preferences are read before the list rather than beside it.
-      const [subscribed, settings] = await Promise.all([
+      const [subscribed, settings, page] = await Promise.all([
         listFeeds(),
         getSettings(),
+        listEntries({
+          ...selectionQuery(),
+          ...(deepLink > 0 ? { around: deepLink } : {}),
+          order: entryOrder,
+        }),
       ]);
       feeds = subscribed;
       markOnOpen = settings.mark_on_open;
       entryView = settings.entry_view;
-      unreadOnly = settings.unread_only;
       readingFont = settings.reading_font;
-      const page = await listEntries({
-        ...selectionQuery(),
-        ...(deepLink > 0 ? { around: deepLink } : {}),
-        order: entryOrder,
-      });
       entries = page.entries;
       cursor = page.next_cursor;
       if (deepLink > 0) {
-        let index = entries.findIndex((entry) => entry.id === deepLink);
-        if (index < 0) index = await restoreAnchor(deepLink);
+        const index = entries.findIndex((entry) => entry.id === deepLink);
         if (index >= 0) {
           selectedIndex = index;
           maybeMarkOnSelect(index);
@@ -319,27 +302,6 @@
       selectionRestored = true;
     }
   });
-
-  /** restoreAnchor puts an Entry the reader arrived at back into a page that
-   * does not hold it. The server drops an `around` anchor falling outside the
-   * selection, so an Entry that has since been Read would take the reader's
-   * place away with it. Reports where it landed, or -1. */
-  async function restoreAnchor(id: number): Promise<number> {
-    try {
-      const page = await listEntries({
-        ...selectionQuery(collection, false),
-        around: id,
-        limit: 1,
-        order: entryOrder,
-      });
-      const anchor = page.entries.find((entry) => entry.id === id);
-      if (!anchor) return -1;
-      entries = [...entries, anchor].sort(compareEntries);
-      return entries.findIndex((entry) => entry.id === id);
-    } catch {
-      return -1;
-    }
-  }
 
   // The selected Entry is the one piece of reading position worth surviving a
   // reload, and it replaces rather than pushes: j down a list of forty would
@@ -365,19 +327,15 @@
   });
 
   /** selectionQuery is the single client mapping for both list reads and
-   * mark-all-read, so bulk state cannot drift beyond the visible selection.
-   * Unread Only is a modifier over the Collection rather than one of its own,
-   * which is how the server reads these four parameters too. */
+   * mark-all-read, so bulk state cannot drift beyond the visible selection. */
   function selectionQuery(
     current: Collection = collection,
-    narrowed: boolean = unreadOnly,
   ): EntrySelectionOptions {
     return {
       feed: current.type === "feed" ? current.id : undefined,
+      unread: current.type === "unread" ? true : undefined,
       starred: current.type === "starred" ? true : undefined,
       archived: current.type === "archive" ? true : undefined,
-      // The archive ignores this: an Archived Entry is always Read.
-      unread: narrowed && current.type !== "archive" ? true : undefined,
     };
   }
 
@@ -395,8 +353,8 @@
     cursor = page.next_cursor;
     selectedIndex = undefined;
     closedIndex = undefined;
-    // Whatever rebuilt the list — a Collection, the order, Unread Only — is
-    // what the reader is holding, so the new list must not take focus off it.
+    // Whatever rebuilt the list — a Collection or the order — is what the
+    // reader is holding, so the new list must not take focus off it.
     focusRequest = 0;
     manuallyUnread = new Set();
   }
@@ -478,12 +436,7 @@
         around: entry.id,
         order: entryOrder,
       });
-      // A Read Entry falls outside a narrowed selection, and the server drops
-      // the anchor with it. The Entry the reader asked for belongs to the list
-      // that is about to show it, so it is put back where it sorts.
-      entries = page.entries.some((candidate) => candidate.id === entry.id)
-        ? page.entries
-        : [...page.entries, entry].sort(compareEntries);
+      entries = page.entries;
       cursor = page.next_cursor;
       manuallyUnread = new Set();
       // This is a different list from the one the reader closed an Entry in.
@@ -503,26 +456,6 @@
   function openSearchFeed(feed: Feed) {
     searchOpen = false;
     void selectCollection({ type: "feed", id: feed.id });
-  }
-
-  /** setUnreadOnly narrows the Entry List to unread Entries, or widens it back
-   * again. The list is what the reader was after, so it is rebuilt at once and
-   * the preference is remembered behind it. */
-  async function setUnreadOnly(next: boolean) {
-    if (busy || unreadOnly === next || !unreadOnlyOffered) return;
-    const previous = preferences();
-    unreadOnly = next;
-    busy = true;
-    try {
-      await reload();
-    } finally {
-      busy = false;
-    }
-    void savePreferences({ ...previous, unread_only: next }, previous);
-  }
-
-  function toggleUnreadOnly() {
-    void setUnreadOnly(!unreadOnly);
   }
 
   async function setEntryOrder(next: EntryOrder) {
@@ -755,29 +688,17 @@
   async function savePreferences(next: Settings, previous: Settings) {
     markOnOpen = next.mark_on_open;
     entryView = next.entry_view;
-    unreadOnly = next.unread_only;
     readingFont = next.reading_font;
     try {
       const stored = await setSettings(next);
       markOnOpen = stored.mark_on_open;
       entryView = stored.entry_view;
-      unreadOnly = stored.unread_only;
       readingFont = stored.reading_font;
     } catch {
       markOnOpen = previous.mark_on_open;
       entryView = previous.entry_view;
-      unreadOnly = previous.unread_only;
       readingFont = previous.reading_font;
       notice = "Could not update your settings.";
-      // A refused Unread Only would leave the list narrowed the way the toggle
-      // no longer claims it is, so the list goes back with the toggle.
-      if (next.unread_only !== previous.unread_only) {
-        try {
-          await reload();
-        } catch (cause) {
-          reportError(cause);
-        }
-      }
     }
   }
 
@@ -785,7 +706,6 @@
     return {
       mark_on_open: markOnOpen,
       entry_view: entryView,
-      unread_only: unreadOnly,
       reading_font: readingFont,
     };
   }
@@ -865,7 +785,7 @@
     close: closeCurrent,
     toggleRead: toggleReadCurrent,
     toggleArchive: toggleArchiveCurrent,
-    toggleUnreadOnly,
+    showUnread: () => void selectCollection({ type: "unread" }),
     help: () => (helpOpen = true),
     search: () => (searchOpen = true),
     addFeed: () => (addFeedOpen = true),
@@ -947,17 +867,28 @@
         <Sidebar.GroupContent>
           <Sidebar.Menu>
             <Sidebar.MenuItem>
-              <!-- The unread count is absolutely positioned chrome, so the
-                   name has to be told to stop before it. -->
               <Sidebar.MenuButton
                 data-testid="collection-all"
-                class={unreadTotal > 0 ? "pr-10" : undefined}
                 isActive={collection.type === "all"}
                 aria-current={collection.type === "all"}
                 onclick={() => selectCollection({ type: "all" })}
               >
                 <InboxIcon strokeWidth={1.5} />
                 <span class="truncate">All Feeds</span>
+              </Sidebar.MenuButton>
+            </Sidebar.MenuItem>
+            <Sidebar.MenuItem>
+              <!-- The unread count is absolutely positioned chrome, so the
+                   name has to be told to stop before it. -->
+              <Sidebar.MenuButton
+                data-testid="collection-unread"
+                class={unreadTotal > 0 ? "pr-10" : undefined}
+                isActive={collection.type === "unread"}
+                aria-current={collection.type === "unread"}
+                onclick={() => selectCollection({ type: "unread" })}
+              >
+                <CircleIcon strokeWidth={1.5} />
+                <span class="truncate">Unread</span>
               </Sidebar.MenuButton>
               {#if unreadTotal > 0}
                 <Sidebar.MenuBadge class="top-1 tabular-nums">
@@ -1116,23 +1047,6 @@
             {collectionTitle}
           </h1>
           <div class="flex shrink-0 items-center gap-1">
-            {#if unreadOnlyOffered}
-              <!-- Pressed fills the pill with the colour the unread dot on
-                   every row is already drawn in, so the control and the mark
-                   it selects on read as the same thing. The label never
-                   changes: it names what the toggle controls, never what
-                   pressing it would do next. -->
-              <Toggle
-                data-testid="unread-only"
-                variant="outline"
-                class="shrink-0 aria-pressed:border-primary aria-pressed:bg-primary aria-pressed:text-primary-foreground aria-pressed:hover:bg-primary/90 aria-pressed:hover:text-primary-foreground @max-3xl:h-9"
-                pressed={unreadOnly}
-                onPressedChange={(next) => void setUnreadOnly(next)}
-                disabled={busy || loading}
-              >
-                Unread
-              </Toggle>
-            {/if}
             <Label for="entry-order" class="sr-only">
               Sort Entries by publish date
             </Label>
@@ -1143,10 +1057,9 @@
                 void setEntryOrder(value as EntryOrder)}
               disabled={busy}
             >
-              <!-- The order is the least-touched control in a header that now
-                   also carries Unread, so it keeps its name for the
-                   accessibility tree and gives the width back to the
-                   Collection's own title. -->
+              <!-- The order is the least-touched control in the header, so it
+                   keeps its name for the accessibility tree and gives the
+                   width back to the Collection's own title. -->
               <Select.Trigger
                 id="entry-order"
                 data-testid="entry-order"
@@ -1270,7 +1183,7 @@
                place instead of replacing a sentence. -->
           <ul class="flex flex-col divide-y divide-border px-2 pt-1" aria-hidden="true">
             {#each [0, 1, 2, 3, 4, 5] as placeholder (placeholder)}
-              <li class="flex flex-col gap-2 py-3.5 ps-5.5 pe-3.5">
+              <li class="flex flex-col gap-2 pt-4 pb-5 ps-6 pe-4">
                 <Skeleton class="h-3 w-32 rounded-md" />
                 <Skeleton class="h-4 w-full rounded-md" />
                 <Skeleton class="h-3 w-3/4 rounded-md" />

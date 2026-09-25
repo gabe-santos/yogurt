@@ -1,5 +1,7 @@
 # Unread Only is a modifier, not a Collection
 
+Superseded by ADR-0017: Unread is a Collection again, and the `unread_only` setting is gone.
+
 The Entry List header carried four tabs — All, Unread, Starred, Archive — as one exclusive choice, while the Collection List carried All Feeds and the Feeds. Two columns therefore each answered half of "what am I looking at", and the halves could not be combined: there was no way to see one Feed's unread Entries, or the Starred ones not yet read. The tabs also made Unread a place, which it is not: an Entry is not filed under unread, it merely has not been Read yet.
 
 Unread is now a setting over whichever Collection the reader chose, and the Collection List holds every Collection there is: All Feeds, Starred, the archive, and each Feed. This is what the server always modelled — `entryWhere` (internal/store/feeds.go) composes independent `feed_id`, `read`, `starred` and `archived` predicates, and the four tabs were a client-side flattening of that into an enum. The exception is the archive, where the server ignores the unread parameter because an Archived Entry is always Read; the toggle is not offered in that Collection rather than offered and lying.

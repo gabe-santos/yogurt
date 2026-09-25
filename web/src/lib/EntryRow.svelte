@@ -5,8 +5,8 @@
   import { entryExcerpt, formatEntryAge, formatPublished } from '$lib/format';
   import ArchiveIcon from '@lucide/svelte/icons/archive';
   import ArchiveRestoreIcon from '@lucide/svelte/icons/archive-restore';
-  import MailIcon from '@lucide/svelte/icons/mail';
-  import MailOpenIcon from '@lucide/svelte/icons/mail-open';
+  import CircleCheckIcon from '@lucide/svelte/icons/circle-check';
+  import CircleIcon from '@lucide/svelte/icons/circle';
   import StarIcon from '@lucide/svelte/icons/star';
 
   interface Props {
@@ -94,7 +94,7 @@
           data-testid="entry"
           aria-current={isCurrent}
           tabindex={tabbable ? 0 : -1}
-          class="flex w-full flex-col gap-1 rounded-xl py-3.5 ps-5.5 pe-3.5 text-left transition-colors hover:bg-accent/50 focus-visible:bg-accent/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring active:bg-accent active:duration-0 aria-[current=true]:bg-accent"
+          class="flex w-full flex-col gap-1 rounded-xl pt-4 pb-5 ps-6 pe-4 text-left transition-colors hover:bg-accent/50 focus-visible:bg-accent/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring active:bg-accent active:duration-0 aria-[current=true]:bg-accent"
           onclick={onClick}
         >
           <span class="relative flex w-full min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
@@ -104,7 +104,7 @@
               colour-only, so an sr-only label carries the state for
               assistive tech instead of relying on the fill alone. -->
               <span
-                class="absolute top-1/2 -start-3.5 size-1.5 -translate-y-1/2 rounded-full bg-primary"
+                class="absolute top-1/2 -start-4 size-1.5 -translate-y-1/2 rounded-full bg-primary"
                 aria-hidden="true"
               ></span>
               <span class="sr-only">unread</span>
@@ -124,13 +124,13 @@
             </span>
           </span>
           <span
-            class="line-clamp-2 leading-snug font-medium"
+            class="line-clamp-2 text-sm font-medium @max-3xl:text-base"
             class:text-muted-foreground={entry.read}
           >
             {entry.title || entry.url}
           </span>
           {#if excerpt}
-            <span class="line-clamp-2 text-xs leading-snug text-muted-foreground">
+            <span class="line-clamp-2 text-xs text-muted-foreground">
               {excerpt}
             </span>
           {/if}
@@ -144,10 +144,10 @@
           onclick={onToggleRead}
         >
           {#if entry.read}
-            <MailIcon strokeWidth={1.5} />
+            <CircleCheckIcon strokeWidth={1.5} />
             Mark unread
           {:else}
-            <MailOpenIcon strokeWidth={1.5} />
+            <CircleIcon strokeWidth={1.5} />
             Mark read
           {/if}
         </ContextMenu.Item>
