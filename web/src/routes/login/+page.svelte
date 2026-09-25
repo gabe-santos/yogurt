@@ -30,7 +30,7 @@
 </script>
 
 <main class="mx-auto flex min-h-dvh max-w-sm flex-col justify-center gap-6 p-8">
-	<h1 class="enter enter-1 text-2xl font-semibold">Yogurt</h1>
+	<h1 class="enter enter-1 text-2xl font-semibold tracking-2xl">Yogurt</h1>
 
 	<form class="flex flex-col gap-3" onsubmit={submit}>
 		<div class="enter enter-2 flex flex-col">

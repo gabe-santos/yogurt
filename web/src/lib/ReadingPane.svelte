@@ -99,7 +99,7 @@
 	//
 	// The column. A measure is counted in characters, not pixels, and the two
 	// faces are not the same width — so each gets the column that holds ~72 of
-	// its own characters at 18px (`--container-reading-*` in app.css).
+	// its own characters at 16px (`--container-reading-*` in app.css).
 	//
 	// The tracking. The `tracking-*` scale was drawn against Geist, which has
 	// no optical-size axis and needs headings pulled tight by hand. Literata
@@ -111,7 +111,7 @@
 	);
 	// The Entry's own headline is part of what is being read, so it takes the
 	// chosen face too. The metadata line under it is chrome and stays sans.
-	const readingTitle = $derived(serif ? 'font-serif' : 'tracking-3xl');
+	const readingTitle = $derived(serif ? 'font-serif' : 'tracking-2xl');
 	// Light text on a dark surface reads thinner than the same text inverted,
 	// and a serif's thin strokes are where that shows first. On dark the
 	// reading serif takes one small step of weight — 420 of its 200-900 axis,
@@ -119,8 +119,8 @@
 	// Geist's strokes are uniform enough not to need either.
 	const readingProse = $derived(
 		serif
-			? 'font-serif dark:font-[420] dark:leading-[1.75] [&_h2]:text-2xl [&_h3]:text-xl'
-			: '[&_h2]:text-2xl [&_h2]:tracking-2xl [&_h3]:text-xl [&_h3]:tracking-xl'
+			? 'font-serif dark:font-[420] dark:leading-[1.75]'
+			: '[&_h2]:tracking-xl [&_h3]:tracking-lg'
 	);
 
 	// The Article views are fetched per Entry and per view, on demand: an Entry
@@ -130,8 +130,11 @@
 	// for the Entry left behind.
 	let article = $state<Article | null>(null);
 	let original = $state<Original | null>(null);
-	let loadError = $state('');
-	let loading = $state(false);
+	// Loading and failure belong to the view that asked for them. A Reader View
+	// fetch still in flight, or one that failed, says nothing about Feed View,
+	// which never touches the publisher.
+	let loading = $state<EntryView | null>(null);
+	let loadError = $state<{ view: EntryView; message: string } | null>(null);
 	let loadedEntryId: number | undefined;
 	// Selecting an Entry is now a keystroke rather than a deliberate open, so a
 	// reader holding j would otherwise fire one publisher request per Entry they
@@ -185,6 +188,10 @@
 		{ id: 'sans', label: 'Sans-serif', face: 'font-sans' },
 		{ id: 'serif', label: 'Serif', face: 'font-serif', align: '-translate-y-[2px]' }
 	];
+	// On a phone the two faces fold into one button that shows the face in use
+	// and switches to the other: the bar has no room for a second letter.
+	const currentFont = $derived(fonts.find((choice) => choice.id === readingFont) ?? fonts[0]);
+	const otherFont = $derived(fonts.find((choice) => choice.id !== readingFont) ?? fonts[1]);
 
 	// One effect owns everything that must happen when the Entry or the view
 	// changes, so a fetch can never outlive the selection that asked for it: the
@@ -199,8 +206,8 @@
 				loadedEntryId = wantedEntry;
 				article = null;
 				original = null;
-				loadError = '';
-				loading = false;
+				loadError = null;
+				loading = null;
 				titleScrolledAway = false;
 				scroller?.scrollTo({ top: 0 });
 			}
@@ -208,10 +215,26 @@
 			if (wantedView === 'feed') return;
 			if (wantedView === 'reader' && article) return;
 			if (wantedView === 'original' && original) return;
-			fetchTimer = setTimeout(() => void load(wantedEntry, wantedView), fetchDelay);
+			// This view's own fetch is already in flight.
+			if (loading === wantedView) return;
+			// The skeleton shows from the moment the view is chosen, not from when
+			// the delay lets the request go, so the pane is never blank.
+			loading = wantedView;
+			loadError = null;
+			fetchTimer = setTimeout(() => {
+				fetchTimer = undefined;
+				void load(wantedEntry, wantedView);
+			}, fetchDelay);
 		});
 
-		return () => clearTimeout(fetchTimer);
+		return () => {
+			// A fetch that never left is forgotten along with its skeleton; one
+			// already in flight finishes, and is kept for when its view is chosen.
+			if (fetchTimer === undefined) return;
+			clearTimeout(fetchTimer);
+			fetchTimer = undefined;
+			loading = null;
+		};
 	});
 
 	// The title is watched against the pane's own scroll box rather than the
@@ -234,8 +257,6 @@
 	// reader has since left is discarded rather than shown under the wrong
 	// title.
 	async function load(requestedFor: number, wanted: EntryView) {
-		loading = true;
-		loadError = '';
 		try {
 			if (wanted === 'reader') {
 				const loaded = await getArticle(requestedFor);
@@ -250,9 +271,9 @@
 			if (requestedFor !== loadedEntryId) return;
 			const fallback =
 				wanted === 'reader' ? 'Could not extract that Article' : 'Could not reach that publisher';
-			loadError = cause instanceof Error ? cause.message : fallback;
+			loadError = { view: wanted, message: cause instanceof Error ? cause.message : fallback };
 		} finally {
-			if (requestedFor === loadedEntryId) loading = false;
+			if (requestedFor === loadedEntryId && loading === wanted) loading = null;
 		}
 	}
 </script>
@@ -300,7 +321,8 @@
 {/snippet}
 
 <!-- Header controls are 28px where a cursor points at them and 36px where a
-     thumb does, which is the width the phone triage session needs. -->
+     thumb does, which is the width the phone triage session needs. Below
+     360px they step down to 32px, the one way nine of them still fit. -->
 {#snippet control(
 	label: string,
 	icon: typeof RssIcon,
@@ -318,7 +340,7 @@
 					{...props}
 					variant={pressed ? 'secondary' : 'ghost'}
 					size="icon-sm"
-					class="@max-3xl:size-9"
+					class="@max-3xl:size-9 @max-[22.5rem]:size-8"
 					aria-label={label}
 					aria-pressed={pressed}
 					data-testid={testid}
@@ -362,7 +384,7 @@
 					disabled={busy}
 					aria-label={label}
 					data-testid={`view-${id}`}
-					class="relative flex size-7 items-center justify-center rounded-[calc(var(--radius)*1.8_-_2px)] text-muted-foreground transition-[color,scale] hover:text-foreground active:scale-[0.96] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-50 data-active:text-foreground @max-3xl:size-9"
+					class="relative flex size-7 items-center justify-center rounded-[calc(var(--radius)*1.8_-_2px)] text-muted-foreground transition-[color,scale] hover:text-foreground active:scale-[0.96] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-50 data-active:text-foreground @max-3xl:size-9 @max-[22.5rem]:size-8"
 				>
 					<Icon class="size-4" />
 				</Tabs.Trigger>
@@ -387,9 +409,9 @@
 					disabled={busy}
 					aria-label={label}
 					data-testid={`reading-font-${id}`}
-					class="relative flex size-7 items-center justify-center rounded-[calc(var(--radius)*1.8_-_2px)] text-muted-foreground transition-[color,scale] hover:text-foreground active:scale-[0.96] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-50 data-active:text-foreground @max-3xl:size-9"
+					class="relative flex size-7 items-center justify-center rounded-[calc(var(--radius)*1.8_-_2px)] text-muted-foreground transition-[color,scale] hover:text-foreground active:scale-[0.96] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-50 data-active:text-foreground @max-3xl:size-9 @max-[22.5rem]:size-8"
 				>
-					<span class={`${face} ${align ?? ''} text-[15px] leading-none`} aria-hidden="true">A</span>
+					<span class={`${face} ${align ?? ''} text-base leading-none`} aria-hidden="true">A</span>
 				</Tabs.Trigger>
 			{/snippet}
 		</Tooltip.Trigger>
@@ -410,13 +432,15 @@
 	out:fly={exit}
 >
 	<Tooltip.Provider delayDuration={400}>
-		<!-- Eight 36px controls and their divider need 311px, so below 21rem the
-		     bar tightens its own margins rather than letting the trailing
-		     control run into the edge of the screen. The bar is opaque: it is a
-		     sibling of the scroll box, never a layer over it, so translucency
-		     here would be blurring this section's own flat background. -->
+		<!-- On a phone the bar holds nine controls, the view track and two
+		     dividers: 354px at 36px a control, so below 360px the controls step
+		     down to 32px and the bar's margins tighten rather than letting the
+		     trailing control run off the edge — 320px is the narrowest width the
+		     layout holds at (issue #37). The bar is opaque: it is a sibling of the
+		     scroll box, never a layer over it, so translucency here would be
+		     blurring this section's own flat background. -->
 		<header
-			class="flex h-12 shrink-0 items-center gap-1 border-b border-border bg-background px-2 @max-3xl:h-14 @max-3xl:gap-0 @max-[21rem]:px-1"
+			class="flex h-12 shrink-0 items-center gap-1 border-b border-border bg-background px-2 @max-3xl:h-14 @max-3xl:gap-0 @max-[22.5rem]:px-1"
 		>
 			<Tooltip.Root>
 				<Tooltip.Trigger>
@@ -426,7 +450,7 @@
 							bind:ref={backButton}
 							variant="ghost"
 							size="icon-sm"
-							class="@3xl:hidden @max-3xl:size-9"
+							class="@3xl:hidden @max-3xl:size-9 @max-[22.5rem]:size-8"
 							aria-label="Back to the Entry List"
 							data-testid="reading-pane-back"
 							onclick={onClose}
@@ -447,14 +471,14 @@
 				{entry.title || entry.url}
 			</p>
 
-			<!-- On a phone the eight controls are the whole bar, so the spare
-			     width sits between the two groups rather than beside them. -->
+			<!-- On a phone the controls are the whole bar, so the spare width sits
+			     between the back button and the rest rather than beside them. -->
 			<div class="flex-1 @3xl:hidden"></div>
 
 			<Tabs.Root
 				value={readingFont}
 				onValueChange={(value) => onFontChange(value as ReadingFont)}
-				class="shrink-0"
+				class="shrink-0 @max-3xl:hidden"
 			>
 				<Tabs.List aria-label="Reading font" class="gap-0.5 p-0.5">
 					{#each fonts as choice (choice.id)}
@@ -462,14 +486,36 @@
 					{/each}
 				</Tabs.List>
 			</Tabs.Root>
+			<Tooltip.Root>
+				<Tooltip.Trigger>
+					{#snippet child({ props })}
+						<Button
+							{...props}
+							variant="ghost"
+							size="icon-sm"
+							class="@3xl:hidden @max-3xl:size-9 @max-[22.5rem]:size-8"
+							aria-label={`Switch to ${otherFont.label.toLowerCase()}`}
+							data-testid="reading-font-toggle"
+							disabled={busy}
+							onclick={() => onFontChange(otherFont.id)}
+						>
+							<span
+								class={`${currentFont.face} ${currentFont.align ?? ''} text-base leading-none`}
+								aria-hidden="true">A</span
+							>
+						</Button>
+					{/snippet}
+				</Tooltip.Trigger>
+				<Tooltip.Content>{`Switch to ${otherFont.label.toLowerCase()}`}</Tooltip.Content>
+			</Tooltip.Root>
 
 			<div
-				class="mx-1.5 h-5 w-px shrink-0 bg-border @max-3xl:mx-1 @max-[21rem]:mx-0.5"
+				class="mx-1.5 h-5 w-px shrink-0 bg-border @max-3xl:mx-0.5"
 				aria-hidden="true"
 			></div>
 
 			<Tabs.Root value={view} onValueChange={(value) => onView(value as EntryView)} class="shrink-0">
-				<Tabs.List aria-label="View" class="gap-0.5 p-0.5">
+				<Tabs.List aria-label="View" class="gap-0.5 p-0.5 @max-3xl:gap-0">
 					{#each views as choice (choice.id)}
 						{@render viewControl(choice.id, choice.label, choice.icon)}
 					{/each}
@@ -477,11 +523,11 @@
 			</Tabs.Root>
 
 			<div
-				class="mx-1.5 h-5 w-px shrink-0 bg-border @max-3xl:mx-1 @max-[21rem]:mx-0.5"
+				class="mx-1.5 h-5 w-px shrink-0 bg-border @max-3xl:mx-0.5"
 				aria-hidden="true"
 			></div>
 
-			<div class="flex shrink-0 items-center gap-0.5">
+			<div class="flex shrink-0 items-center gap-0.5 @max-3xl:gap-0">
 				{@render control(
 					entry.starred ? 'Unstar' : 'Star',
 					StarIcon,
@@ -519,7 +565,7 @@
 								{...props}
 								variant="ghost"
 								size="icon-sm"
-								class="@max-3xl:size-9"
+								class="@max-3xl:size-9 @max-[22.5rem]:size-8"
 								href={entry.url}
 								target="_blank"
 								rel="noreferrer"
@@ -548,7 +594,7 @@
 		>
 			<div bind:this={titleAnchor} class="flex flex-col gap-2">
 				<h2
-					class="text-3xl leading-tight font-semibold break-words text-balance {readingTitle}"
+					class="text-2xl leading-tight font-semibold break-words text-balance {readingTitle}"
 				>
 					{entry.title || entry.url}
 				</h2>
@@ -563,25 +609,27 @@
 			<div
 				data-testid="reading-prose"
 				dir="auto"
-				class="max-w-none flex-1 text-lg leading-relaxed break-words text-foreground [&_a]:underline [&_a]:decoration-from-font [&_a]:[text-underline-position:from-font] [&_a]:[text-decoration-skip-ink:auto] [&_blockquote]:my-4 [&_blockquote]:border-s-2 [&_blockquote]:border-border [&_blockquote]:ps-4 [&_blockquote]:text-muted-foreground [&_h2]:mt-8 [&_h2]:mb-3 [&_h2]:font-semibold [&_h3]:mt-6 [&_h3]:mb-2 [&_h3]:font-semibold [&_img]:max-w-full [&_img]:rounded-md [&_img]:outline [&_img]:outline-1 [&_img]:-outline-offset-1 [&_img]:outline-prose-image-outline [&_ol]:my-4 [&_ol]:list-decimal [&_ol]:ps-6 [&_p]:my-4 [&_ul]:my-4 [&_ul]:list-disc [&_ul]:ps-6 {readingProse}"
+				class="max-w-none flex-1 text-base leading-relaxed break-words text-foreground [&_a:not([data-slot=button])]:underline [&_a:not([data-slot=button])]:decoration-from-font [&_a:not([data-slot=button])]:[text-underline-position:from-font] [&_a:not([data-slot=button])]:[text-decoration-skip-ink:auto] [&_blockquote]:my-4 [&_blockquote]:border-s [&_blockquote]:border-border [&_blockquote]:ps-4 [&_blockquote]:text-muted-foreground [&_h2]:mt-8 [&_h2]:mb-3 [&_h2]:text-xl [&_h2]:leading-7 [&_h2]:font-semibold [&_:is(h3,h4,h5,h6)]:mt-6 [&_:is(h3,h4,h5,h6)]:mb-2 [&_:is(h3,h4,h5,h6)]:leading-6 [&_:is(h3,h4,h5,h6)]:font-semibold [&_h3]:text-lg [&_:is(h2,h3,h4,h5,h6)+:is(p,ul,ol,blockquote)]:mt-0 [&_img]:max-w-full [&_img]:rounded-md [&_img]:outline [&_img]:outline-1 [&_img]:-outline-offset-1 [&_img]:outline-prose-image-outline [&_ol]:my-4 [&_ol]:list-decimal [&_ol]:ps-6 [&_p]:my-4 [&_ul]:my-4 [&_ul]:list-disc [&_ul]:ps-6 {readingProse}"
 			>
-				{#if loading}
+				{#if loading === view}
 					<!-- The shape of what is coming, rather than a sentence about it:
-					     the wait is short and the pane should not jump when it ends. -->
-					<div class="flex flex-col gap-3" data-testid="view-loading">
+					     the wait is short and the pane should not jump when it ends.
+					     Each bar sits where a 16px line of text would on its 26px line,
+					     and the gap between the two groups is a paragraph's. -->
+					<div class="flex flex-col gap-3 pt-5" data-testid="view-loading">
 						<span class="sr-only">
 							{view === 'reader' ? 'Extracting the Article…' : 'Asking the publisher…'}
 						</span>
-						<Skeleton class="h-4 w-full rounded-md" />
-						<Skeleton class="h-4 w-11/12 rounded-md" />
-						<Skeleton class="h-4 w-4/5 rounded-md" />
-						<Skeleton class="mt-3 h-4 w-full rounded-md" />
-						<Skeleton class="h-4 w-10/12 rounded-md" />
-						<Skeleton class="h-4 w-2/3 rounded-md" />
+						<Skeleton class="h-3.5 w-full rounded-md" />
+						<Skeleton class="h-3.5 w-11/12 rounded-md" />
+						<Skeleton class="h-3.5 w-4/5 rounded-md" />
+						<Skeleton class="mt-4 h-3.5 w-full rounded-md" />
+						<Skeleton class="h-3.5 w-10/12 rounded-md" />
+						<Skeleton class="h-3.5 w-2/3 rounded-md" />
 					</div>
-				{:else if loadError}
+				{:else if loadError?.view === view}
 					<div class="flex max-w-2xl flex-col items-start gap-3">
-						<p class="text-destructive" data-testid="view-error">{loadError}</p>
+						<p class="text-destructive" data-testid="view-error">{loadError.message}</p>
 						{@render waysOn(true)}
 					</div>
 				{:else if view === 'reader'}

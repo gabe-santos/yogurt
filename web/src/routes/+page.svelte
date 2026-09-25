@@ -965,7 +965,7 @@
                   </span>
                   <!-- The host is the whole of this app's notion of identity,
                        and a long one truncates rather than growing the row. -->
-                  <span class="grid flex-1 leading-tight">
+                  <span class="grid flex-1 leading-4">
                     <span class="truncate font-medium">Yogurt</span>
                     <span class="truncate text-xs text-muted-foreground">{serverHost}</span>
                   </span>
@@ -1200,7 +1200,7 @@
             <p class="text-sm font-medium">
               {feeds.length === 0 ? "No Feeds yet." : emptyState.title}
             </p>
-            <p class="max-w-56 text-xs leading-snug text-muted-foreground">
+            <p class="max-w-56 text-xs text-muted-foreground">
               {feeds.length === 0
                 ? "Subscribe to a Feed and its Entries collect here."
                 : emptyState.detail}
@@ -1223,7 +1223,7 @@
             {/if}
           </div>
         {:else}
-          <ul class="flex flex-col divide-y divide-border px-2 pt-1">
+          <ul class="flex flex-col divide-y divide-border px-6 pt-1">
             {#each entries as entry, index (entry.id)}
               <EntryRow
                 {entry}

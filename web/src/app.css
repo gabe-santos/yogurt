@@ -199,15 +199,15 @@
      can be decorated with one. */
   --font-serif: 'Literata Variable', Georgia, serif;
   /* The reading column is sized to the face inside it, not to a shared box.
-     A line of Geist at 18px averages 8.11px per character and a line of
-     Literata averages 8.36px (measured, latin, 400), so the same 672px column
-     would hold 77 characters of one and 75 of the other — and a shared `ch`
+     A line of Geist at 16px averages 7.21px per character and a line of
+     Literata averages 7.44px (measured, latin, 400), so the same 600px column
+     would hold 77 characters of one and 74 of the other — and a shared `ch`
      cap would be worse, since `ch` is the width of a zero and the ratio of
      average character to zero runs from 0.68 in Geist to 0.80 in Literata.
      Both values below are 72 characters of their own face plus the column's
      own 48px of padding, in rem so the measure survives a changed root size. */
-  --container-reading-sans: 39.5rem;
-  --container-reading-serif: 40.625rem;
+  --container-reading-sans: 35.5rem;
+  --container-reading-serif: 36.5rem;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);

@@ -23,9 +23,14 @@ colors:
 typography:
   headline:
     fontFamily: "Geist Variable, sans-serif | Literata Variable, Georgia, serif (reading_font)"
-    fontSize: "1.875rem"
+    fontSize: "1.5rem"
     fontWeight: 600
     lineHeight: 1.25
+  heading:
+    fontFamily: "Geist Variable, sans-serif"
+    fontSize: "1.125rem"
+    fontWeight: 600
+    lineHeight: 1.333
   title:
     fontFamily: "Geist Variable, sans-serif"
     fontSize: "1rem"
@@ -33,19 +38,24 @@ typography:
     lineHeight: 1.5
   reading-body:
     fontFamily: "Geist Variable, sans-serif | Literata Variable, Georgia, serif (reading_font)"
-    fontSize: "1.125rem"
-    fontWeight: 400
-    lineHeight: 1.625
-  body:
-    fontFamily: "Geist Variable, sans-serif"
     fontSize: "1rem"
     fontWeight: 400
-    lineHeight: 1.5
+    lineHeight: 1.625
+  item:
+    fontFamily: "Geist Variable, sans-serif"
+    fontSize: "0.875rem"
+    fontWeight: 500
+    lineHeight: 1.429
+  body:
+    fontFamily: "Geist Variable, sans-serif"
+    fontSize: "0.875rem"
+    fontWeight: 400
+    lineHeight: 1.429
   label:
     fontFamily: "Geist Variable, sans-serif"
     fontSize: "0.75rem"
     fontWeight: 400
-    lineHeight: 1.5
+    lineHeight: 1.333
   mono-label:
     fontFamily: "ui-monospace, monospace"
     fontSize: "0.75rem"
@@ -137,24 +147,29 @@ Dark mode inverts lightness on the same near-zero-chroma hue (`app.css:45-79`); 
 
 **Interface Font:** Geist Variable (with `sans-serif` fallback) — every pane, control, label and dialog, without exception.
 **Reading Font:** the reader's choice of Geist Variable or Literata Variable (with `Georgia, serif` fallback), stored server-side as the `reading_font` preference and applied only to the Reading Pane's own text.
-**Label/Mono Font:** system `ui-monospace` (the `<kbd>` shortcut glyphs in the Help dialog only)
+**Label/Mono Font:** system `ui-monospace` (the `<kbd>` shortcut glyphs in the Help dialog and the empty Reading Pane only)
 
 **Character:** A single, quiet grotesque runs the interface — headline, title and label are the same face at different sizes and weights, so nothing in the chrome competes with the Entry being read. The one place a second family is permitted is the text of the Entry itself, and only because the reader asked for it. No display face, no letter-spacing or uppercase transforms anywhere in the UI.
 
 Both faces are bundled (`@fontsource-variable/*`, latin subset ~29KB sans / ~110KB serif) and served from the binary; nothing is fetched from a CDN. Each ships a **drawn italic**, not a synthesised slant — extracted Articles are full of `<em>`, so the italic stylesheet is imported alongside the upright for both.
 
 ### Hierarchy
-- **Headline** (600, 1.875rem/30px, 1.25 line-height): the open Entry's own title at the top of the Reading Pane. Set in the chosen Reading Font. The one place type is allowed to be loud.
-- **Title** (500, 1rem/16px, 1.5 line-height): the Entry List's scope heading, the Reading Pane's collapsed sticky-bar title, and each Entry row's own title line. Always the Interface Font.
-- **Reading Body** (400, 1.125rem/18px, 1.625 line-height "relaxed"): Reader View and Feed View content, in the chosen Reading Font. Prose headings step to 24px (`h2`) and 20px (`h3`) above it; paragraphs, lists and blockquotes are separated by 16px of space and never also indented.
-- **Label** (400, 0.75rem/12px, 1.5 line-height): Feed name, timestamp, Excerpt text, filter tabs, all metadata rows — including the Reading Pane's own metadata line under the headline, which is chrome and stays in the Interface Font. Always paired with the Ash (`muted-foreground`) color, never Ink at this size.
+- **Headline** (600, 1.5rem/24px, 1.25 line-height): the open Entry's own title at the top of the Reading Pane, set in the chosen Reading Font, and the product name on the sign-in page. The largest type in the app, and only one step above the prose headings: the Entry's own words carry the page, not its title.
+- **Heading** (600, 1.125rem/18px, 24px line-height): every dialog's title, set once in the Dialog Title primitive rather than per dialog — the same step as a prose `h3`.
+- **Title** (500, 1rem/16px, 1.5 line-height): the Entry List's scope heading. Always the Interface Font.
+- **Item** (500, 0.875rem/14px, 20px line-height): the name of one thing in a list — each Entry row's title (16px/24px below the three-column width, where it is read at arm's length), the Reading Pane's collapsed sticky-bar title, a search result, an empty state's title.
+- **Reading Body** (400, 1rem/16px, 1.625 line-height "relaxed"): Reader View and Feed View content, in the chosen Reading Font. Prose headings stay close to it: 20px (`h2`), 18px (`h3`), and 16px (`h4`–`h6`), all semibold, so weight and space do most of the work size would otherwise do. A heading sits 24–32px below what precedes it and 8–12px above what it introduces; paragraphs, lists and blockquotes are separated by 16px of space and never also indented.
+- **Body** (400, 0.875rem/14px, 20px line-height): the interface's own text — Collection List items, buttons (at 500), menus, dialog copy, and form fields on a desktop.
+- **Label** (400, 0.75rem/12px, 16px line-height): Feed name, timestamp, Excerpt text, empty-state detail, notices, all metadata rows — including the Reading Pane's own metadata line under the headline, which is chrome and stays in the Interface Font. Always paired with the Ash (`muted-foreground`) color, never Ink at this size.
 
 ### Named Rules
 **The One Interface Voice Rule.** Geist Variable is the only typeface in the interface. Every control, label, pane and dialog is set in it, and a second family in the chrome is a defect. This rule stops at the Reading Pane's own text and nowhere earlier.
 
-**The Measure-Follows-the-Face Rule.** The reading column is sized in characters, not pixels: `--container-reading-sans` (39.5rem) and `--container-reading-serif` (40.625rem) each hold ~72 characters of their own face at 18px, measured rather than guessed. A shared cap would give the two faces different measures, and a shared `ch` cap would be worse — `ch` is the width of a zero, and the ratio of average character to zero runs 0.68 in Geist against 0.80 in Literata. A new reading face gets its own measured token.
+**The Measure-Follows-the-Face Rule.** The reading column is sized in characters, not pixels: `--container-reading-sans` (35.5rem) and `--container-reading-serif` (36.5rem) each hold ~72 characters of their own face at 16px, measured rather than guessed. A shared cap would give the two faces different measures, and a shared `ch` cap would be worse — `ch` is the width of a zero, and the ratio of average character to zero runs 0.68 in Geist against 0.80 in Literata. A new reading face gets its own measured token.
 
 **The Font-Does-Its-Own-Work Rule.** The `tracking-*` scale exists because Geist has no optical-size axis and needs headings pulled tight by hand. Literata has one, is drawn correctly at every size, and therefore takes none of that scale. Never apply the tracking tokens to a face with an `opsz` axis.
+
+**The One-Scale Rule.** Every size in the interface is a step of 12 / 14 / 16 / 18 / 20 / 24px, and every stacked line lands on a whole pixel — `leading-snug`/`leading-tight` on small text produce fractional line boxes that drift a list's rhythm by half-pixels, so text takes its step's own line height or an explicit whole one. A Geist heading at 18px or above carries its step's `tracking-*` token. The only off-scale size is the Feed Icon's 9px monogram, which is part of an icon, not of the type.
 
 **The Dark-Serif Compensation.** Light text on a dark surface reads thinner than the same text inverted, and a serif's thin strokes show it first. On dark, the reading serif takes 420 of its 200–900 weight axis and 1.75 line-height. Geist's strokes are uniform enough to need neither, and gets neither.
 
@@ -164,7 +179,7 @@ Three fixed structural regions at desktop width (`lg:` and up, 1024px Tailwind b
 
 The page itself does not scroll (`h-svh`, `overflow-hidden` on the shell); each pane owns its own internal scroll region, so the chrome around it — header bars, filter tabs — stays fixed while content moves underneath.
 
-**Spacing rhythm:** chrome padding (headers, list gutters) sits at 12px (`p-3`/`px-3`); Entry rows use 14px vertical rhythm (`py-3.5`) separated by 1px hairline dividers (`divide-y divide-border`), never a gap plus rounded card. The Entry List insets its rows 8px from both edges (`px-2`, the Collection List's own inset), which also gives an overlay scrollbar room to sit in, and 4px from the header (`pt-1`, with matching `scroll-pt-1` so keyboard scrolling keeps it). The reading column uses 24px horizontal padding and an 18px body: the measured sans/serif caps are 632px and 650px respectively, each yielding ~74 characters per line in real Article copy. Controls are uniformly 32px tall (`h-8`); header bars are 48px (`h-12`).
+**Spacing rhythm:** chrome padding (headers, list gutters) sits at 12px (`p-3`/`px-3`); Entry rows use 16px top and 20px bottom padding (`pt-4 pb-5`) and are separated by 1px hairline dividers (`divide-y divide-border`), never a gap plus rounded card. The Entry List insets its rows 8px from both edges (`px-2`, the Collection List's own inset), which also gives an overlay scrollbar room to sit in, and 4px from the header (`pt-1`, with matching `scroll-pt-1` so keyboard scrolling keeps it). The reading column uses 24px horizontal padding and a 16px body: the measured sans/serif caps are 568px and 584px respectively, each yielding 68–76 characters per line in real Article copy. Controls are uniformly 32px tall (`h-8`); header bars are 48px (`h-12`).
 
 ## Elevation & Depth
 
@@ -202,10 +217,10 @@ Soft, uniform rounding scaled from one base token (`--radius: 0.45rem`/7.2px) ra
 - **Active state:** background fill, not a colored indicator bar or icon-color change — consistent with the No-Hue Rule.
 
 ### Entry Row (signature component)
-The list's core unit, and deliberately not a card: no border, no shadow, and no fill at rest — just a row separated from its neighbors by a 1px hairline (`divide-y`) that stops 8px short of each edge of the list. Hover, focus, and the current Entry fill the row as one `rounded-xl` highlight, and the hairlines touching it clear while it shows, so they never poke past its corners. A 6px unread dot in Ink is the only differentiator between read and unread besides text weight (unread titles stay full-weight Ink; read titles drop to Ash); it hangs centred in the row's 22px leading padding, as Apple Mail's does, so the Feed Icon lines up with the title on every row. Feed Icon (16px, rounded-sm, monogram fallback), Feed name, and timestamp share the 12px Label row; Star/Archive glyphs float right, shown only when set. Title is Title-weight (500) at body size; a two-line-clamped Excerpt below it is Label-sized and Ash-colored, and the row skips that line entirely rather than reserving empty space when an Entry has no Excerpt.
+The list's core unit, and deliberately not a card: no border, no shadow, and no fill at rest — just a row separated from its neighbors by a 1px hairline (`divide-y`) that stops 8px short of each edge of the list. Hover, focus, and the current Entry fill the row as one `rounded-xl` highlight, and the hairlines touching it clear while it shows, so they never poke past its corners. A 6px unread dot in Ink is the only differentiator between read and unread besides title colour (unread titles stay Ink; read titles drop to Ash); it hangs in the row's 24px leading padding, 8px from its edge, as Apple Mail's does, so the Feed Icon lines up with the title on every row. Feed Icon (16px, rounded-sm, monogram fallback), Feed name, and timestamp share the 12px Label row; Star/Archive glyphs float right, shown only when set. The title is the Item role (14px/500, 16px below the three-column width); a two-line-clamped Excerpt below it is Label-sized and Ash-colored, and the row skips that line entirely rather than reserving empty space when an Entry has no Excerpt.
 
 ### Reading Pane (signature component)
-Two states of one component, never two implementations: a static third column at desktop width, a full-bleed `inset-0` overlay below it, with the Entry List beneath it marked `inert` so tab order never leaks out of the overlay. A 48px header holds back-navigation (mobile only), a title that only appears once the real headline has scrolled out of view, the three-way view switcher (Feed / Reader / Original), and the Star/Archive/Read/open-in-new-tab controls — all `ghost` icon buttons at `icon-sm`, grouped with a single hairline divider between “view” and “state” controls. Below it, Reader/Feed View use the chosen face's measured reading cap (632px Geist / 650px Literata); Original View is full width and keeps the publisher's own typography.
+Two states of one component, never two implementations: a static third column at desktop width, a full-bleed `inset-0` overlay below it, with the Entry List beneath it marked `inert` so tab order never leaks out of the overlay. A 48px header (56px on a phone) holds back-navigation (phone only), a title that only appears once the real headline has scrolled out of view, the reading-font track (sans / serif, each set in its own face), the three-way view switcher (Feed / Reader / Original), and the Star/Archive/Read/open-in-new-tab controls — all `ghost` icon buttons at `icon-sm`, with a hairline divider between the font, view and state groups. Controls are 28px under a cursor and 36px under a thumb; on a phone the font track folds into one button showing the face in use, and below 360px every control steps down to 32px, so all nine fit at 320px. Loading and failure belong to the view that asked for them: a Reader View fetch in flight or failed never shows in Feed View, and the skeleton appears the moment a view is chosen. Below the header, Reader/Feed View use the chosen face's measured reading cap (568px Geist / 584px Literata); Original View is full width and keeps the publisher's own typography. Blockquotes take a 1px hairline rule like every other border.
 
 ## Do's and Don'ts
 
@@ -222,6 +237,6 @@ Two states of one component, never two implementations: a static third column at
 - **Don't** introduce a brand accent hue without an explicit decision to depart from the No-Hue Rule — it is not a placeholder waiting to be filled in.
 - **Don't** put a solid destructive-red fill on a button; the system's one chromatic token stays at reduced opacity everywhere it appears.
 - **Don't** wrap Entry rows in cards or add per-row shadow — the list is one continuous hairline-divided column, not a stack of cards. The only rounding is the highlight on a hovered, focused, or current row.
-- **Don't** reach for a second typeface in the interface. Chrome hierarchy comes from Geist Variable's own weight and size steps (400/500/600 at 12/16/30px), not from mixing faces; the Reading Font is the single, reader-chosen exception and never leaves the Reading Pane's own text.
+- **Don't** reach for a second typeface in the interface. Chrome hierarchy comes from Geist Variable's own weight and size steps (400/500/600 at 12/14/16/18/24px), not from mixing faces; the Reading Font is the single, reader-chosen exception and never leaves the Reading Pane's own text.
 - **Don't** hard-code a pixel width for the reading column, or share one across faces — see the Measure-Follows-the-Face Rule.
 - **Don't** uppercase or letter-space labels; none of the incumbent UI does, and Excerpt/metadata rows read as plain sentence case throughout.

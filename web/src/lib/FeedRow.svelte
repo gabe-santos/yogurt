@@ -136,7 +136,7 @@
   <Dialog.Root bind:open={showError}>
     <Dialog.Content data-testid="feed-error-dialog" class="sm:max-w-md">
       <Dialog.Header>
-        <Dialog.Title class="text-lg font-semibold tracking-lg">{feed.title} error</Dialog.Title>
+        <Dialog.Title>{feed.title} error</Dialog.Title>
       </Dialog.Header>
       <p class="max-h-[60vh] overflow-y-auto text-sm whitespace-pre-wrap text-destructive">
         {feed.last_error}

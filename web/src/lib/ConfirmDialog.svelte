@@ -21,7 +21,7 @@
 <Dialog.Root open onOpenChange={(open) => !open && onCancel()}>
 	<Dialog.Content data-testid="confirm-dialog" class="sm:max-w-sm">
 		<Dialog.Header>
-			<Dialog.Title class="text-lg font-semibold tracking-lg">{title}</Dialog.Title>
+			<Dialog.Title>{title}</Dialog.Title>
 			<Dialog.Description>{description}</Dialog.Description>
 		</Dialog.Header>
 

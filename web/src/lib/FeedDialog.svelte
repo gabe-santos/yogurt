@@ -57,7 +57,7 @@
 <Dialog.Root open onOpenChange={(open) => !open && onClose()}>
 	<Dialog.Content data-testid={feed ? 'edit-feed-dialog' : 'add-feed-dialog'} class="sm:max-w-sm">
 		<Dialog.Header>
-			<Dialog.Title class="text-lg font-semibold tracking-lg">{feed ? 'Edit Feed' : 'Add Feed'}</Dialog.Title>
+			<Dialog.Title>{feed ? 'Edit Feed' : 'Add Feed'}</Dialog.Title>
 		</Dialog.Header>
 
 		<form class="flex flex-col gap-4" onsubmit={submit}>

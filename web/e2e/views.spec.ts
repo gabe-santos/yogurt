@@ -171,6 +171,26 @@ test('the reader switches views, keeps the choice, and is offered a tab when a p
   await page.unroute('**/api/entries/*/original');
   await page.getByTestId('view-feed').click();
 
+  // A failed Reader View is Reader View's failure alone: going back to the
+  // Feed's own text shows that text, not the publisher's error.
+  await page.route('**/api/entries/*/article', (route) =>
+    route.fulfill({
+      status: 502,
+      contentType: 'application/json',
+      body: JSON.stringify({ error: 'The publisher returned 502' }),
+    }),
+  );
+  await page.getByTestId('entry').nth(0).click();
+  await page.getByTestId('entry').nth(1).click();
+  await page.getByTestId('view-reader').click();
+  await expect(page.getByTestId('view-error')).toBeVisible();
+  await page.getByTestId('view-feed').click();
+  await expect(page.getByTestId('view-error')).toHaveCount(0);
+  await expect(page.getByTestId('entry-content')).toContainText(
+    'Keeping a fire alive overnight.',
+  );
+  await page.unroute('**/api/entries/*/article');
+
   // The face an Entry is read in is the reader's too, and it outlives the
   // reload the same way the view does.
   await page.getByTestId('reading-font-serif').click();

@@ -66,7 +66,7 @@
 <Dialog.Root open onOpenChange={(open) => !open && onClose()}>
 	<Dialog.Content data-testid="device-tokens-dialog" class="sm:max-w-md">
 		<Dialog.Header>
-			<Dialog.Title class="text-lg font-semibold tracking-lg">Device tokens</Dialog.Title>
+			<Dialog.Title>Device tokens</Dialog.Title>
 		</Dialog.Header>
 
 		<p class="text-sm text-muted-foreground">
