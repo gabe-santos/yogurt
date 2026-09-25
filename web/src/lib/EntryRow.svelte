@@ -104,7 +104,7 @@
               colour-only, so an sr-only label carries the state for
               assistive tech instead of relying on the fill alone. -->
               <span
-                class="absolute top-1/2 -start-4 size-1.5 -translate-y-1/2 rounded-full bg-primary"
+                class="absolute top-1/2 -start-3 size-1.5 -translate-y-1/2 rounded-full bg-primary"
                 aria-hidden="true"
               ></span>
               <span class="sr-only">unread</span>
