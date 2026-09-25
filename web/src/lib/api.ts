@@ -296,6 +296,7 @@ export async function listEntries(
   }
 
   const path = query.size > 0 ? `/entries?${query}` : '/entries';
+  await Promise.allSettled(entryStateWrites);
   const response = await send('GET', path, 'Could not load your Entries');
   const body = (await response.json()) as {
     entries: Entry[] | null;
@@ -316,17 +317,24 @@ export async function search(query: string): Promise<SearchResults> {
   return { entries: body.entries ?? [], feeds: body.feeds ?? [] };
 }
 
+/** Entry state changes the server has not answered yet. listEntries waits for
+ * them, so a list built right after the reader changed an Entry never shows
+ * the Entry as it was before. */
+const entryStateWrites = new Set<Promise<Response>>();
+
 /** setEntryState declares complete reader-owned state, never a toggle. */
 export async function setEntryState(
   id: number,
   state: Pick<Entry, 'read' | 'starred' | 'archived'>,
 ): Promise<Entry> {
-  const response = await send(
+  const write = send(
     'PUT',
     `/entries/${id}/state`,
     'Could not update that Entry',
     state,
   );
+  entryStateWrites.add(write);
+  const response = await write.finally(() => entryStateWrites.delete(write));
   const body = (await response.json()) as { entry: Entry };
   return body.entry;
 }

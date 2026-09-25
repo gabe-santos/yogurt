@@ -177,7 +177,15 @@ test('the reader opens an Entry, reads it, and triages by keyboard', async ({
   );
 
   // Manual unread always overrides mark-on-open — including after navigating
-  // away and back, which would otherwise re-trigger mark-on-open.
+  // away and back, which would otherwise re-trigger mark-on-open. Saving it
+  // is held back so Unread Only below is chosen before the server has it: a
+  // rebuilt list must still reflect what the reader already did.
+  await page.route('**/api/entries/*/state', async (route) => {
+    const held = Promise.withResolvers<void>();
+    setTimeout(held.resolve, 500);
+    await held.promise;
+    await route.continue();
+  });
   await page.keyboard.press('m');
   await expect(entries.nth(0)).toContainText('unread');
   await page.keyboard.press('j');
@@ -202,6 +210,7 @@ test('the reader opens an Entry, reads it, and triages by keyboard', async ({
     'Wheels: a review',
   );
   await expect(page.getByTestId('feed-icon').first()).toBeVisible();
+  await page.unroute('**/api/entries/*/state');
 
   // u is the same act from the keyboard.
   await page.keyboard.press('u');
