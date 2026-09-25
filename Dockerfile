@@ -29,6 +29,7 @@ RUN mkdir /data
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=server /yogurt /yogurt
 COPY --from=server --chown=nonroot:nonroot /data /data
+COPY THIRD_PARTY_NOTICES /usr/share/doc/yogurt/THIRD_PARTY_NOTICES
 ENV YOGURT_DATA_DIR=/data
 EXPOSE 8080
 ENTRYPOINT ["/yogurt"]

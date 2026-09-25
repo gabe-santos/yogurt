@@ -1,4 +1,4 @@
-.PHONY: all build frontend backend test test-api test-e2e check clean run
+.PHONY: all build frontend backend notices test test-api test-e2e check clean run
 
 BINARY := bin/yogurt
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
@@ -18,6 +18,11 @@ backend:
 run: build
 	./$(BINARY)
 
+# The license notices the image and each release carry. `check` regenerates
+# them, so a dependency change shows up as a diff to commit.
+notices:
+	node scripts/third-party-notices.mjs
+
 # Seams 1 and 2: the HTTP API and the pure pull policy.
 test-api:
 	go test ./...
@@ -28,7 +33,7 @@ test-e2e: build
 
 test: test-api test-e2e
 
-check: build
+check: build notices
 	go vet ./...
 	pnpm --dir web run check
 	$(MAKE) test

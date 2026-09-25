@@ -5,6 +5,7 @@
 !cmd
 !internal
 !web
+!THIRD_PARTY_NOTICES
 internal/webui/dist/spa
 web/.env*
 web/node_modules

@@ -1,0 +1,49 @@
+# A version tag publishes a release: `git tag v1.2.3 && git push origin v1.2.3`.
+# The Server image goes to GHCR as :1.2.3 and :latest for amd64 and arm64, with
+# its binary stamped v1.2.3. Pushes without a tag never run this.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write # the GitHub release
+  packages: write # the GHCR image
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # No QEMU: the Dockerfile cross-compiles on the runner, and the
+      # per-architecture stage only copies files.
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # v1.2.3 becomes :1.2.3, plus :latest unless it is a pre-release.
+      - id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: type=semver,pattern={{version}}
+
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          build-args: VERSION=${{ github.ref_name }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          push: true
+
+      # Desktop App installers join this release later.
+      - run: gh release create "$GITHUB_REF_NAME" --generate-notes THIRD_PARTY_NOTICES
+        env:
+          GH_TOKEN: ${{ github.token }}
