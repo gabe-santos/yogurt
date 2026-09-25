@@ -444,6 +444,9 @@ test('archiving toggles from the Reading Pane, the context menu, and the keyboar
   await expect(page.getByTestId('entry-archive')).toHaveAccessibleName(
     'Unarchive',
   );
+  // Like its buttons, an Entry ignores keys until its last change is saved,
+  // and the response arriving is not yet the app having taken it in.
+  await expect(page.getByTestId('entry-archive')).toBeEnabled();
   saved = stateResponse();
   await page.keyboard.press('e');
   await saved;
