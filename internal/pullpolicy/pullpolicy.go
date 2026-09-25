@@ -80,7 +80,9 @@ func NextCheckAfterFailure(now time.Time, interval time.Duration, hints Hints, c
 	if consecutiveFailures < 0 {
 		consecutiveFailures = 0
 	}
-	backoff := time.Duration(float64(interval) * math.Pow(backoffBase, float64(consecutiveFailures)))
+	// Capped while still a float: past int64's range, converting to a Duration
+	// gives a different value on each CPU, and a negative one on amd64.
+	backoff := time.Duration(math.Min(float64(interval)*math.Pow(backoffBase, float64(consecutiveFailures)), float64(MaxInterval)))
 	return now.Add(capped(strictest(interval, backoff, hints.RetryAfter)))
 }
 
