@@ -94,7 +94,7 @@
           data-testid="entry"
           aria-current={isCurrent}
           tabindex={tabbable ? 0 : -1}
-          class="flex -ms-6.5 -me-5 ps-6.5 pe-5 flex-col gap-1 rounded-xl pt-4 pb-5  text-left transition-colors hover:bg-accent/50 focus-visible:bg-accent/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring active:bg-accent active:duration-0 aria-[current=true]:bg-accent"
+          class="flex -ms-6.5 -me-5 ps-6.5 pe-5 flex-col gap-1 rounded-xl pt-4 pb-5  text-left transition-colors hover:bg-accent/50 focus-visible:bg-accent/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring active:bg-entry-current active:duration-0 aria-[current=true]:bg-entry-current"
           onclick={onClick}
         >
           <span class="relative flex w-full min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
@@ -125,9 +125,12 @@
               <span class="tabular-nums" title={published}>{age}</span>
             </span>
           </span>
+          <!-- Opening an Entry marks it Read unless mark_on_open is off, so the
+               current row is nearly always Read; dimming it would make the row
+               the reader is at the faintest in the list. -->
           <span
             class="line-clamp-2 text-sm font-medium @max-3xl:text-base"
-            class:text-muted-foreground={entry.read}
+            class:text-muted-foreground={entry.read && !isCurrent}
           >
             {entry.title || entry.url}
           </span>

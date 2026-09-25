@@ -13,9 +13,10 @@ colors:
   secondary: "oklch(0.967 0.001 286.375)"
   secondary-foreground: "oklch(0.21 0.006 285.885)"
   muted: "oklch(0.967 0.001 286.375)"
-  muted-foreground: "oklch(0.552 0.016 285.938)"
+  muted-foreground: "oklch(0.52 0.016 285.938)"
   accent: "oklch(0.967 0.001 286.375)"
   accent-foreground: "oklch(0.21 0.006 285.885)"
+  entry-current: "oklch(0.944 0.003 286.35)"
   destructive: "oklch(0.577 0.245 27.325)"
   border: "oklch(0.92 0.004 286.32)"
   input: "oklch(0.92 0.004 286.32)"
@@ -133,7 +134,8 @@ Pure OKLCH neutral scale (chroma ≈ 0–0.02, hue ≈ 286) plus a single chroma
 - **Paper** (`oklch(1 0 0)` background/card/popover, light): the reading surface itself.
 - **Ink** (`oklch(0.141 0.005 285.823)` foreground, light): body and heading text.
 - **Fog** (`oklch(0.967 0.001 286.375)` secondary/muted/accent, light): row hover, active tab, secondary-button fill.
-- **Ash** (`oklch(0.552 0.016 285.938)` muted-foreground, light): metadata — Feed name, timestamp, excerpt text, unstarred/unarchived affordances.
+- **Current** (`oklch(0.944 0.003 286.35)` entry-current, light; Fog's own value dark): the current Entry's row and a pressed row. One step deeper than Fog, so the row the reader is at outranks a hovered one (1.18:1 against Paper, 1.12:1 against half-strength Fog), while Ash still clears 4.5:1 on it.
+- **Ash** (`oklch(0.52 0.016 285.938)` muted-foreground, light): metadata — Feed name, timestamp, excerpt text, unstarred/unarchived affordances.
 - **Hairline** (`oklch(0.92 0.004 286.32)` border/input, light): every structural divider — pane borders, `divide-y` Entry List rows, chrome bottom-borders.
 
 Dark mode inverts lightness on the same near-zero-chroma hue (`app.css:45-79`); it is not a separate palette, and no color role changes meaning between the two.
@@ -217,7 +219,7 @@ Soft, uniform rounding scaled from one base token (`--radius: 0.45rem`/7.2px) ra
 - **Active state:** background fill, not a colored indicator bar or icon-color change — consistent with the No-Hue Rule.
 
 ### Entry Row (signature component)
-The list's core unit, and deliberately not a card: no border, no shadow, and no fill at rest — just a row separated from its neighbors by a 1px hairline (`divide-y`) that stops 8px short of each edge of the list. Hover, focus, and the current Entry fill the row as one `rounded-xl` highlight, and the hairlines touching it clear while it shows, so they never poke past its corners. A 6px unread dot in Ink is the only differentiator between read and unread besides title colour (unread titles stay Ink; read titles drop to Ash); it hangs in the row's 24px leading padding, 8px from its edge, as Apple Mail's does, so the Feed Icon lines up with the title on every row. Feed Icon (16px, rounded-sm, monogram fallback), Feed name, and timestamp share the 12px Label row; Star/Archive glyphs float right, shown only when set. The title is the Item role (14px/500, 16px below the three-column width); a two-line-clamped Excerpt below it is Label-sized and Ash-colored, and the row skips that line entirely rather than reserving empty space when an Entry has no Excerpt.
+The list's core unit, and deliberately not a card: no border, no shadow, and no fill at rest — just a row separated from its neighbors by a 1px hairline (`divide-y`) that stops 8px short of each edge of the list. Hover and focus fill the row with Fog at half strength; the current Entry, and a row while it is pressed, take Current, one step deeper, so the row the reader is at never reads like a hovered one. Either is one `rounded-xl` highlight, and the hairlines touching it clear while it shows, so they never poke past its corners. A 6px unread dot in Ink is the only differentiator between read and unread besides title colour (unread titles stay Ink; read titles drop to Ash, except the current Entry's, which stays Ink because opening it is what marked it Read); it hangs in the row's 24px leading padding, 8px from its edge, as Apple Mail's does, so the Feed Icon lines up with the title on every row. Feed Icon (16px, rounded-sm, monogram fallback), Feed name, and timestamp share the 12px Label row; Star/Archive glyphs float right, shown only when set. The title is the Item role (14px/500, 16px below the three-column width); a two-line-clamped Excerpt below it is Label-sized and Ash-colored, and the row skips that line entirely rather than reserving empty space when an Entry has no Excerpt.
 
 ### Reading Pane (signature component)
 Two states of one component, never two implementations: a static third column at desktop width, a full-bleed `inset-0` overlay below it, with the Entry List beneath it marked `inert` so tab order never leaks out of the overlay. A 48px header (56px on a phone) holds back-navigation (phone only), a title that only appears once the real headline has scrolled out of view, the reading-font track (sans / serif, each set in its own face), the three-way view switcher (Feed / Reader / Original), and the Star/Archive/Read/open-in-new-tab controls — all `ghost` icon buttons at `icon-sm`, with a hairline divider between the font, view and state groups. Controls are 28px under a cursor and 36px under a thumb; on a phone the font track folds into one button showing the face in use, and below 360px every control steps down to 32px, so all nine fit at 320px. Loading and failure belong to the view that asked for them: a Reader View fetch in flight or failed never shows in Feed View, and the skeleton appears the moment a view is chosen. Below the header, Reader/Feed View use the chosen face's measured reading cap (568px Geist / 584px Literata); Original View is full width and keeps the publisher's own typography. Blockquotes take a 1px hairline rule like every other border.
@@ -225,7 +227,7 @@ Two states of one component, never two implementations: a static third column at
 ## Do's and Don'ts
 
 ### Do:
-- **Do** keep the palette achromatic: Ink, Paper, Fog, Ash, Hairline, and destructive red are the entire vocabulary. Adding a role means reaching for one of these first.
+- **Do** keep the palette achromatic: Ink, Paper, Fog, Current, Ash, Hairline, and destructive red are the entire vocabulary. Adding a role means reaching for one of these first.
 - **Do** use `ghost` buttons for every icon-only control in header/toolbar contexts; reserve `outline` for content-area secondary actions (Load more, Open in a new tab) and `default`/primary for the single most-committal action on a screen.
 - **Do** separate structural surfaces with 1px hairline borders, not shadows.
 - **Do** use shadow only on content that floats above the page and disappears when dismissed (dialogs, sheets, menus).

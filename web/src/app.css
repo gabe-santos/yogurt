@@ -31,12 +31,16 @@
   --secondary: oklch(0.967 0.001 286.375);
   --secondary-foreground: oklch(0.21 0.006 285.885);
   --muted: oklch(0.967 0.001 286.375);
-  --muted-foreground: oklch(0.54 0.016 285.938);
+  --muted-foreground: oklch(0.52 0.016 285.938);
   --accent: oklch(0.967 0.001 286.375);
   --accent-foreground: oklch(0.21 0.006 285.885);
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.92 0.004 286.32);
   --prose-image-outline: oklch(0 0 0 / 0.1);
+  /* The current Entry's row, and the row being pressed. One step deeper than
+     accent so the row the reader is at outranks a hovered one; Ash still
+     clears 4.5:1 on it. Dark keeps accent's value, which already separates. */
+  --entry-current: oklch(0.944 0.003 286.35);
   --input: oklch(0.92 0.004 286.32);
   --ring: oklch(0.62 0.015 286.067);
   --chart-1: oklch(0.871 0.006 286.286);
@@ -82,6 +86,7 @@
   --dark-muted-foreground: oklch(0.705 0.015 286.067);
   --dark-accent: oklch(0.274 0.006 286.033);
   --dark-accent-foreground: oklch(0.985 0 0);
+  --dark-entry-current: oklch(0.274 0.006 286.033);
   --dark-destructive: oklch(0.704 0.191 22.216);
   --dark-border: oklch(1 0 0 / 10%);
   --dark-input: oklch(1 0 0 / 15%);
@@ -121,6 +126,7 @@
     --muted-foreground: var(--dark-muted-foreground);
     --accent: var(--dark-accent);
     --accent-foreground: var(--dark-accent-foreground);
+    --entry-current: var(--dark-entry-current);
     --destructive: var(--dark-destructive);
     --border: var(--dark-border);
     --input: var(--dark-input);
@@ -170,6 +176,7 @@
   --muted-foreground: var(--dark-muted-foreground);
   --accent: var(--dark-accent);
   --accent-foreground: var(--dark-accent-foreground);
+  --entry-current: var(--dark-entry-current);
   --destructive: var(--dark-destructive);
   --border: var(--dark-border);
   --input: var(--dark-input);
@@ -227,6 +234,7 @@
   --color-destructive: var(--destructive);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
+  --color-entry-current: var(--entry-current);
   --color-muted-foreground: var(--muted-foreground);
   --color-muted: var(--muted);
   --color-secondary-foreground: var(--secondary-foreground);
