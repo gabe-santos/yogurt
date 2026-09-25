@@ -1,5 +1,9 @@
 # Yogurt
 
+A feed reader for one person. It collects the RSS, Atom and JSON Feeds you follow into one place.
+
+Run it as a [Server](#run-a-server) on a machine you control. A Desktop App is coming later.
+
 ## Run a Server
 
 You need a computer or VPS with [Docker](https://docs.docker.com/get-docker/) installed. Compose comes with it.
@@ -74,3 +78,11 @@ docker run --rm --user 65532 --volumes-from "$(docker compose ps -aq yogurt)" \
   -v "$PWD/backup-20260924-120000:/backup" busybox sh -c 'rm -f /data/* && cp /backup/* /data/'
 docker compose start
 ```
+
+## Contributing
+
+Issues are welcome; pull requests aren't accepted yet. See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## License
+
+MIT. See [LICENSE](LICENSE).
