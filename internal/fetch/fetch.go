@@ -14,14 +14,19 @@ import (
 	"net/url"
 	"syscall"
 	"time"
+
+	"github.com/gabe-santos/yogurt/internal/version"
 )
 
 // Defaults for a client the caller has no opinion about.
 const (
-	DefaultTimeout   = 20 * time.Second
-	DefaultMaxBody   = 8 << 20 // 8 MiB, which no sane Feed document exceeds
-	DefaultUserAgent = "yogurt/1.0 (+https://github.com/gabe-santos/yogurt)"
+	DefaultTimeout = 20 * time.Second
+	DefaultMaxBody = 8 << 20 // 8 MiB, which no sane Feed document exceeds
 )
+
+// DefaultUserAgent names this build of Yogurt to every publisher it fetches
+// from.
+var DefaultUserAgent = "yogurt/" + version.Version + " (+https://github.com/gabe-santos/yogurt)"
 
 // ErrBodyTooLarge reports a response bigger than the client is willing to read.
 var ErrBodyTooLarge = errors.New("response body is too large")

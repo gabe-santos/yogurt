@@ -6,20 +6,40 @@ import (
 	"embed"
 	"fmt"
 	"io/fs"
+	"slices"
 	"sort"
+
+	"github.com/gabe-santos/yogurt/internal/version"
 )
 
 //go:embed migrations/*.sql
 var migrations embed.FS
 
 // migrate applies every embedded migration the database has not seen yet, in
-// filename order, each in its own transaction.
+// filename order, each in its own transaction, recording which Yogurt applied
+// it. It refuses a database carrying a migration this binary does not embed:
+// a newer Yogurt applied it, and this one does not know the schema it left.
 func migrate(ctx context.Context, db *sql.DB) error {
 	if _, err := db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS schema_migrations (
 		name TEXT PRIMARY KEY,
 		applied_at INTEGER NOT NULL
 	) STRICT`); err != nil {
 		return fmt.Errorf("create schema_migrations: %w", err)
+	}
+
+	// applied_by came after the table itself, so every database gains it here,
+	// new or not; rows from before versioning keep it empty.
+	var versioned bool
+	if err := db.QueryRowContext(ctx,
+		`SELECT count(*) > 0 FROM pragma_table_info('schema_migrations') WHERE name = 'applied_by'`,
+	).Scan(&versioned); err != nil {
+		return fmt.Errorf("inspect schema_migrations: %w", err)
+	}
+	if !versioned {
+		if _, err := db.ExecContext(ctx,
+			`ALTER TABLE schema_migrations ADD COLUMN applied_by TEXT NOT NULL DEFAULT ''`); err != nil {
+			return fmt.Errorf("add schema_migrations.applied_by: %w", err)
+		}
 	}
 
 	applied, err := appliedMigrations(ctx, db)
@@ -32,8 +52,18 @@ func migrate(ctx context.Context, db *sql.DB) error {
 		return err
 	}
 
+	newest := ""
+	for name := range applied {
+		if _, known := slices.BinarySearch(names, name); !known && name > newest {
+			newest = name
+		}
+	}
+	if newest != "" {
+		return fmt.Errorf("database was migrated by Yogurt %s, newer than this Yogurt %s", applied[newest], version.Version)
+	}
+
 	for _, name := range names {
-		if applied[name] {
+		if _, done := applied[name]; done {
 			continue
 		}
 		statements, err := fs.ReadFile(migrations, "migrations/"+name)
@@ -58,26 +88,29 @@ func applyMigration(ctx context.Context, db *sql.DB, name, statements string) er
 		return err
 	}
 	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO schema_migrations (name, applied_at) VALUES (?, unixepoch())`, name); err != nil {
+		`INSERT INTO schema_migrations (name, applied_at, applied_by) VALUES (?, unixepoch(), ?)`,
+		name, version.Version); err != nil {
 		return err
 	}
 	return tx.Commit()
 }
 
-func appliedMigrations(ctx context.Context, db *sql.DB) (map[string]bool, error) {
-	rows, err := db.QueryContext(ctx, `SELECT name FROM schema_migrations`)
+// appliedMigrations maps each migration the database has applied to the
+// version of Yogurt that applied it.
+func appliedMigrations(ctx context.Context, db *sql.DB) (map[string]string, error) {
+	rows, err := db.QueryContext(ctx, `SELECT name, applied_by FROM schema_migrations`)
 	if err != nil {
 		return nil, fmt.Errorf("read schema_migrations: %w", err)
 	}
 	defer rows.Close()
 
-	applied := make(map[string]bool)
+	applied := make(map[string]string)
 	for rows.Next() {
-		var name string
-		if err := rows.Scan(&name); err != nil {
+		var name, appliedBy string
+		if err := rows.Scan(&name, &appliedBy); err != nil {
 			return nil, err
 		}
-		applied[name] = true
+		applied[name] = appliedBy
 	}
 	return applied, rows.Err()
 }

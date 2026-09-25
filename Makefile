@@ -1,6 +1,7 @@
 .PHONY: all build frontend backend test test-api test-e2e check clean run
 
 BINARY := bin/yogurt
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 
 all: check
 
@@ -12,7 +13,7 @@ frontend:
 	pnpm --dir web build
 
 backend:
-	go build -o $(BINARY) ./cmd/yogurt
+	go build -ldflags "-X github.com/gabe-santos/yogurt/internal/version.Version=$(VERSION)" -o $(BINARY) ./cmd/yogurt
 
 run: build
 	./$(BINARY)

@@ -12,6 +12,7 @@ import (
 
 	"github.com/gabe-santos/yogurt/internal/app"
 	"github.com/gabe-santos/yogurt/internal/config"
+	"github.com/gabe-santos/yogurt/internal/version"
 )
 
 func main() {
@@ -28,6 +29,7 @@ func run() error {
 	}
 
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: cfg.LogLevel}))
+	logger.Info("starting", "version", version.Version)
 
 	application, err := app.New(cfg, app.Deps{Logger: logger})
 	if err != nil {
