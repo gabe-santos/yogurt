@@ -1,0 +1,38 @@
+# Every push to master and every pull request runs `make check`. The release
+# workflow calls this too, so a tag publishes nothing unless it passes.
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - run: pnpm --dir web install --frozen-lockfile
+      - run: pnpm --dir web exec playwright install --with-deps chromium
+      - run: make check
+
+      # `make check` regenerates THIRD_PARTY_NOTICES, so a stale committed
+      # copy shows up here as a diff.
+      - run: git diff --exit-code

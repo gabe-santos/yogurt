@@ -1,6 +1,7 @@
 # A version tag publishes a release: `git tag v1.2.3 && git push origin v1.2.3`.
 # The Server image goes to GHCR as :1.2.3 and :latest for amd64 and arm64, with
-# its binary stamped v1.2.3. Pushes without a tag never run this.
+# its binary stamped v1.2.3, once `make check` passes. Pushes without a tag
+# never run this.
 name: Release
 
 on:
@@ -12,7 +13,11 @@ permissions:
   packages: write # the GHCR image
 
 jobs:
+  check:
+    uses: ./.github/workflows/ci.yml
+
   release:
+    needs: check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
