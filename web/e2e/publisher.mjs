@@ -17,7 +17,7 @@ const feed = `<?xml version="1.0" encoding="UTF-8"?>
       <link>${publisherURL}/fire</link>
       <guid isPermaLink="false">fire</guid>
       <pubDate>Thu, 01 Jan 2026 10:00:00 +0000</pubDate>
-      <description>&lt;h2&gt;Keeping the flame&lt;/h2&gt;Keeping a fire alive overnight.</description>
+      <description>&lt;h2&gt;Keeping the flame&lt;/h2&gt;Keeping a fire alive overnight. &lt;p&gt;&lt;a href=&quot;${publisherURL}/feed-link&quot;&gt;Feed link&lt;/a&gt;&lt;/p&gt;</description>
     </item>
     <item>
       <title>Wheels: a review</title>
@@ -78,6 +78,7 @@ const article = (title) => `<!doctype html>
       rather than the navigation chrome wrapped around it, and padded with
       further clauses to satisfy the same density heuristics a real page would
       have to satisfy.</p>
+      <p><a href="${publisherURL}/reader-link">Reader link</a></p>
       <p>A second paragraph continues in the same vein, adding detail nobody
       asked for, so that the extracted text is unmistakably this page and not
       the summary the Feed carried, and so the parser has the length it wants
@@ -119,6 +120,8 @@ const documents = {
     headers: { 'X-Frame-Options': 'DENY' },
     body: article('Wheels: a review'),
   },
+  '/feed-link': { type: 'text/html; charset=utf-8', body: page },
+  '/reader-link': { type: 'text/html; charset=utf-8', body: page },
 };
 
 createServer((request, response) => {

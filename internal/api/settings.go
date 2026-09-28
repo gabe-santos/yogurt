@@ -27,6 +27,10 @@ const entryViewKey = "entry_view"
 // typography, and is never restyled.
 const readingFontKey = "reading_font"
 
+// openLinksInNewTabsKey is the settings row deciding whether links in Feed View
+// and Reader View open in a separate browser tab.
+const openLinksInNewTabsKey = "open_links_in_new_tabs"
+
 // The views an Entry can open in: the text the Feed itself carried, the
 // Article reduced to its main text, or the publisher's own page embedded.
 const (
@@ -62,6 +66,8 @@ type settingsView struct {
 	EntryView string `json:"entry_view"`
 	// ReadingFont is one of readingFonts.
 	ReadingFont string `json:"reading_font"`
+	// OpenLinksInNewTabs is off by default for existing Readers.
+	OpenLinksInNewTabs bool `json:"open_links_in_new_tabs"`
 }
 
 func (h *Handler) readSettings(r *http.Request) (settingsView, error) {
@@ -90,10 +96,20 @@ func (h *Handler) readSettings(r *http.Request) (settingsView, error) {
 		readingFont = sansReadingFont
 	}
 
+	openLinksInNewTabs, err := h.deps.Store.Setting(r.Context(), openLinksInNewTabsKey, strconv.FormatBool(false))
+	if err != nil {
+		return settingsView{}, err
+	}
+	openLinksInNewTabsValue, err := strconv.ParseBool(openLinksInNewTabs)
+	if err != nil {
+		openLinksInNewTabsValue = false
+	}
+
 	return settingsView{
-		MarkOnOpen:  markOnOpen,
-		EntryView:   entryView,
-		ReadingFont: readingFont,
+		MarkOnOpen:         markOnOpen,
+		EntryView:          entryView,
+		ReadingFont:        readingFont,
+		OpenLinksInNewTabs: openLinksInNewTabsValue,
 	}, nil
 }
 
@@ -112,7 +128,7 @@ func (h *Handler) getSettings(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) setSettings(w http.ResponseWriter, r *http.Request) {
 	var body settingsView
 	if err := json.NewDecoder(io.LimitReader(r.Body, maxSettingsBody)).Decode(&body); err != nil {
-		h.writeError(w, r, http.StatusBadRequest, "expected a JSON object with mark_on_open, entry_view and reading_font")
+		h.writeError(w, r, http.StatusBadRequest, "expected a JSON object with mark_on_open, entry_view, reading_font and open_links_in_new_tabs")
 		return
 	}
 	if !slices.Contains(entryViews, body.EntryView) {
@@ -127,6 +143,10 @@ func (h *Handler) setSettings(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.deps.Store.SetSetting(r.Context(), markOnOpenKey, strconv.FormatBool(body.MarkOnOpen)); err != nil {
+		h.serverError(w, r, err)
+		return
+	}
+	if err := h.deps.Store.SetSetting(r.Context(), openLinksInNewTabsKey, strconv.FormatBool(body.OpenLinksInNewTabs)); err != nil {
 		h.serverError(w, r, err)
 		return
 	}

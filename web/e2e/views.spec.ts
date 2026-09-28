@@ -224,3 +224,122 @@ test('the reader switches views, keeps the choice, and is offered a tab when a p
     /Geist/,
   );
 });
+
+test('the reader opens Feed View and Reader View links in new tabs when enabled', async ({
+  page,
+}) => {
+  await page.goto('/login');
+  await page.getByLabel('Password').fill(password);
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByTestId('entry')).toHaveCount(2);
+  await page.getByTestId('entry').nth(1).click();
+  await expect(page.getByTestId('reading-pane')).toBeVisible();
+
+  await page.getByTestId('reader-menu').click();
+  const openLinks = page.getByRole('menuitemcheckbox', {
+    name: 'Open links in new tabs',
+  });
+  const markRead = page.getByRole('menuitemcheckbox', {
+    name: 'Mark Read on open',
+  });
+  await expect(openLinks).not.toBeChecked();
+  await expect(openLinks).toBeEnabled();
+  await expect(markRead).toBeChecked();
+  await page.keyboard.press('Escape');
+
+  const prose = page.getByTestId('reading-prose');
+  const feedLink = prose.getByRole('link', { name: 'Feed link' });
+  await expect(feedLink).not.toHaveAttribute('target', '_blank');
+  await page.getByTestId('reader-menu').click();
+  const settingsSaved = page.waitForResponse(
+    (response) =>
+      response.url().endsWith('/api/settings') &&
+      response.request().method() === 'PUT',
+  );
+  await openLinks.click();
+  await settingsSaved;
+  await expect(openLinks).toBeChecked();
+  await page.keyboard.press('Escape');
+
+  const feedPopup = page.waitForEvent('popup');
+  await feedLink.click();
+  const feedPage = await feedPopup;
+  await expect(feedPage).toHaveURL(publisherURL + '/feed-link');
+  expect(await feedPage.evaluate(() => window.opener)).toBeNull();
+  await feedPage.close();
+  expect(page.url()).not.toContain('/feed-link');
+
+  await page.getByTestId('view-reader').click();
+  await expect(prose).toContainText('Reader link');
+  const readerLink = prose.getByRole('link', { name: 'Reader link' });
+  const readerPopup = page.waitForEvent('popup');
+  await readerLink.click();
+  const readerPage = await readerPopup;
+  await expect(readerPage).toHaveURL(publisherURL + '/reader-link');
+  expect(await readerPage.evaluate(() => window.opener)).toBeNull();
+  await readerPage.close();
+  expect(page.url()).not.toContain('/reader-link');
+
+  await page.getByTestId('view-original').click();
+  const embedded = page.frameLocator('[data-testid="original-view"]');
+  await expect(
+    embedded.getByRole('link', { name: 'Reader link' }),
+  ).not.toHaveAttribute('target', '_blank');
+  const publisherFrame = page.frame({ url: publisherURL + '/fire' });
+  expect(publisherFrame).not.toBeNull();
+  await publisherFrame!.getByRole('link', { name: 'Reader link' }).click();
+  await expect
+    .poll(async () =>
+      (await page.frames()).some(
+        (frame) => frame.url() === publisherURL + '/reader-link',
+      ),
+    )
+    .toBe(true);
+
+  await page.getByTestId('view-feed').click();
+  await page.reload();
+  await expect(page.getByTestId('reading-pane')).toBeVisible();
+  await page.getByTestId('reader-menu').click();
+  await expect(
+    page.getByRole('menuitemcheckbox', {
+      name: 'Open links in new tabs',
+    }),
+  ).toBeChecked();
+  await expect(
+    page.getByRole('menuitemcheckbox', {
+      name: 'Mark Read on open',
+    }),
+  ).toBeChecked();
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('view-feed')).toHaveAttribute(
+    'data-state',
+    'active',
+  );
+
+  await page.getByTestId('reader-menu').click();
+  const disabledAgain = page.waitForResponse(
+    (response) =>
+      response.url().endsWith('/api/settings') &&
+      response.request().method() === 'PUT',
+  );
+  await page
+    .getByRole('menuitemcheckbox', {
+      name: 'Open links in new tabs',
+    })
+    .click();
+  await disabledAgain;
+  await expect(
+    page.getByRole('menuitemcheckbox', {
+      name: 'Open links in new tabs',
+    }),
+  ).not.toBeChecked();
+  await page.keyboard.press('Escape');
+  await expect(feedLink).not.toHaveAttribute('target', '_blank');
+  await page.getByTestId('view-reader').click();
+  await expect(prose).toContainText('Reader link');
+  const disabledReaderLink = prose.getByRole('link', { name: 'Reader link' });
+  await expect(disabledReaderLink).not.toHaveAttribute('target', '_blank');
+  const currentTabNavigation = page.waitForURL(publisherURL + '/reader-link');
+  await disabledReaderLink.click();
+  await currentTabNavigation;
+});

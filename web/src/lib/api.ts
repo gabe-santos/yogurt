@@ -120,6 +120,8 @@ export interface Settings {
   /** reading_font is the typeface the Reading Pane reads in. Sans by default:
    * the same face as the rest of the interface. */
   reading_font: ReadingFont;
+  /** open_links_in_new_tabs is off by default and affects Feed View and Reader View links. */
+  open_links_in_new_tabs: boolean;
 }
 
 async function request(

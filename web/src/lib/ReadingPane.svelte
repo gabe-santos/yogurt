@@ -40,6 +40,8 @@
 		 * markup; Original View is the publisher's own page and keeps their
 		 * typography. */
 		readingFont: ReadingFont;
+		/** openLinksInNewTabs applies only to links in Feed View and Reader View. */
+		openLinksInNewTabs: boolean;
 		/** iconUrl is the Entry's Feed Icon, so the pane's own metadata line
 		 * names its Feed the same way the Entry List row did. */
 		iconUrl?: string;
@@ -63,6 +65,7 @@
 		busy,
 		view,
 		readingFont,
+		openLinksInNewTabs,
 		iconUrl,
 		overlay,
 		onClose,
@@ -123,6 +126,16 @@
 			: '[&_h2]:tracking-xl [&_h3]:tracking-lg'
 	);
 
+	function prepareLinkForNewTab(event: MouseEvent) {
+		if (!openLinksInNewTabs || view === 'original') return;
+		if (event.type === 'auxclick' && event.button !== 1) return;
+		if (!(event.target instanceof Element)) return;
+		const link = event.target.closest('a');
+		if (!link) return;
+		event.preventDefault();
+		window.open(link.href, '_blank', 'noopener,noreferrer');
+	}
+
 	// The Article views are fetched per Entry and per view, on demand: an Entry
 	// the reader passes through in the Feed's own text never touches the
 	// publisher. The remembered view, by contrast, is the reader's and outlives
@@ -157,6 +170,14 @@
 	// that; onMount alone gives the once-per-open timing for free.
 	onMount(() => {
 		if (overlay) backButton?.focus({ preventScroll: true });
+		const root = scroller;
+		if (!root) return;
+		root.addEventListener('click', prepareLinkForNewTab);
+		root.addEventListener('auxclick', prepareLinkForNewTab);
+		return () => {
+			root.removeEventListener('click', prepareLinkForNewTab);
+			root.removeEventListener('auxclick', prepareLinkForNewTab);
+		};
 	});
 	// titleScrolledAway drives the sticky bar's copy of the title: the title
 	// itself lives in the scrolling body, so once it leaves the pane the bar has

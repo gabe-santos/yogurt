@@ -81,6 +81,7 @@
   let collection = $state<Collection>({ type: "all" });
   let entryOrder = $state<EntryOrder>("newest");
   let loading = $state(true);
+  let settingsLoaded = $state(false);
 
   // feedsByID resolves an Entry's Feed Icon from data this page already
   // holds, so the list costs no extra request to show one.
@@ -149,6 +150,7 @@
   // closeCurrent and onKeydown.
   let readerMenuOpen = $state(false);
   let markOnOpen = $state(true);
+  let openLinksInNewTabs = $state(false);
   // The only thing this app knows about who is signed in is which server
   // they are signed in to: there are no accounts, just one password
   // (docs/adr/0002-single-user.md). Read at init, so it is empty while
@@ -288,6 +290,8 @@
       markOnOpen = settings.mark_on_open;
       entryView = settings.entry_view;
       readingFont = settings.reading_font;
+      openLinksInNewTabs = settings.open_links_in_new_tabs;
+      settingsLoaded = true;
       entries = page.entries;
       cursor = page.next_cursor;
       if (deepLink > 0) {
@@ -689,15 +693,18 @@
     markOnOpen = next.mark_on_open;
     entryView = next.entry_view;
     readingFont = next.reading_font;
+    openLinksInNewTabs = next.open_links_in_new_tabs;
     try {
       const stored = await setSettings(next);
       markOnOpen = stored.mark_on_open;
       entryView = stored.entry_view;
       readingFont = stored.reading_font;
+      openLinksInNewTabs = stored.open_links_in_new_tabs;
     } catch {
       markOnOpen = previous.mark_on_open;
       entryView = previous.entry_view;
       readingFont = previous.reading_font;
+      openLinksInNewTabs = previous.open_links_in_new_tabs;
       notice = "Could not update your settings.";
     }
   }
@@ -707,7 +714,16 @@
       mark_on_open: markOnOpen,
       entry_view: entryView,
       reading_font: readingFont,
+      open_links_in_new_tabs: openLinksInNewTabs,
     };
+  }
+
+  function toggleOpenLinksInNewTabs() {
+    const previous = preferences();
+    void savePreferences(
+      { ...previous, open_links_in_new_tabs: !openLinksInNewTabs },
+      previous,
+    );
   }
 
   function toggleMarkOnOpen() {
@@ -980,6 +996,14 @@
                      click before then would send this page's defaults as if
                      the reader had chosen them. The menu stays open on toggle
                      so the tick lands where the reader is looking. -->
+                <DropdownMenu.CheckboxItem
+                  checked={openLinksInNewTabs}
+                  disabled={!settingsLoaded}
+                  closeOnSelect={false}
+                  onCheckedChange={() => toggleOpenLinksInNewTabs()}
+                >
+                  Open links in new tabs
+                </DropdownMenu.CheckboxItem>
                 <DropdownMenu.CheckboxItem
                   checked={markOnOpen}
                   disabled={loading}
@@ -1271,6 +1295,7 @@
         busy={busy || pendingEntryIDs.has(selectedEntry.id)}
         view={entryView}
         {readingFont}
+        {openLinksInNewTabs}
         iconUrl={iconForEntry(selectedEntry)}
         overlay={narrow}
         onClose={clearSelection}

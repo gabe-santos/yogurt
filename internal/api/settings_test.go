@@ -46,6 +46,37 @@ func TestTheMarkOnOpenSettingPersists(t *testing.T) {
 	}
 }
 
+func TestTheOpenLinksInNewTabsSettingPersists(t *testing.T) {
+	h := loggedIn(t)
+
+	var body struct {
+		Settings struct {
+			OpenLinksInNewTabs bool `json:"open_links_in_new_tabs"`
+		} `json:"settings"`
+	}
+	h.Do(http.MethodGet, "/api/settings", nil).ExpectStatus(http.StatusOK).JSON(&body)
+	if body.Settings.OpenLinksInNewTabs {
+		t.Fatal("open-links-in-new-tabs is on by default")
+	}
+
+	h.Do(http.MethodPut, "/api/settings",
+		map[string]any{
+			"mark_on_open":           true,
+			"entry_view":             "feed",
+			"reading_font":           "sans",
+			"open_links_in_new_tabs": true,
+		}).
+		ExpectStatus(http.StatusOK).JSON(&body)
+	if !body.Settings.OpenLinksInNewTabs {
+		t.Fatal("turning open-links-in-new-tabs on was not reflected in the response")
+	}
+
+	h.Do(http.MethodGet, "/api/settings", nil).ExpectStatus(http.StatusOK).JSON(&body)
+	if !body.Settings.OpenLinksInNewTabs {
+		t.Fatal("open-links-in-new-tabs did not persist as on")
+	}
+}
+
 // The reader's choice between the Feed's own text, Reader View, and Original
 // View is a preference, not per-Entry state: it outlives the Entry it was made
 // on, and the application it was made in.
