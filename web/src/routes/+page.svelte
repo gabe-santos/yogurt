@@ -151,6 +151,9 @@
   let readerMenuOpen = $state(false);
   let markOnOpen = $state(true);
   let openLinksInNewTabs = $state(false);
+  let savedSettings: Settings;
+  let settingsWrite = Promise.resolve();
+  let settingsRevision = 0;
   // The only thing this app knows about who is signed in is which server
   // they are signed in to: there are no accounts, just one password
   // (docs/adr/0002-single-user.md). Read at init, so it is empty while
@@ -291,6 +294,7 @@
       entryView = settings.entry_view;
       readingFont = settings.reading_font;
       openLinksInNewTabs = settings.open_links_in_new_tabs;
+      savedSettings = settings;
       settingsLoaded = true;
       entries = page.entries;
       cursor = page.next_cursor;
@@ -687,26 +691,27 @@
     }
   }
 
-  // Preferences are declared whole, so every change sends every field rather
-  // than letting an omitted one fall back to a default the reader never chose.
-  async function savePreferences(next: Settings, previous: Settings) {
+  // Preferences are declared whole. Queue writes so a slower, older request
+  // cannot overwrite a later choice; keep the latest choice visible while it saves.
+  function savePreferences(next: Settings) {
+    const revision = ++settingsRevision;
     markOnOpen = next.mark_on_open;
     entryView = next.entry_view;
     readingFont = next.reading_font;
     openLinksInNewTabs = next.open_links_in_new_tabs;
-    try {
-      const stored = await setSettings(next);
-      markOnOpen = stored.mark_on_open;
-      entryView = stored.entry_view;
-      readingFont = stored.reading_font;
-      openLinksInNewTabs = stored.open_links_in_new_tabs;
-    } catch {
-      markOnOpen = previous.mark_on_open;
-      entryView = previous.entry_view;
-      readingFont = previous.reading_font;
-      openLinksInNewTabs = previous.open_links_in_new_tabs;
-      notice = "Could not update your settings.";
-    }
+    settingsWrite = settingsWrite.then(async () => {
+      try {
+        savedSettings = await setSettings(next);
+      } catch {
+        if (revision === settingsRevision) {
+          markOnOpen = savedSettings.mark_on_open;
+          entryView = savedSettings.entry_view;
+          readingFont = savedSettings.reading_font;
+          openLinksInNewTabs = savedSettings.open_links_in_new_tabs;
+        }
+        notice = "Could not update your settings.";
+      }
+    });
   }
 
   function preferences(): Settings {
@@ -719,26 +724,19 @@
   }
 
   function toggleOpenLinksInNewTabs() {
-    const previous = preferences();
-    void savePreferences(
-      { ...previous, open_links_in_new_tabs: !openLinksInNewTabs },
-      previous,
-    );
+    savePreferences({ ...preferences(), open_links_in_new_tabs: !openLinksInNewTabs });
   }
 
   function toggleMarkOnOpen() {
-    const previous = preferences();
-    void savePreferences({ ...previous, mark_on_open: !markOnOpen }, previous);
+    savePreferences({ ...preferences(), mark_on_open: !markOnOpen });
   }
 
   function chooseEntryView(view: EntryView) {
-    const previous = preferences();
-    void savePreferences({ ...previous, entry_view: view }, previous);
+    savePreferences({ ...preferences(), entry_view: view });
   }
 
   function chooseReadingFont(font: ReadingFont) {
-    const previous = preferences();
-    void savePreferences({ ...previous, reading_font: font }, previous);
+    savePreferences({ ...preferences(), reading_font: font });
   }
 
   function removeFeed(feed: Feed) {

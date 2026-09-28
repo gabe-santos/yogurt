@@ -4,6 +4,8 @@ A modern, minimal feed reader.
 
 Run it as a [Server](#self-hosting) on a machine you control. A Desktop App is coming later.
 
+In the footer menu, **Open links in new tabs** keeps Yogurt open when following links in Feed View or Reader View. The preference is saved; Original View keeps the publisher's link behavior.
+
 ## Self-hosting
 
 You need a computer or VPS with [Docker](https://docs.docker.com/get-docker/) installed. Compose comes with it.

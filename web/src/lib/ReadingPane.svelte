@@ -128,7 +128,7 @@
 
 	function prepareLinkForNewTab(event: MouseEvent) {
 		if (!openLinksInNewTabs || view === 'original') return;
-		if (event.type === 'auxclick' && event.button !== 1) return;
+		if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
 		if (!(event.target instanceof Element)) return;
 		const link = event.target.closest('a');
 		if (!link) return;
@@ -173,10 +173,8 @@
 		const root = scroller;
 		if (!root) return;
 		root.addEventListener('click', prepareLinkForNewTab);
-		root.addEventListener('auxclick', prepareLinkForNewTab);
 		return () => {
 			root.removeEventListener('click', prepareLinkForNewTab);
-			root.removeEventListener('auxclick', prepareLinkForNewTab);
 		};
 	});
 	// titleScrolledAway drives the sticky bar's copy of the title: the title

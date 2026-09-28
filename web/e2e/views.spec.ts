@@ -269,6 +269,34 @@ test('the reader opens Feed View and Reader View links in new tabs when enabled'
   await feedPage.close();
   expect(page.url()).not.toContain('/feed-link');
 
+  const shiftPrevented = page.evaluate(
+    () =>
+      new Promise<boolean>((resolve) => {
+        document.addEventListener(
+          'click',
+          (event) => resolve(event.defaultPrevented),
+          { once: true },
+        );
+      }),
+  );
+  await feedLink.click({ modifiers: ['Shift'] });
+  expect(await shiftPrevented).toBe(false);
+  expect(page.url()).not.toContain('/feed-link');
+
+  const middlePrevented = page.evaluate(
+    () =>
+      new Promise<boolean>((resolve) => {
+        document.addEventListener(
+          'auxclick',
+          (event) => resolve(event.defaultPrevented),
+          { once: true },
+        );
+      }),
+  );
+  await feedLink.click({ button: 'middle' });
+  expect(await middlePrevented).toBe(false);
+  expect(page.url()).not.toContain('/feed-link');
+
   await page.getByTestId('view-reader').click();
   await expect(prose).toContainText('Reader link');
   const readerLink = prose.getByRole('link', { name: 'Reader link' });
@@ -342,4 +370,75 @@ test('the reader opens Feed View and Reader View links in new tabs when enabled'
   const currentTabNavigation = page.waitForURL(publisherURL + '/reader-link');
   await disabledReaderLink.click();
   await currentTabNavigation;
+});
+
+test('rapid view and link changes preserve the latest preferences', async ({
+  page,
+}) => {
+  await page.goto('/login');
+  await page.getByLabel('Password').fill(password);
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByTestId('entry')).toHaveCount(2);
+  await page.getByTestId('entry').nth(1).click();
+  await expect(page.getByTestId('view-reader')).toHaveAttribute(
+    'data-state',
+    'active',
+  );
+
+  let releaseFirst!: () => void;
+  const firstHeld = new Promise<void>((resolve) => (releaseFirst = resolve));
+  let firstArrived!: () => void;
+  const firstRequest = new Promise<void>((resolve) => (firstArrived = resolve));
+  let secondArrived!: () => void;
+  const secondRequest = new Promise<void>(
+    (resolve) => (secondArrived = resolve),
+  );
+  let held = false;
+  await page.route('**/api/settings', async (route) => {
+    if (route.request().method() === 'PUT') {
+      if (!held) {
+        held = true;
+        firstArrived();
+        await firstHeld;
+      } else {
+        secondArrived();
+      }
+    }
+    await route.continue();
+  });
+
+  await page.getByTestId('view-feed').click();
+  await firstRequest;
+  await page.getByTestId('reader-menu').click();
+  const openLinks = page.getByRole('menuitemcheckbox', {
+    name: 'Open links in new tabs',
+  });
+  const newerSaved = page.waitForResponse(
+    (response) =>
+      response.url().endsWith('/api/settings') &&
+      response.request().method() === 'PUT' &&
+      response.request().postDataJSON().open_links_in_new_tabs === true,
+  );
+  await openLinks.click();
+  await expect(openLinks).toBeChecked();
+  const overlapping = await Promise.race([
+    secondRequest.then(() => true),
+    page.waitForTimeout(500).then(() => false),
+  ]);
+  if (overlapping) await newerSaved;
+  const olderSaved = page.waitForResponse(
+    (response) =>
+      response.url().endsWith('/api/settings') &&
+      response.request().method() === 'PUT' &&
+      response.request().postDataJSON().open_links_in_new_tabs === false,
+  );
+  releaseFirst();
+  await olderSaved;
+  if (!overlapping) await newerSaved;
+  await expect(openLinks).toBeChecked();
+  await page.reload();
+  await page.getByTestId('reader-menu').click();
+  await expect(
+    page.getByRole('menuitemcheckbox', { name: 'Open links in new tabs' }),
+  ).toBeChecked();
 });
