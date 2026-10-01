@@ -16,4 +16,5 @@
 # Local agent tooling
 /.agents/
 /.claude/
+/.codex/
 /learn/
