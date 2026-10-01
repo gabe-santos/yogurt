@@ -148,7 +148,7 @@
   // has to be told independently or Escape also runs the app's own "close
   // whatever is open" shortcut on top of the menu's own close — see
   // closeCurrent and onKeydown.
-  let readerMenuOpen = $state(false);
+  let yogurtMenuOpen = $state(false);
   let markOnOpen = $state(true);
   let openLinksInNewTabs = $state(false);
   let savedSettings: Settings;
@@ -780,8 +780,8 @@
   }
 
   function closeCurrent() {
-    if (readerMenuOpen) {
-      readerMenuOpen = false;
+    if (yogurtMenuOpen) {
+      yogurtMenuOpen = false;
     } else if (searchOpen) {
       searchOpen = false;
     } else if (helpOpen) {
@@ -841,7 +841,7 @@
           addFeedOpen ||
           editingFeed ||
           removal ||
-          readerMenuOpen) &&
+          yogurtMenuOpen) &&
         binding.action !== "close"
       ) {
         return;
@@ -985,10 +985,10 @@
     <Sidebar.Footer>
       <Sidebar.Menu>
         <Sidebar.MenuItem>
-          <DropdownMenu.Root bind:open={readerMenuOpen}>
+          <DropdownMenu.Root bind:open={yogurtMenuOpen}>
             <DropdownMenu.Trigger>
               {#snippet child({ props })}
-                <Sidebar.MenuButton {...props} size="lg" data-testid="reader-menu">
+                <Sidebar.MenuButton {...props} size="lg" data-testid="yogurt-menu">
                   <span
                     class="flex aspect-square size-8 shrink-0 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground"
                   >
@@ -1004,7 +1004,7 @@
                 </Sidebar.MenuButton>
               {/snippet}
             </DropdownMenu.Trigger>
-            <DropdownMenu.Content side="top" align="start" data-testid="reader-menu-content">
+            <DropdownMenu.Content side="top" align="start" data-testid="yogurt-menu-content">
               <DropdownMenu.Group>
                 <!-- A preference is declared whole, so no control that writes
                      one is live until the stored preferences have arrived: a

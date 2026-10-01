@@ -235,7 +235,7 @@ test('the reader opens Feed View and Reader View links in new tabs when enabled'
   await page.getByTestId('entry').nth(1).click();
   await expect(page.getByTestId('reading-pane')).toBeVisible();
 
-  await page.getByTestId('reader-menu').click();
+  await page.getByTestId('yogurt-menu').click();
   const openLinks = page.getByRole('menuitemcheckbox', {
     name: 'Open links in new tabs',
   });
@@ -250,7 +250,7 @@ test('the reader opens Feed View and Reader View links in new tabs when enabled'
   const prose = page.getByTestId('reading-prose');
   const feedLink = prose.getByRole('link', { name: 'Feed link' });
   await expect(feedLink).not.toHaveAttribute('target', '_blank');
-  await page.getByTestId('reader-menu').click();
+  await page.getByTestId('yogurt-menu').click();
   const settingsSaved = page.waitForResponse(
     (response) =>
       response.url().endsWith('/api/settings') &&
@@ -327,7 +327,7 @@ test('the reader opens Feed View and Reader View links in new tabs when enabled'
   await page.getByTestId('view-feed').click();
   await page.reload();
   await expect(page.getByTestId('reading-pane')).toBeVisible();
-  await page.getByTestId('reader-menu').click();
+  await page.getByTestId('yogurt-menu').click();
   await expect(
     page.getByRole('menuitemcheckbox', {
       name: 'Open links in new tabs',
@@ -344,7 +344,7 @@ test('the reader opens Feed View and Reader View links in new tabs when enabled'
     'active',
   );
 
-  await page.getByTestId('reader-menu').click();
+  await page.getByTestId('yogurt-menu').click();
   const disabledAgain = page.waitForResponse(
     (response) =>
       response.url().endsWith('/api/settings') &&
@@ -409,7 +409,7 @@ test('rapid view and link changes preserve the latest preferences', async ({
 
   await page.getByTestId('view-feed').click();
   await firstRequest;
-  await page.getByTestId('reader-menu').click();
+  await page.getByTestId('yogurt-menu').click();
   const openLinks = page.getByRole('menuitemcheckbox', {
     name: 'Open links in new tabs',
   });
@@ -437,7 +437,7 @@ test('rapid view and link changes preserve the latest preferences', async ({
   if (!overlapping) await newerSaved;
   await expect(openLinks).toBeChecked();
   await page.reload();
-  await page.getByTestId('reader-menu').click();
+  await page.getByTestId('yogurt-menu').click();
   await expect(
     page.getByRole('menuitemcheckbox', { name: 'Open links in new tabs' }),
   ).toBeChecked();

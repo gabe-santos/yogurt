@@ -10,8 +10,8 @@ test('the reader creates, sees the last use of, and revokes a device token', asy
   await page.getByRole('button', { name: 'Sign in' }).click();
   await expect(page.getByRole('button', { name: 'Add Feed' })).toBeVisible();
 
-  // Device tokens live in the menu at the foot of the Collection List.
-  await page.getByTestId('reader-menu').click();
+  // Device tokens live in the Yogurt Menu at the foot of the Collection List.
+  await page.getByTestId('yogurt-menu').click();
   await page.getByRole('menuitem', { name: 'Device tokens' }).click();
   const dialog = page.getByTestId('device-tokens-dialog');
   await expect(dialog).toBeVisible();
@@ -43,7 +43,7 @@ test('the reader creates, sees the last use of, and revokes a device token', asy
 
   await page.getByRole('button', { name: 'Close' }).first().click();
   await expect(dialog).toBeHidden();
-  await page.getByTestId('reader-menu').click();
+  await page.getByTestId('yogurt-menu').click();
   await page.getByRole('menuitem', { name: 'Device tokens' }).click();
   await expect(dialog.getByText('desktop shell')).toBeVisible();
   await expect(dialog.getByText('Never used')).toBeHidden();
@@ -74,8 +74,8 @@ test('the footer menu blocks background shortcuts while open, and Escape closes 
   // file (see subscribe.spec.ts), so this journey stays self-contained by
   // never touching it, and exercises the 'a' binding instead, which needs
   // no Feed to fire.
-  const menu = page.getByTestId('reader-menu');
-  const content = page.getByTestId('reader-menu-content');
+  const menu = page.getByTestId('yogurt-menu');
+  const content = page.getByTestId('yogurt-menu-content');
   const addFeedDialog = page.getByTestId('add-feed-dialog');
   await menu.click();
   await expect(content).toBeVisible();

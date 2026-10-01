@@ -20,7 +20,7 @@ test('the reader signs in, stays signed in across a reload, and signs out', asyn
   await page.reload();
   await expect(page.getByRole('button', { name: 'Add Feed' })).toBeVisible();
 
-  await page.getByTestId('reader-menu').click();
+  await page.getByTestId('yogurt-menu').click();
   await page.getByRole('menuitem', { name: 'Sign out' }).click();
   await expect(page).toHaveURL(/\/login$/);
 
