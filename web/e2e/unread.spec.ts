@@ -67,11 +67,13 @@ test('Unread holds every unread Entry and then holds still', async ({
     'Keeping a fire alive overnight.',
   );
 
-  // A reload opens on All Feeds, as it always has, with the list starting at
-  // the Entry the reader was on.
+  // A reload opens on All Feeds, as it always has, with the Entry the reader
+  // was on still open — and every Entry newer than it still listed above it,
+  // not cut off by a list that starts at the open one. See issue #68.
   await page.reload();
   await expect(page.getByTestId('collection')).toHaveText('All Feeds');
-  await expect(entries).toHaveCount(1);
+  await expect(entries).toHaveCount(2);
+  await expect(entries.nth(1)).toHaveAttribute('aria-current', 'true');
   await expect(page.getByTestId('entry-content')).toContainText(
     'Keeping a fire alive overnight.',
   );

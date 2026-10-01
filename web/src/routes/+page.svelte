@@ -272,10 +272,14 @@
     return () => observer.disconnect();
   });
 
+  // How many pages of the list a deep-linked Entry is looked for in.
+  const deepLinkPages = 5;
+
   onMount(async () => {
-    // An Entry named in the address bar is restored in place: the list loads
-    // around it rather than from the top, so a reload leaves the reader where
-    // they were with the rest of the list still under them.
+    // An Entry named in the address bar is restored in place, but the list
+    // still loads from the top: starting it at that Entry would hide every
+    // newer one, as on coming back from a followed link. Pages are read down
+    // to the Entry; one further down than that is not reopened.
     const deepLink = Number(
       new URL(window.location.href).searchParams.get("entry") ?? "",
     );
@@ -285,7 +289,6 @@
         getSettings(),
         listEntries({
           ...selectionQuery(),
-          ...(deepLink > 0 ? { around: deepLink } : {}),
           order: entryOrder,
         }),
       ]);
@@ -298,12 +301,18 @@
       settingsLoaded = true;
       entries = page.entries;
       cursor = page.next_cursor;
-      if (deepLink > 0) {
-        const index = entries.findIndex((entry) => entry.id === deepLink);
-        if (index >= 0) {
-          selectedIndex = index;
-          maybeMarkOnSelect(index);
-        }
+      let index =
+        deepLink > 0 ? entries.findIndex((entry) => entry.id === deepLink) : -1;
+      // ponytail: capped at deepLinkPages; past it the reader lands at the top.
+      for (let read = 1; index < 0 && deepLink > 0 && cursor && read < deepLinkPages; read++) {
+        const more = await listEntries({ ...selectionQuery(), cursor, order: entryOrder });
+        entries = [...entries, ...more.entries];
+        cursor = more.next_cursor;
+        index = entries.findIndex((entry) => entry.id === deepLink);
+      }
+      if (index >= 0) {
+        selectedIndex = index;
+        maybeMarkOnSelect(index);
       }
     } finally {
       loading = false;
@@ -856,7 +865,15 @@
   });
 </script>
 
-<svelte:window onkeydown={onKeydown} />
+<!-- A page the browser restores from its back/forward cache runs no onMount,
+     so the Feeds and their unread counts are refetched rather than shown as
+     they stood when the reader left. -->
+<svelte:window
+  onkeydown={onKeydown}
+  onpageshow={(event) => {
+    if (event.persisted) refreshCounts().catch(reportError);
+  }}
+/>
 
 <Sidebar.Provider>
   <Sidebar.Root>
