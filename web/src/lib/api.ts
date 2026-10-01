@@ -173,11 +173,16 @@ export async function logOut(): Promise<void> {
   await send('DELETE', '/session', 'Could not sign out');
 }
 
-/** isSignedIn reports whether the browser holds a live session. */
-export async function isSignedIn(): Promise<boolean> {
+/** Session is a live session, and the version of the server it is on. */
+export interface Session {
+  version: string;
+}
+
+/** getSession is the browser's live session, or null without one. */
+export async function getSession(): Promise<Session | null> {
   const response = await request('GET', '/session');
   if (response.status === 401) {
-    return false;
+    return null;
   }
   if (!response.ok) {
     throw new ApiError(
@@ -185,7 +190,7 @@ export async function isSignedIn(): Promise<boolean> {
       await errorMessage(response, 'Could not read session'),
     );
   }
-  return true;
+  return (await response.json()) as Session;
 }
 
 /** listFeeds is the reader's whole collection, by title. */

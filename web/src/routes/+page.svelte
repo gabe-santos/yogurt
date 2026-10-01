@@ -62,6 +62,7 @@
   import SearchDialog from "$lib/SearchDialog.svelte";
   import { bindings, matches } from "$lib/keys";
   import type { Action } from "$lib/keys";
+  import type { PageProps } from "./$types";
 
   /** Collection is what the Collection List selects: every Feed, everything
    * Unread, everything Starred, the archive, or one Feed — see
@@ -159,6 +160,7 @@
   // (docs/adr/0002-single-user.md). Read at init, so it is empty while
   // prerendering and filled on the client.
   const serverHost = browser ? location.host : "";
+  let { data }: PageProps = $props();
 
   // The view an Entry opens in belongs to the reader, not to an Entry: it is
   // stored on the server, so it survives both moving to the next Entry and
@@ -1047,6 +1049,15 @@
                   Sign out
                 </DropdownMenu.Item>
               </DropdownMenu.Group>
+              <DropdownMenu.Separator />
+              <!-- Which build this server runs, so the reader can tell whether
+                   it is behind the latest release. -->
+              <DropdownMenu.Label
+                class="text-xs font-normal text-muted-foreground"
+                data-testid="yogurt-version"
+              >
+                Yogurt {data.version}
+              </DropdownMenu.Label>
             </DropdownMenu.Content>
           </DropdownMenu.Root>
         </Sidebar.MenuItem>

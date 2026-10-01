@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+
+	"github.com/gabe-santos/yogurt/internal/version"
 )
 
 // SessionCookie is the name of the browser's session cookie.
@@ -68,8 +70,10 @@ func (h *Handler) logout(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// currentSession also names this build, so the Reader can tell whether their
+// Instance is behind the latest release.
 func (h *Handler) currentSession(w http.ResponseWriter, r *http.Request) {
-	h.writeJSON(w, r, http.StatusOK, map[string]bool{"authenticated": true})
+	h.writeJSON(w, r, http.StatusOK, map[string]any{"authenticated": true, "version": version.Version})
 }
 
 // setSessionCookie writes the browser's credential. Its attributes live in one
