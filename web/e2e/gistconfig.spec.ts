@@ -60,3 +60,56 @@ test('the reader configures Gists in the Yogurt Menu, the key stays hidden, and 
     await clearAIConfig(page);
   }
 });
+
+test('a slow Save keeps Turn off Gists disabled, so a delayed response cannot undo a clear', async ({
+  page,
+}) => {
+  await page.goto('/login');
+  await page.getByLabel('Password').fill(password);
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByRole('button', { name: 'Add Feed' })).toBeVisible();
+
+  try {
+    await page.getByTestId('yogurt-menu').click();
+    await page.getByRole('menuitem', { name: 'Configure Gists' }).click();
+    const dialog = page.getByTestId('gist-config-dialog');
+    const saveButton = dialog.getByRole('button', { name: 'Save' });
+    const turnOffButton = dialog.getByRole('button', {
+      name: 'Turn off Gists',
+    });
+
+    // Hold the PUT so Save is still in flight when we try Turn off: without
+    // cross-disabling, a reader could clear the config and then have this
+    // delayed response resurrect it.
+    const held = Promise.withResolvers<void>();
+    await page.route('**/api/ai', async (route) => {
+      if (route.request().method() !== 'PUT') return route.continue();
+      await held.promise;
+      await route.continue();
+    });
+
+    await dialog
+      .getByLabel('Endpoint URL')
+      .fill('http://localhost:4272/v1/chat/completions');
+    await dialog.getByLabel('Model').fill('test-model');
+    await dialog.getByLabel('API key').fill('sk-secret');
+    await saveButton.click();
+
+    // While the PUT is held, neither button can start a second request.
+    await expect(saveButton).toBeDisabled();
+    await expect(turnOffButton).toBeDisabled();
+
+    held.resolve();
+    await expect(dialog.getByText('An API key is stored.')).toBeVisible();
+    await expect(turnOffButton).toBeEnabled();
+
+    // Now that Save has finished, Turn off runs and its result stands.
+    await turnOffButton.click();
+    await expect(dialog.getByText('No API key is stored.')).toBeVisible();
+    await expect(dialog.getByLabel('Endpoint URL')).toHaveValue('');
+
+    await page.getByRole('button', { name: 'Close' }).first().click();
+  } finally {
+    await clearAIConfig(page);
+  }
+});

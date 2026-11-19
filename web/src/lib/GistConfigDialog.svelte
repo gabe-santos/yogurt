@@ -40,7 +40,7 @@
 
 	async function submit(event: SubmitEvent) {
 		event.preventDefault();
-		if (submitting) return;
+		if (submitting || clearing) return;
 		submitting = true;
 		error = '';
 		try {
@@ -59,7 +59,7 @@
 	}
 
 	async function turnOff() {
-		if (clearing) return;
+		if (submitting || clearing) return;
 		clearing = true;
 		error = '';
 		try {
@@ -74,6 +74,7 @@
 			clearing = false;
 		}
 	}
+
 </script>
 
 <Dialog.Root open onOpenChange={(open) => !open && onClose()}>
@@ -131,7 +132,7 @@
 				<Button
 					type="button"
 					variant="outline"
-					disabled={!loaded || clearing}
+					disabled={!loaded || submitting || clearing}
 					onclick={turnOff}
 				>
 					{#if clearing}
@@ -139,7 +140,7 @@
 					{/if}
 					Turn off Gists
 				</Button>
-				<Button type="submit" disabled={!loaded || submitting}>
+				<Button type="submit" disabled={!loaded || submitting || clearing}>
 					{#if submitting}
 						<LoaderCircleIcon class="animate-spin" />
 					{/if}
