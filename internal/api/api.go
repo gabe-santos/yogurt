@@ -62,6 +62,13 @@ func New(deps Deps) *Handler {
 	h.mux.Handle("GET /api/settings", h.requireAuth(http.HandlerFunc(h.getSettings)))
 	h.mux.Handle("PUT /api/settings", h.requireAuth(http.HandlerFunc(h.setSettings)))
 
+	// The Gist model configuration is deliberately separate from the
+	// ordinary settings above: it holds a credential the settings endpoints
+	// must never return or overwrite.
+	h.mux.Handle("GET /api/ai", h.requireAuth(http.HandlerFunc(h.getAI)))
+	h.mux.Handle("PUT /api/ai", h.requireAuth(http.HandlerFunc(h.setAI)))
+	h.mux.Handle("DELETE /api/ai", h.requireAuth(http.HandlerFunc(h.deleteAI)))
+
 	h.mux.Handle("POST /api/opml/import", h.requireAuth(http.HandlerFunc(h.importOPML)))
 	h.mux.Handle("GET /api/opml/export", h.requireAuth(http.HandlerFunc(h.exportOPML)))
 

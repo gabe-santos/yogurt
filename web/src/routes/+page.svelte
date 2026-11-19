@@ -54,10 +54,12 @@
   import BookOpenIcon from "@lucide/svelte/icons/book-open";
   import CheckCheckIcon from "@lucide/svelte/icons/check-check";
   import RefreshCwIcon from "@lucide/svelte/icons/refresh-cw";
+  import SparklesIcon from "@lucide/svelte/icons/sparkles";
   import ConfirmDialog from "$lib/ConfirmDialog.svelte";
   import EntryRow from "$lib/EntryRow.svelte";
   import FeedRow from "$lib/FeedRow.svelte";
   import DeviceTokensDialog from "$lib/DeviceTokensDialog.svelte";
+  import GistConfigDialog from "$lib/GistConfigDialog.svelte";
   import HelpDialog from "$lib/HelpDialog.svelte";
   import SearchDialog from "$lib/SearchDialog.svelte";
   import { bindings, matches } from "$lib/keys";
@@ -143,6 +145,7 @@
   let selectionRestored = $state(false);
   let helpOpen = $state(false);
   let deviceTokensOpen = $state(false);
+  let gistConfigOpen = $state(false);
   let searchOpen = $state(false);
   // The footer menu is a bits-ui DropdownMenu: it closes itself on Escape
   // without telling the window `keydown` listener below, so that listener
@@ -790,6 +793,8 @@
       helpOpen = false;
     } else if (deviceTokensOpen) {
       deviceTokensOpen = false;
+    } else if (gistConfigOpen) {
+      gistConfigOpen = false;
     } else if (addFeedOpen) {
       addFeedOpen = false;
     } else if (editingFeed) {
@@ -840,6 +845,7 @@
         (helpOpen ||
           searchOpen ||
           deviceTokensOpen ||
+          gistConfigOpen ||
           addFeedOpen ||
           editingFeed ||
           removal ||
@@ -1040,6 +1046,10 @@
                 <DropdownMenu.Item onSelect={() => (deviceTokensOpen = true)}>
                   <KeyRoundIcon strokeWidth={1.5} />
                   Device tokens
+                </DropdownMenu.Item>
+                <DropdownMenu.Item onSelect={() => (gistConfigOpen = true)}>
+                  <SparklesIcon strokeWidth={1.5} />
+                  Configure Gists
                 </DropdownMenu.Item>
               </DropdownMenu.Group>
               <DropdownMenu.Separator />
@@ -1383,6 +1393,10 @@
 
 {#if deviceTokensOpen}
   <DeviceTokensDialog onClose={() => (deviceTokensOpen = false)} />
+{/if}
+
+{#if gistConfigOpen}
+  <GistConfigDialog onClose={() => (gistConfigOpen = false)} />
 {/if}
 
 {#if searchOpen}

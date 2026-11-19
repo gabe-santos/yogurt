@@ -408,6 +408,50 @@ export async function setSettings(settings: Settings): Promise<Settings> {
   return body.settings;
 }
 
+/** AIConfig is the Gist model configuration, stored separately from the
+ * reader's ordinary Settings (ADR-0018). It never carries the API key
+ * itself, only whether one is stored. */
+export interface AIConfig {
+  url: string;
+  model: string;
+  has_key: boolean;
+}
+
+/** getAIConfig reads the Gist model configuration. */
+export async function getAIConfig(): Promise<AIConfig> {
+  const response = await send(
+    'GET',
+    '/ai',
+    'Could not load your Gist configuration',
+  );
+  return (await response.json()) as AIConfig;
+}
+
+/** AIConfigUpdate is a PUT /api/ai body. Omitting key keeps the stored one;
+ * passing one, even empty, replaces it. */
+export interface AIConfigUpdate {
+  url: string;
+  model: string;
+  key?: string;
+}
+
+/** setAIConfig declares the endpoint URL and model, replacing whatever they
+ * held. */
+export async function setAIConfig(config: AIConfigUpdate): Promise<AIConfig> {
+  const response = await send(
+    'PUT',
+    '/ai',
+    'Could not update your Gist configuration',
+    config,
+  );
+  return (await response.json()) as AIConfig;
+}
+
+/** clearAIConfig removes the URL, the model and the key, turning Gists off. */
+export async function clearAIConfig(): Promise<void> {
+  await send('DELETE', '/ai', 'Could not clear your Gist configuration');
+}
+
 /** DeviceToken is a named, hashed-at-rest credential for a non-browser
  * client. last_used_at is null until the token first authenticates a
  * request. */
