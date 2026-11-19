@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount, untrack } from 'svelte';
-	import { prefersReducedMotion } from 'svelte/motion';
 	import { fly } from 'svelte/transition';
+	import { prefersReducedMotion } from 'svelte/motion';
 	import { expoOut } from 'svelte/easing';
 	import {
 		getArticle,
@@ -10,7 +10,8 @@
 		type Entry,
 		type EntryView,
 		type ReadingFont,
-		type Original
+		type Original,
+		type Gist
 	} from '$lib/api';
 	import { formatPublished } from '$lib/format';
 	import { Button } from '$lib/components/ui/button';
@@ -23,11 +24,13 @@
 	import ArchiveRestoreIcon from '@lucide/svelte/icons/archive-restore';
 	import ArrowLeftIcon from '@lucide/svelte/icons/arrow-left';
 	import BookOpenIcon from '@lucide/svelte/icons/book-open';
+	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
 	import CircleCheckIcon from '@lucide/svelte/icons/circle-check';
 	import CircleIcon from '@lucide/svelte/icons/circle';
 	import ExternalLinkIcon from '@lucide/svelte/icons/external-link';
 	import GlobeIcon from '@lucide/svelte/icons/globe';
 	import RssIcon from '@lucide/svelte/icons/rss';
+	import SparklesIcon from '@lucide/svelte/icons/sparkles';
 	import StarIcon from '@lucide/svelte/icons/star';
 
 	interface Props {
@@ -50,6 +53,16 @@
 		 * both panes are measured against; the CSS here asks the same question
 		 * with `@3xl`. */
 		overlay: boolean;
+		/** gistsEnabled hides the whole Gist block until the Reader configures
+		 * a model (ADR-0018); the page derives it from GET /api/ai. */
+		gistsEnabled: boolean;
+		/** gistStatus, gist, gistError and gistCollapsed describe the open
+		 * Entry's Gist. The page owns them — it is the one place that both the
+		 * `g` keybinding and this pane's own controls can reach. */
+		gistStatus: 'idle' | 'loading' | 'shown' | 'error';
+		gist: Gist | null;
+		gistError: string;
+		gistCollapsed: boolean;
 		/** onClose backs out of the overlay the pane becomes on a narrow
 		 * screen. On a wide one the pane is furniture and nothing calls it. */
 		onClose: () => void;
@@ -58,6 +71,8 @@
 		onToggleRead: () => void;
 		onToggleStar: () => void;
 		onToggleArchive: () => void;
+		onRequestGist: () => void;
+		onToggleGistCollapse: () => void;
 	}
 
 	const {
@@ -68,12 +83,19 @@
 		openLinksInNewTabs,
 		iconUrl,
 		overlay,
+		gistsEnabled,
+		gistStatus,
+		gist,
+		gistError,
+		gistCollapsed,
 		onClose,
 		onView,
 		onFontChange,
 		onToggleRead,
 		onToggleStar,
-		onToggleArchive
+		onToggleArchive,
+		onRequestGist,
+		onToggleGistCollapse
 	}: Props = $props();
 
 	// Only the overlay has somewhere to arrive from and leave to. The enter is
@@ -134,6 +156,17 @@
 		if (!link) return;
 		event.preventDefault();
 		window.open(link.href, '_blank', 'noopener,noreferrer');
+	}
+
+	// gistLines reduces a Gist's reply to plain list items: split on its own
+	// line breaks, with whatever bullet marker the model used stripped, never
+	// interpreted as HTML or Markdown — a hostile Article cannot get a link or
+	// markup rendered from its own reply.
+	function gistLines(text: string): string[] {
+		return text
+			.split('\n')
+			.map((line) => line.trim().replace(/^(?:[-*•●▪]+|\d+[.)])\s+/, ''))
+			.filter((line) => line.length > 0);
 	}
 
 	// The Article views are fetched per Entry and per view, on demand: an Entry
@@ -632,6 +665,91 @@
 					<span class="shrink-0">{formatPublished(entry.published_at)}</span>
 				</p>
 			</div>
+
+			<!-- The Gist block sits above every view, never as a fourth one of
+			     its own (GABE-201/203): a stored Gist is checked for on open and
+			     shown without a model call; making or regenerating one only
+			     happens when the Reader asks. Output is rendered as plain list
+			     items only — gistLines never runs through {@html} — so an
+			     Article trying to steer the model cannot get markup or a
+			     clickable link out of its own reply. -->
+			{#if gistsEnabled}
+				<section
+					aria-label="Gist"
+					data-testid="gist-block"
+					class="flex flex-col gap-3 rounded-md border border-border bg-muted/40 p-4"
+				>
+					<div class="flex items-center justify-between gap-2">
+						{#if gistStatus === 'shown'}
+							<button
+								type="button"
+								class="flex items-center gap-1.5 text-sm font-medium"
+								data-testid="gist-toggle"
+								aria-expanded={!gistCollapsed}
+								onclick={onToggleGistCollapse}
+							>
+								<SparklesIcon class="size-4" aria-hidden="true" />
+								Gist
+								<ChevronDownIcon
+									class="size-3.5 transition-transform {gistCollapsed ? '-rotate-90' : ''}"
+									aria-hidden="true"
+								/>
+							</button>
+						{:else}
+							<span class="flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
+								<SparklesIcon class="size-4" aria-hidden="true" />
+								Gist
+							</span>
+						{/if}
+
+						{#if gistStatus === 'idle'}
+							<Button variant="outline" size="sm" data-testid="gist-request" onclick={onRequestGist}>
+								Get Gist
+							</Button>
+						{:else if gistStatus === 'shown'}
+							<Button variant="ghost" size="sm" data-testid="gist-regenerate" onclick={onRequestGist}>
+								Regenerate
+							</Button>
+						{/if}
+					</div>
+
+					<!-- A polite live region: the Gist block's loading, completion
+					     and error states are announced without moving focus. -->
+					<div aria-live="polite" class="sr-only">
+						{#if gistStatus === 'loading'}
+							Writing your Gist…
+						{:else if gistStatus === 'shown'}
+							Gist ready.
+						{:else if gistStatus === 'error'}
+							{gistError}
+						{/if}
+					</div>
+
+					{#if gistStatus === 'loading'}
+						<div class="flex flex-col gap-2" data-testid="gist-loading">
+							<Skeleton class="h-3.5 w-full rounded-md" />
+							<Skeleton class="h-3.5 w-11/12 rounded-md" />
+							<Skeleton class="h-3.5 w-4/5 rounded-md" />
+						</div>
+					{:else if gistStatus === 'error'}
+						<div class="flex flex-col items-start gap-2">
+							<p class="text-sm text-destructive" data-testid="gist-error">{gistError}</p>
+							<Button variant="outline" size="sm" data-testid="gist-retry" onclick={onRequestGist}>
+								Retry
+							</Button>
+						</div>
+					{:else if gistStatus === 'shown' && gist && !gistCollapsed}
+						<ul class="flex flex-col gap-1.5 text-sm" data-testid="gist-bullets">
+							{#each gistLines(gist.text) as line, index (index)}
+								<li>{line}</li>
+							{/each}
+						</ul>
+						<p class="text-xs text-muted-foreground" data-testid="gist-attribution">
+							From the {gist.source === 'article' ? 'Article' : 'Feed'} · {gist.model}
+						</p>
+					{/if}
+				</section>
+			{/if}
 
 			<div
 				data-testid="reading-prose"

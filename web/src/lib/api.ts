@@ -376,6 +376,44 @@ export async function getOriginal(entryId: number): Promise<Original> {
   return body.original;
 }
 
+/** Gist is a reader-requested condensation of an Entry's Article, or of its
+ * own body when the Article cannot be reduced, written by the configured
+ * Gist model (ADR-0018). */
+export interface Gist {
+  text: string;
+  source: 'article' | 'feed';
+  model: string;
+  created_at: string;
+}
+
+/** getGist reads an Entry's stored Gist, making no model call. Null when the
+ * Entry has no stored Gist, or when Gists are turned off. */
+export async function getGist(entryId: number): Promise<Gist | null> {
+  const response = await request('GET', `/entries/${entryId}/gist`);
+  if (response.status === 404) {
+    return null;
+  }
+  if (!response.ok) {
+    throw new ApiError(
+      response.status,
+      await errorMessage(response, 'Could not load that Gist'),
+    );
+  }
+  const body = (await response.json()) as { gist: Gist };
+  return body.gist;
+}
+
+/** requestGist makes or regenerates an Entry's Gist. */
+export async function requestGist(entryId: number): Promise<Gist> {
+  const response = await send(
+    'POST',
+    `/entries/${entryId}/gist`,
+    'Could not write that Gist',
+  );
+  const body = (await response.json()) as { gist: Gist };
+  return body.gist;
+}
+
 /** markEntriesRead declares Read for exactly one filter and scope. */
 export async function markEntriesRead(
   options: EntrySelectionOptions,

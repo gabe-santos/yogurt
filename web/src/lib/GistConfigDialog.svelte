@@ -4,14 +4,24 @@
 	import { Input } from '$lib/components/ui/input';
 	import * as Field from '$lib/components/ui/field';
 	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
-	import { clearAIConfig, describeError, getAIConfig, setAIConfig } from '$lib/api';
+	import {
+		clearAIConfig,
+		describeError,
+		getAIConfig,
+		setAIConfig,
+		type AIConfig,
+	} from '$lib/api';
 	import { onMount } from 'svelte';
 
 	interface Props {
 		onClose: () => void;
+		/** onConfigChange reports the config this dialog's own write just
+		 * returned, so the page can update gistsEnabled from the same
+		 * response rather than a second GET racing the write. */
+		onConfigChange?: (config: AIConfig) => void;
 	}
 
-	const { onClose }: Props = $props();
+	const { onClose, onConfigChange }: Props = $props();
 
 	let url = $state('');
 	let model = $state('');
@@ -51,6 +61,7 @@
 			model = config.model;
 			hasKey = config.has_key;
 			key = '';
+			onConfigChange?.(config);
 		} catch (cause) {
 			error = describeError(cause, 'Could not update your Gist configuration');
 		} finally {
@@ -68,6 +79,7 @@
 			model = '';
 			key = '';
 			hasKey = false;
+			onConfigChange?.({ url: '', model: '', has_key: false });
 		} catch (cause) {
 			error = describeError(cause, 'Could not clear your Gist configuration');
 		} finally {

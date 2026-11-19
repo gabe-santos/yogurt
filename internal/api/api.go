@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/gabe-santos/yogurt/internal/aiclient"
 	"github.com/gabe-santos/yogurt/internal/auth"
 	"github.com/gabe-santos/yogurt/internal/clock"
 	"github.com/gabe-santos/yogurt/internal/extraction"
@@ -24,6 +25,7 @@ type Deps struct {
 	Store        *store.Store
 	Pull         *pull.Service
 	Extraction   *extraction.Service
+	AIClient     *aiclient.Client
 	Clock        clock.Clock
 	Logger       *slog.Logger
 	// SPA is the compiled frontend, or nil when the binary carries none.
@@ -57,6 +59,8 @@ func New(deps Deps) *Handler {
 	h.mux.Handle("PUT /api/entries/{id}/state", h.requireAuth(http.HandlerFunc(h.setEntryState)))
 	h.mux.Handle("GET /api/entries/{id}/article", h.requireAuth(http.HandlerFunc(h.getArticle)))
 	h.mux.Handle("GET /api/entries/{id}/original", h.requireAuth(http.HandlerFunc(h.getOriginal)))
+	h.mux.Handle("GET /api/entries/{id}/gist", h.requireAuth(http.HandlerFunc(h.getGist)))
+	h.mux.Handle("POST /api/entries/{id}/gist", h.requireAuth(http.HandlerFunc(h.postGist)))
 	h.mux.Handle("GET /api/search", h.requireAuth(http.HandlerFunc(h.search)))
 
 	h.mux.Handle("GET /api/settings", h.requireAuth(http.HandlerFunc(h.getSettings)))

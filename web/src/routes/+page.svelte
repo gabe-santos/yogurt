@@ -31,12 +31,15 @@
     deleteFeed,
     describeError,
     feedIconUrl,
+    getAIConfig,
+    getGist,
     getSettings,
     listEntries,
     listFeeds,
     logOut,
     markEntriesRead,
     refreshFeeds,
+    requestGist,
     setEntryState,
     setSettings,
   } from "$lib/api";
@@ -46,6 +49,7 @@
     EntrySelectionOptions,
     EntryView,
     Feed,
+    Gist,
     ReadingFont,
     SearchEntry,
     Settings,
@@ -177,6 +181,16 @@
   let manuallyUnread = $state<Set<number>>(new Set());
   let pendingEntryIDs = $state<Set<number>>(new Set());
 
+  // Gists (GABE-201/203): nothing about them appears until the Reader
+  // configures a model (ADR-0018). gistStatus and the rest describe the
+  // currently selected Entry's Gist block, reset whenever the selection or
+  // gistsEnabled changes.
+  let gistsEnabled = $state(false);
+  let gist = $state<Gist | null>(null);
+  let gistStatus = $state<"idle" | "loading" | "shown" | "error">("idle");
+  let gistError = $state("");
+  let gistCollapsed = $state(false);
+
   let addFeedOpen = $state(false);
   let notice = $state("");
   let busy = $state(false);
@@ -251,6 +265,11 @@
   const selectedEntry = $derived(
     selectedIndex !== undefined ? entries[selectedIndex] : undefined,
   );
+  // A scalar id, not the Entry object: applyEntryState replaces entries with
+  // fresh objects on every Read/Star/Archive change (including the
+  // mark-on-open that happens on nearly every selection), so depending on
+  // selectedEntry itself would reset the Gist block on every one of those.
+  const selectedEntryId = $derived(selectedEntry?.id);
   const overlayUp = $derived(narrow && selectedEntry !== undefined);
   // The Feeds group is a flat, title-sorted list of every Feed: this stays in
   // step with a rename without a separate resort step.
@@ -289,15 +308,17 @@
       new URL(window.location.href).searchParams.get("entry") ?? "",
     );
     try {
-      const [subscribed, settings, page] = await Promise.all([
+      const [subscribed, settings, aiConfig, page] = await Promise.all([
         listFeeds(),
         getSettings(),
+        getAIConfig(),
         listEntries({
           ...selectionQuery(),
           order: entryOrder,
         }),
       ]);
       feeds = subscribed;
+      gistsEnabled = aiConfig.url !== "" && aiConfig.model !== "";
       markOnOpen = settings.mark_on_open;
       entryView = settings.entry_view;
       readingFont = settings.reading_font;
@@ -323,6 +344,32 @@
       loading = false;
       selectionRestored = true;
     }
+  });
+
+  // The Gist block belongs to whichever Entry is open: a new selection or a
+  // change to gistsEnabled (the Yogurt Menu's configuration form) drops
+  // whatever the last one held and checks storage again, never calling the
+  // model itself — that only happens when the Reader asks (requestGistForCurrent).
+  $effect(() => {
+    const id = selectedEntryId;
+    const enabled = gistsEnabled;
+    gist = null;
+    gistStatus = "idle";
+    gistError = "";
+    gistCollapsed = false;
+    if (id === undefined || !enabled) return;
+    getGist(id)
+      .then((found) => {
+        if (selectedEntryId !== id) return;
+        if (found) {
+          gist = found;
+          gistStatus = "shown";
+        }
+      })
+      .catch(() => {
+        /* The automatic check-on-open is quiet; a request control is still
+           offered either way. */
+      });
   });
 
   // The selected Entry is the one piece of reading position worth surviving a
@@ -676,6 +723,37 @@
     if (selectedIndex !== undefined) toggleArchiveAt(selectedIndex);
   }
 
+  // requestGistForCurrent makes or regenerates the open Entry's Gist. A
+  // second call while one is already in flight is ignored (GABE-201 #20).
+  async function requestGistForCurrent() {
+    const current = selectedEntry;
+    if (!current || !gistsEnabled || gistStatus === "loading") return;
+    gistStatus = "loading";
+    gistError = "";
+    try {
+      const result = await requestGist(current.id);
+      if (selectedEntry?.id !== current.id) return;
+      gist = result;
+      gistStatus = "shown";
+      gistCollapsed = false;
+    } catch (cause) {
+      if (selectedEntry?.id !== current.id) return;
+      gistStatus = "error";
+      gistError = describeError(cause, "Could not write that Gist");
+    }
+  }
+
+  // The `g` binding and the Gist button both call this: request one where
+  // there is none yet, or collapse/expand one already showing.
+  function toggleOrRequestGist() {
+    if (!gistsEnabled) return;
+    if (gistStatus === "shown") {
+      gistCollapsed = !gistCollapsed;
+      return;
+    }
+    void requestGistForCurrent();
+  }
+
   async function markAllRead() {
     if (busy || !canMarkAllRead) return;
     busy = true;
@@ -820,6 +898,7 @@
     search: () => (searchOpen = true),
     addFeed: () => (addFeedOpen = true),
     refreshAll: () => void refresh(),
+    requestGist: toggleOrRequestGist,
   };
 
   function isTypingTarget(target: EventTarget | null): boolean {
@@ -1334,12 +1413,19 @@
         {openLinksInNewTabs}
         iconUrl={iconForEntry(selectedEntry)}
         overlay={narrow}
+        {gistsEnabled}
+        {gistStatus}
+        {gist}
+        {gistError}
+        {gistCollapsed}
         onClose={clearSelection}
         onView={chooseEntryView}
         onFontChange={chooseReadingFont}
         onToggleRead={toggleReadCurrent}
         onToggleStar={toggleStarCurrent}
         onToggleArchive={toggleArchiveCurrent}
+        onRequestGist={requestGistForCurrent}
+        onToggleGistCollapse={() => (gistCollapsed = !gistCollapsed)}
       />
     {:else}
       <div
@@ -1373,7 +1459,7 @@
 </Sidebar.Provider>
 
 {#if helpOpen}
-  <HelpDialog onClose={() => (helpOpen = false)} />
+  <HelpDialog onClose={() => (helpOpen = false)} {gistsEnabled} />
 {/if}
 
 {#if addFeedOpen}
@@ -1396,7 +1482,11 @@
 {/if}
 
 {#if gistConfigOpen}
-  <GistConfigDialog onClose={() => (gistConfigOpen = false)} />
+  <GistConfigDialog
+    onClose={() => (gistConfigOpen = false)}
+    onConfigChange={(config) =>
+      (gistsEnabled = config.url !== "" && config.model !== "")}
+  />
 {/if}
 
 {#if searchOpen}

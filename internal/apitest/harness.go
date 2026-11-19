@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gabe-santos/yogurt/internal/aiclient"
 	"github.com/gabe-santos/yogurt/internal/app"
 	"github.com/gabe-santos/yogurt/internal/clock"
 	"github.com/gabe-santos/yogurt/internal/config"
@@ -41,42 +42,49 @@ type Harness struct {
 	stop func()
 }
 
-// Option adjusts the configuration a harness boots with.
-type Option func(*config.Config)
+// Option adjusts the configuration and collaborators a harness boots with.
+type Option func(*config.Config, *app.Deps)
 
 // BlockPrivateFetch keeps the application's default refusal to fetch private
 // network addresses in place. Every harness relaxes it by default, because the
 // fake publisher listens on loopback.
 func BlockPrivateFetch() Option {
-	return func(cfg *config.Config) { cfg.AllowPrivateFetch = false }
+	return func(cfg *config.Config, _ *app.Deps) { cfg.AllowPrivateFetch = false }
 }
 
 // PollInterval sets how often a Feed is checked when nothing else says
 // otherwise, for tests that want to observe the schedule without a real
 // interval's wait.
 func PollInterval(d time.Duration) Option {
-	return func(cfg *config.Config) { cfg.PollInterval = d }
+	return func(cfg *config.Config, _ *app.Deps) { cfg.PollInterval = d }
 }
 
 // PollTick sets how often the background schedule wakes to look for a due
 // Feed, for tests that want to observe scheduled polling within a bounded
 // real-time wait instead of a production-sized tick.
 func PollTick(d time.Duration) Option {
-	return func(cfg *config.Config) { cfg.PollTick = d }
+	return func(cfg *config.Config, _ *app.Deps) { cfg.PollTick = d }
 }
 
 // RetentionAge sets how old an unstarred Entry may get before automatic
 // cleanup removes it, for tests that want to observe retention without a
 // production-sized age.
 func RetentionAge(d time.Duration) Option {
-	return func(cfg *config.Config) { cfg.RetentionAge = d }
+	return func(cfg *config.Config, _ *app.Deps) { cfg.RetentionAge = d }
 }
 
 // RetentionTick sets how often the background schedule wakes to look for
 // expired Entries, for tests that want to observe cleanup within a bounded
 // real-time wait instead of a production-sized tick.
 func RetentionTick(d time.Duration) Option {
-	return func(cfg *config.Config) { cfg.RetentionTick = d }
+	return func(cfg *config.Config, _ *app.Deps) { cfg.RetentionTick = d }
+}
+
+// AIClient substitutes the Gist model client, such as one with a short
+// timeout, so a test can exercise a slow model without waiting out a
+// production-sized timeout.
+func AIClient(client *aiclient.Client) Option {
+	return func(_ *config.Config, deps *app.Deps) { deps.AIClient = client }
 }
 
 // New boots the application against a fresh temporary data directory. The
@@ -101,11 +109,12 @@ func NewInDir(t *testing.T, dataDir string, opts ...Option) *Harness {
 		// fetch unless told otherwise.
 		AllowPrivateFetch: true,
 	}
+	deps := app.Deps{Clock: fake, Logger: testLogger(t)}
 	for _, opt := range opts {
-		opt(&cfg)
+		opt(&cfg, &deps)
 	}
 
-	application, err := app.New(cfg, app.Deps{Clock: fake, Logger: testLogger(t)})
+	application, err := app.New(cfg, deps)
 	if err != nil {
 		t.Fatalf("boot application: %v", err)
 	}

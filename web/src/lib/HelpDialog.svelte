@@ -4,9 +4,15 @@
 
 	interface Props {
 		onClose: () => void;
+		/** gistsEnabled hides the `g` row entirely: GABE-201/203 says nothing
+		 * about Gists appears, anywhere, until the Reader configures a model. */
+		gistsEnabled: boolean;
 	}
 
-	const { onClose }: Props = $props();
+	const { onClose, gistsEnabled }: Props = $props();
+	const shown = $derived(
+		bindings.filter((binding) => binding.action !== 'requestGist' || gistsEnabled),
+	);
 </script>
 
 <Dialog.Root open onOpenChange={(open) => !open && onClose()}>
@@ -16,7 +22,7 @@
 		</Dialog.Header>
 
 		<dl class="flex flex-col gap-2 text-sm">
-			{#each bindings as binding (binding.key)}
+			{#each shown as binding (binding.key)}
 				<div class="flex items-center justify-between gap-4">
 					<dt>
 						<kbd class="rounded-md border border-border bg-muted px-1.5 py-0.5 font-mono text-xs"

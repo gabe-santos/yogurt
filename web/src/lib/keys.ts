@@ -15,7 +15,8 @@ export type Action =
   | 'help'
   | 'search'
   | 'addFeed'
-  | 'refreshAll';
+  | 'refreshAll'
+  | 'requestGist';
 
 /** Binding is one keyboard shortcut: the key a reader presses, what it does. */
 export interface Binding {
@@ -35,6 +36,7 @@ export const bindings: Binding[] = [
   { key: '/', description: 'Search', action: 'search' },
   { key: 'a', description: 'Add a Feed', action: 'addFeed' },
   { key: 'R', description: 'Refresh all Feeds (Shift+R)', action: 'refreshAll' },
+  { key: 'g', description: 'Request the Gist', action: 'requestGist' },
   { key: '?', description: 'Show this help', action: 'help' },
 ];
 

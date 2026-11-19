@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gabe-santos/yogurt/internal/aiclient"
 	"github.com/gabe-santos/yogurt/internal/api"
 	"github.com/gabe-santos/yogurt/internal/auth"
 	"github.com/gabe-santos/yogurt/internal/clock"
@@ -31,6 +32,10 @@ import (
 type Deps struct {
 	Clock  clock.Clock
 	Logger *slog.Logger
+	// AIClient is the Gist model client. A caller substitutes one with a
+	// shorter timeout to test a slow model without waiting out a
+	// production-sized one.
+	AIClient *aiclient.Client
 }
 
 // App is one assembled application over one database.
@@ -55,6 +60,9 @@ func New(cfg config.Config, deps Deps) (*App, error) {
 	}
 	if deps.Logger == nil {
 		deps.Logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+	}
+	if deps.AIClient == nil {
+		deps.AIClient = aiclient.New(aiclient.DefaultTimeout)
 	}
 	if cfg.SessionTTL <= 0 {
 		cfg.SessionTTL = config.Defaults().SessionTTL
@@ -98,6 +106,7 @@ func New(cfg config.Config, deps Deps) (*App, error) {
 		Store:        db,
 		Pull:         pullService,
 		Extraction:   extractionService,
+		AIClient:     deps.AIClient,
 		Clock:        deps.Clock,
 		Logger:       deps.Logger,
 		SPA:          spa,

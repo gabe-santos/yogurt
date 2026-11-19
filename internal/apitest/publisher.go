@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"sync"
 	"testing"
+	"time"
 )
 
 // Document is one response the fake publisher will serve.
@@ -16,6 +17,9 @@ type Document struct {
 	ContentType string
 	Headers     map[string]string
 	Body        string
+	// Delay holds the response before it is written, for a test exercising a
+	// caller's own timeout against a model that never answers fast enough.
+	Delay time.Duration
 }
 
 // Publisher is an in-process HTTP server standing in for a website. It is the
@@ -28,6 +32,7 @@ type Publisher struct {
 	docs     map[string]Document
 	hits     map[string]int
 	requests map[string]http.Header
+	bodies   map[string]string
 }
 
 // NewPublisher starts a fake publisher that serves nothing until documents are
@@ -40,6 +45,7 @@ func NewPublisher(t *testing.T) *Publisher {
 		docs:     make(map[string]Document),
 		hits:     make(map[string]int),
 		requests: make(map[string]http.Header),
+		bodies:   make(map[string]string),
 	}
 	p.server = httptest.NewServer(http.HandlerFunc(p.serve))
 	t.Cleanup(p.server.Close)
@@ -77,16 +83,32 @@ func (p *Publisher) LastRequest(path string) http.Header {
 	return p.requests[path]
 }
 
+// LastRequestBody is the body of the most recent request the publisher
+// received for a path, so a test can assert what a caller — such as the
+// Gist model client — actually sent.
+func (p *Publisher) LastRequestBody(path string) string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.bodies[path]
+}
+
 func (p *Publisher) serve(w http.ResponseWriter, r *http.Request) {
+	body, _ := io.ReadAll(r.Body)
+
 	p.mu.Lock()
 	doc, ok := p.docs[r.URL.Path]
 	p.hits[r.URL.Path]++
 	p.requests[r.URL.Path] = r.Header.Clone()
+	p.bodies[r.URL.Path] = string(body)
 	p.mu.Unlock()
 
 	if !ok {
 		http.NotFound(w, r)
 		return
+	}
+
+	if doc.Delay > 0 {
+		time.Sleep(doc.Delay)
 	}
 
 	for name, value := range doc.Headers {

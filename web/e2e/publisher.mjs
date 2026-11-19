@@ -124,12 +124,34 @@ const documents = {
   '/reader-link': { type: 'text/html; charset=utf-8', body: page },
 };
 
+// The Gist model's reply (GABE-203): carries a script tag and a
+// Markdown-style link, to prove Reader-facing Gist output is shown as inert
+// text rather than ever being parsed as HTML or Markdown.
+const chatCompletion = {
+  choices: [
+    {
+      message: {
+        content:
+          "- Fire basics: keep it fed through the <script>alert('xss')</script> night.\n" +
+          '- A [dangerous link](javascript:alert(1)) should never become clickable.\n' +
+          '- Overnight tending is the main point.',
+      },
+    },
+  ],
+};
+
 createServer((request, response) => {
   const path = new URL(request.url, publisherURL).pathname;
   if (path === '/session-check') {
     response
       .writeHead(200, { 'Content-Type': 'application/json' })
       .end(JSON.stringify({ cookie: request.headers.cookie ?? '' }));
+    return;
+  }
+  if (path === '/v1/chat/completions') {
+    response
+      .writeHead(200, { 'Content-Type': 'application/json' })
+      .end(JSON.stringify(chatCompletion));
     return;
   }
   const document = documents[path];
